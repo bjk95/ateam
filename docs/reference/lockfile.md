@@ -52,3 +52,11 @@ directory.
 If two `[[skill]]` entries share a `name`, ateam refuses to load the lockfile
 and prints both offending entries. Resolve the conflict in your editor, then
 re-run.
+
+## Subpath validator
+
+For `github:` and `git:` entries, `path` must be a relative subpath inside the
+source repo. Components like `..` (parent traversal) or absolute paths are
+rejected at lockfile load — ateam refuses before any tarball is extracted, so
+a malicious entry can't escape the package root. `local:` entries skip this
+check because their `path` records the source location itself.

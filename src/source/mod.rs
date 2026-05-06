@@ -5,7 +5,7 @@ pub mod skills_sh;
 
 use anyhow::{anyhow, bail, Result};
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 /// A skill-package source. Parsed from user input and stored verbatim
 /// (sans path) in the lockfile's `source` field. The `path` field on
@@ -111,6 +111,26 @@ impl fmt::Display for Source {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.lockfile_string())
     }
+}
+
+/// Reject any subpath that could escape its package root. Used at parse time
+/// (lockfile load) so a malicious `path = "../../etc"` entry can never reach
+/// the extraction step where `pkg_root.join(sub_path)` would traverse outside
+/// the tarball working dir.
+pub fn sanitize_subpath(s: &str) -> Result<()> {
+    if s.is_empty() {
+        bail!("subpath is empty");
+    }
+    for comp in Path::new(s).components() {
+        match comp {
+            Component::ParentDir => bail!("subpath `{}` contains `..` traversal", s),
+            Component::RootDir | Component::Prefix(_) => {
+                bail!("subpath `{}` must be relative, not absolute", s)
+            }
+            Component::CurDir | Component::Normal(_) => {}
+        }
+    }
+    Ok(())
 }
 
 fn parse_github_owner_repo(s: &str) -> Result<Source> {
@@ -222,5 +242,31 @@ mod tests {
         // Lockfile entries were blessed at add-time; reload must not fail.
         let s = Source::from_lockfile_string("github:openclaw/x").unwrap();
         assert_eq!(s, Source::Github { owner: "openclaw".into(), repo: "x".into() });
+    }
+
+    #[test]
+    fn sanitize_subpath_accepts_normal_segments() {
+        assert!(sanitize_subpath("skills/foo").is_ok());
+        assert!(sanitize_subpath("a/b/c").is_ok());
+        assert!(sanitize_subpath("./skills/foo").is_ok());
+    }
+
+    #[test]
+    fn sanitize_subpath_rejects_parent_dir_traversal() {
+        assert!(sanitize_subpath("..").is_err());
+        assert!(sanitize_subpath("../etc").is_err());
+        assert!(sanitize_subpath("skills/../../etc").is_err());
+        assert!(sanitize_subpath("a/b/../../..").is_err());
+    }
+
+    #[test]
+    fn sanitize_subpath_rejects_absolute_paths() {
+        assert!(sanitize_subpath("/etc/passwd").is_err());
+        assert!(sanitize_subpath("/abs/path").is_err());
+    }
+
+    #[test]
+    fn sanitize_subpath_rejects_empty() {
+        assert!(sanitize_subpath("").is_err());
     }
 }
