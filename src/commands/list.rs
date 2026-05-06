@@ -75,8 +75,8 @@ pub fn run(args: ListArgs) -> Result<()> {
 fn render_source(s: &SkillEntry) -> String {
     let base: String = if let Some(rest) = s.source.strip_prefix("github:") {
         format!("{}", style(rest).cyan())
-    } else if s.source.starts_with("local:") {
-        format!("{}", style("local").dim())
+    } else if let Some(rest) = s.source.strip_prefix("local:") {
+        format!("{} {}", style("local").dim(), style(rest).cyan())
     } else if let Some(url) = s.source.strip_prefix("git:") {
         format!("{}", style(url).cyan())
     } else {
