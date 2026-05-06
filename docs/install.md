@@ -9,7 +9,7 @@ and Intel) and Linux (x86_64 and aarch64, musl-static).
 ## One-line install
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/bjk95/ateam/releases/latest/download/ateam-installer.sh | sh
+curl -fsSL https://github.com/bjk95/ateam/releases/latest/download/ateam-installer.sh | sh
 ```
 
 The installer detects your OS/arch, downloads the matching binary, and drops

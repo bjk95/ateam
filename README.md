@@ -24,7 +24,7 @@ backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
 ## Install
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/bjk95/ateam/releases/latest/download/ateam-installer.sh | sh
+curl -fsSL https://github.com/bjk95/ateam/releases/latest/download/ateam-installer.sh | sh
 ```
 
 Drops a single static binary at `~/.local/bin/ateam` on macOS (Apple Silicon
