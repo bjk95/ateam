@@ -34,8 +34,7 @@ copy-pasting between `~/.claude/skills`, no maintaining `CLAUDE.md` and
   `ateam skills add`. Already using the Vercel one? Switch in a minute.
 
 > **Status:** v1, stable on macOS + Linux. Tested end-to-end against the live
-> [skills.sh](https://skills.sh) registry. Roadmap in
-> [WISHLIST.md](./WISHLIST.md).
+> [skills.sh](https://skills.sh) registry.
 
 ## Install
 
