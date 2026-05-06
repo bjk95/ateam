@@ -52,12 +52,28 @@ pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
         true
     };
     if snapshot_managed && snapshot.exists() {
-        let _ = std::fs::remove_dir_all(&snapshot);
+        if let Err(e) = std::fs::remove_dir_all(&snapshot) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                ui::warn(format!(
+                    "couldn't remove {}: {:#}",
+                    paths::display_path(&snapshot),
+                    e
+                ));
+            }
+        }
     }
     // Legacy cache copy from before the snapshot-into-skills/ migration.
     let legacy_cache = paths::cache_dir(&repo).join(&args.name);
     if legacy_cache.exists() {
-        let _ = std::fs::remove_dir_all(&legacy_cache);
+        if let Err(e) = std::fs::remove_dir_all(&legacy_cache) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                ui::warn(format!(
+                    "couldn't remove {}: {:#}",
+                    paths::display_path(&legacy_cache),
+                    e
+                ));
+            }
+        }
     }
 
     if git_sync::enabled(no_sync) {
