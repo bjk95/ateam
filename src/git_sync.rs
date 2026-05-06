@@ -23,7 +23,9 @@ pub fn pre_pull(repo: &Path) -> Result<()> {
     if !has_remote(repo)? {
         return Ok(());
     }
+    let step = ui::step("pulling latest from remote");
     let out = run(repo, &["pull", "--ff-only"])?;
+    step.finish();
     if out.status.success() {
         return Ok(());
     }
@@ -64,7 +66,9 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
         return Ok(false);
     }
 
+    let step = ui::step("committing changes");
     let commit = run(repo, &["commit", "-m", message])?;
+    step.finish();
     if !commit.status.success() {
         ui::warn("git commit failed");
         ui::detail(String::from_utf8_lossy(&commit.stderr).trim().to_string());
@@ -80,7 +84,9 @@ fn push_with_retry(repo: &Path) -> Result<()> {
         ui::detail("no git remote configured; skipping push");
         return Ok(());
     }
+    let step = ui::step("pushing to remote");
     let attempt = run(repo, &["push"])?;
+    step.finish();
     if attempt.status.success() {
         return Ok(());
     }

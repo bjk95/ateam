@@ -86,6 +86,12 @@ impl Step {
         self.clear();
     }
 
+    pub fn set_msg(&self, msg: impl Into<String>) {
+        if let StepImpl::Spinner(pb) = &self.inner {
+            pb.set_message(msg.into());
+        }
+    }
+
     fn clear(&self) {
         if let StepImpl::Spinner(pb) = &self.inner {
             pb.finish_and_clear();
