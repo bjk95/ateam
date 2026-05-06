@@ -276,6 +276,14 @@ instruction files differ, ateam shows an interactive picker so you choose which
 becomes the canonical template. Orphan snapshot directories (already in
 `<repo>/skills/` but missing from the lockfile) are adopted instead of erroring.
 
+Plugin-managed skills (those installed via `claude plugin add` from a
+marketplace) are detected through `~/.claude/plugins/installed_plugins.json`
+and **skipped** — both bulk and single import refuse to take ownership, since
+Claude's plugin updater would race ateam's symlink on the next plugin sync.
+Single import errors out with the upstream source named; bulk prints a `·`
+line per skipped plugin skill and continues. Manage those skills via the
+`claude plugin` commands instead.
+
 For each adopted skill, ateam also auto-discovers upstream by inspecting the
 on-disk skill folder for a `.git/config` or sibling git checkout — so a skill
 imported from a local clone of `github.com/foo/bar` gets a `github:foo/bar`

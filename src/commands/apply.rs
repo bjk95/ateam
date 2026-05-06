@@ -21,7 +21,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         git_sync::pre_pull(&repo)?;
     }
 
-    install::sweep_cache_tmp(&repo).ok();
+    install::sweep_tmp(&repo).ok();
 
     let lock = Lockfile::load(&repo)?;
     let prev_manifest = Manifest::load(&repo)?;
@@ -367,7 +367,7 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
             }
         }
         Source::Git { url } => {
-            let tmp_root = paths::cache_tmp_dir(repo);
+            let tmp_root = paths::tmp_dir(repo);
             std::fs::create_dir_all(&tmp_root)?;
             let suffix: u64 = rand::random();
             let work = tmp_root.join(format!("git-{:016x}", suffix));
@@ -407,7 +407,7 @@ fn refetch_github(
     sub_path: &str,
     skill_name: &str,
 ) -> Result<()> {
-    let tmp_root = paths::cache_tmp_dir(repo);
+    let tmp_root = paths::tmp_dir(repo);
     std::fs::create_dir_all(&tmp_root)?;
     let suffix: u64 = rand::random();
     let work = tmp_root.join(format!("fetch-{:016x}", suffix));

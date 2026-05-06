@@ -73,6 +73,17 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
         return Ok(());
     }
 
+    if args.upstream.is_none() {
+        let upstream_index = crate::upstream::build_index(home);
+        if let Some(plugin_source) = upstream_index.get(&normalized) {
+            bail!(
+                "{} is plugin-managed by {} — ateam won't take ownership. Manage it via `claude plugin` commands.",
+                normalized,
+                plugin_source
+            );
+        }
+    }
+
     let mut lock = Lockfile::load(repo)?;
     let entry = build_entry(repo, &normalized, &installed, args)?;
     let replaced = lock.upsert(entry);
@@ -133,6 +144,12 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
         "ateam: imported {} skill(s); skipped {} already managed",
         outcome.imported, outcome.skipped_managed
     );
+    if outcome.skipped_plugin > 0 {
+        println!(
+            "  + skipped {} plugin-managed (manage via `claude plugin`)",
+            outcome.skipped_plugin
+        );
+    }
     if outcome.discovered_upstream > 0 {
         println!(
             "  + discovered upstream for {} existing entr{}",
@@ -178,6 +195,7 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
 pub(crate) struct BulkOutcome {
     pub imported: usize,
     pub skipped_managed: usize,
+    pub skipped_plugin: usize,
     pub discovered_upstream: usize,
     pub errors: Vec<(String, String)>,
 }
@@ -217,6 +235,11 @@ pub(crate) fn bulk_import_skills(
             }
             if lock.find(&name).is_some() {
                 outcome.skipped_managed += 1;
+                continue;
+            }
+            if let Some(plugin_source) = upstream_index.get(&name) {
+                outcome.skipped_plugin += 1;
+                println!("  · {name} (plugin-managed by {plugin_source})");
                 continue;
             }
 
@@ -298,8 +321,7 @@ fn is_managed_by_ateam(repo: &Path, installed: &Path) -> Result<bool> {
     }
     let target = std::fs::read_link(installed)
         .with_context(|| format!("reading symlink {}", installed.display()))?;
-    Ok(target.starts_with(paths::cache_dir(repo))
-        || target.starts_with(paths::local_skills_dir(repo)))
+    Ok(target.starts_with(paths::local_skills_dir(repo)))
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +523,39 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("SKILL.md"), body).unwrap();
         }
+        /// Stage a Claude marketplace plugin so `upstream::build_index` will
+        /// classify `skill_name` as plugin-managed.
+        fn write_plugin_skill(
+            &self,
+            plugin: &str,
+            marketplace: &str,
+            repo: &str,
+            skill_name: &str,
+        ) {
+            let plugins = self.home.path().join(".claude/plugins");
+            let install_path = plugins
+                .join("cache")
+                .join(marketplace)
+                .join(plugin)
+                .join("1.0.0");
+            std::fs::create_dir_all(install_path.join("skills").join(skill_name)).unwrap();
+            std::fs::create_dir_all(&plugins).unwrap();
+            std::fs::write(
+                plugins.join("installed_plugins.json"),
+                format!(
+                    r#"{{"version":2,"plugins":{{"{plugin}@{marketplace}":[{{"installPath":"{}"}}]}}}}"#,
+                    install_path.display()
+                ),
+            )
+            .unwrap();
+            std::fs::write(
+                plugins.join("known_marketplaces.json"),
+                format!(
+                    r#"{{"{marketplace}":{{"source":{{"source":"github","repo":"{repo}"}}}}}}"#
+                ),
+            )
+            .unwrap();
+        }
         fn run_instructions(&self) -> Result<PathBuf> {
             import_instructions(self.repo.path(), self.home.path())
         }
@@ -628,19 +683,76 @@ mod tests {
     }
 
     #[test]
-    fn bulk_skips_symlinks_into_ateam_cache() {
+    fn bulk_skips_symlinks_into_ateam_local() {
         let fx = Fixture::new();
         // Pretend a skill is already an ateam-managed symlink.
-        let cache_target = paths::cache_dir(fx.repo.path()).join("alpha");
-        std::fs::create_dir_all(&cache_target).unwrap();
-        std::fs::write(cache_target.join("SKILL.md"), "cached").unwrap();
+        let local_target = paths::local_skills_dir(fx.repo.path()).join("alpha");
+        std::fs::create_dir_all(&local_target).unwrap();
+        std::fs::write(local_target.join("SKILL.md"), "snapshot").unwrap();
         let claude_skills = fx.home.path().join(".claude/skills");
         std::fs::create_dir_all(&claude_skills).unwrap();
-        std::os::unix::fs::symlink(&cache_target, claude_skills.join("alpha")).unwrap();
+        std::os::unix::fs::symlink(&local_target, claude_skills.join("alpha")).unwrap();
 
         let mut lock = Lockfile::load(fx.repo.path()).unwrap();
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
         assert_eq!(outcome.imported, 0);
         assert_eq!(outcome.skipped_managed, 1);
+    }
+
+    #[test]
+    fn bulk_skips_plugin_managed_skills() {
+        let fx = Fixture::new();
+        // alpha is plugin-managed; ateam must not snapshot it.
+        fx.write_skill("claude", "alpha", "alpha body");
+        fx.write_plugin_skill(
+            "frontend-design",
+            "claude-plugins-official",
+            "anthropics/claude-plugins-official",
+            "alpha",
+        );
+        // beta is a plain unmanaged skill that should still get imported.
+        fx.write_skill("claude", "beta", "beta body");
+
+        let mut lock = Lockfile::load(fx.repo.path()).unwrap();
+        let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
+
+        assert_eq!(outcome.imported, 1, "only beta should import");
+        assert_eq!(outcome.skipped_plugin, 1, "alpha is plugin-managed");
+        assert!(lock.find("beta").is_some());
+        assert!(lock.find("alpha").is_none());
+        // Snapshot dir for alpha must NOT be created.
+        assert!(!paths::local_skills_dir(fx.repo.path())
+            .join("alpha")
+            .exists());
+    }
+
+    #[test]
+    fn single_import_refuses_plugin_managed_skill() {
+        let fx = Fixture::new();
+        fx.write_skill("claude", "alpha", "body");
+        fx.write_plugin_skill(
+            "frontend-design",
+            "claude-plugins-official",
+            "anthropics/claude-plugins-official",
+            "alpha",
+        );
+
+        let args = ImportArgs {
+            name: Some("alpha".into()),
+            instructions: false,
+            upstream: None,
+            project: None,
+        };
+        let err = run_single(fx.repo.path(), fx.home.path(), &args, true).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("plugin-managed"), "got: {msg}");
+        assert!(
+            msg.contains("anthropics/claude-plugins-official"),
+            "got: {msg}"
+        );
+
+        // Lockfile untouched.
+        let lock = Lockfile::load(fx.repo.path()).unwrap();
+        assert!(lock.find("alpha").is_none());
     }
 }

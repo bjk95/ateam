@@ -148,7 +148,7 @@ Partial failure:
 `-v` adds, between `→ fetching` and the install lines:
 ```
 ·  source: github:vercel-labs/agent-skills
-·  cached at ~/.config/ateam/.ateam/cache/deploy-to-vercel
+·  snapshot: ~/.config/ateam/skills/deploy-to-vercel
 ```
 and one `·  linked <path>` line per agent symlink under each `✓ installed`.
 
@@ -184,7 +184,7 @@ Dry-run default:
 
 Dry-run `-v` adds one dim line per planned link:
 ```
-·  ~/.claude/skills/deploy-to-vercel → ~/.config/ateam/.ateam/cache/deploy-to-vercel
+·  ~/.claude/skills/deploy-to-vercel → ~/.config/ateam/skills/deploy-to-vercel
 ```
 
 Unregistered project alias (default and `-v`):

@@ -188,18 +188,6 @@ fn remove_one(repo: &Path, name: &str) -> Result<()> {
             }
         }
     }
-    let legacy_cache = paths::cache_dir(repo).join(name);
-    if legacy_cache.exists() {
-        if let Err(e) = std::fs::remove_dir_all(&legacy_cache) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                ui::warn(format!(
-                    "couldn't remove {}: {:#}",
-                    paths::display_path(&legacy_cache),
-                    e
-                ));
-            }
-        }
-    }
 
     Ok(())
 }

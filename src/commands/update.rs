@@ -188,7 +188,7 @@ fn check_and_refetch(
                 return Ok(None);
             }
             // Refetch via fresh shallow clone.
-            let tmp_root = paths::cache_tmp_dir(repo);
+            let tmp_root = paths::tmp_dir(repo);
             std::fs::create_dir_all(&tmp_root)?;
             let suffix: u64 = rand::random();
             let work = tmp_root.join(format!("git-{:016x}", suffix));
@@ -220,7 +220,7 @@ fn refetch_github(
     sub_path: &str,
     skill_name: &str,
 ) -> Result<()> {
-    let tmp_root = paths::cache_tmp_dir(repo);
+    let tmp_root = paths::tmp_dir(repo);
     std::fs::create_dir_all(&tmp_root)?;
     let suffix: u64 = rand::random();
     let work = tmp_root.join(format!("fetch-{:016x}", suffix));
