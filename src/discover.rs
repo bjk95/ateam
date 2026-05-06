@@ -123,9 +123,9 @@ pub fn harness_skill_dirs(home: &Path) -> Vec<PathBuf> {
 /// Scan the agent skills dirs for skills not yet adopted by ateam.
 ///
 /// A directory is unmanaged when it isn't hidden, isn't a symlink whose
-/// target lives inside the ateam repo (`cache/` or `skills/`), and its
-/// name isn't already in the lockfile. Cross-tool dedup: a skill present
-/// in multiple agent dirs returns one entry with all dirs aggregated.
+/// target lives inside the ateam repo (`skills/`), and its name isn't
+/// already in the lockfile. Cross-tool dedup: a skill present in multiple
+/// agent dirs returns one entry with all dirs aggregated.
 pub fn discover_unmanaged(
     repo: &Path,
     home: &Path,
@@ -133,7 +133,6 @@ pub fn discover_unmanaged(
 ) -> Vec<UnmanagedSkill> {
     use std::collections::BTreeMap;
 
-    let cache = crate::paths::cache_dir(repo);
     let local = crate::paths::local_skills_dir(repo);
 
     let mut acc: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
@@ -158,7 +157,7 @@ pub fn discover_unmanaged(
             }
             if ft.is_symlink() {
                 if let Ok(target) = std::fs::read_link(&path) {
-                    if target.starts_with(&cache) || target.starts_with(&local) {
+                    if target.starts_with(&local) {
                         continue;
                     }
                 }

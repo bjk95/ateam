@@ -95,7 +95,7 @@ fn content_matches(a: &Path, b: &Path) -> Result<bool> {
 /// machines as part of the ateam-config repo — no per-machine refetch needed.
 pub fn prepare_cache_slot(repo: &Path, skill_name: &str) -> Result<CacheSlot> {
     let dest_root = crate::paths::local_skills_dir(repo);
-    let tmp_root = crate::paths::cache_tmp_dir(repo);
+    let tmp_root = crate::paths::tmp_dir(repo);
     std::fs::create_dir_all(&dest_root)
         .with_context(|| format!("creating {}", dest_root.display()))?;
     std::fs::create_dir_all(&tmp_root)
@@ -147,7 +147,7 @@ impl CacheSlot {
             )
         })?;
         if displaced {
-            // Best-effort; `sweep_cache_tmp` cleans up any straggler.
+            // Best-effort; `sweep_tmp` cleans up any straggler.
             let _ = std::fs::remove_dir_all(&quarantine);
         }
         Ok(self.final_path)
@@ -163,9 +163,9 @@ fn quarantine_path(tmp: &Path) -> PathBuf {
     tmp.with_file_name(name)
 }
 
-/// Sweep stale dirs out of `<repo>/.ateam/cache/.tmp/` from previous failed apply runs.
-pub fn sweep_cache_tmp(repo: &Path) -> Result<()> {
-    let tmp_root = crate::paths::cache_tmp_dir(repo);
+/// Sweep stale dirs out of `<repo>/.ateam/tmp/` from previous failed apply runs.
+pub fn sweep_tmp(repo: &Path) -> Result<()> {
+    let tmp_root = crate::paths::tmp_dir(repo);
     if !tmp_root.exists() {
         return Ok(());
     }
@@ -514,12 +514,12 @@ mod tests {
         write_marker(&second.tmp, "v2");
         second.commit().unwrap();
 
-        let cache_tmp = crate::paths::cache_tmp_dir(repo);
-        let leftovers: Vec<_> = std::fs::read_dir(&cache_tmp)
+        let tmp = crate::paths::tmp_dir(repo);
+        let leftovers: Vec<_> = std::fs::read_dir(&tmp)
             .unwrap()
             .flatten()
             .map(|e| e.path())
             .collect();
-        assert!(leftovers.is_empty(), "cache tmp not empty: {:?}", leftovers);
+        assert!(leftovers.is_empty(), "tmp not empty: {:?}", leftovers);
     }
 }

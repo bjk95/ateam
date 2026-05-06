@@ -631,7 +631,7 @@ impl Drop for TempDir {
 }
 
 fn tempdir(repo: &Path) -> Result<TempDir> {
-    let root = paths::cache_tmp_dir(repo);
+    let root = paths::tmp_dir(repo);
     std::fs::create_dir_all(&root)
         .with_context(|| format!("creating {}", root.display()))?;
     let suffix: u64 = rand::random();

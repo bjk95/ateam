@@ -160,8 +160,6 @@ fn ensure_gitignore(target: &Path) -> Result<()> {
 }
 
 fn ensure_state_dirs(target: &Path) -> Result<()> {
-    std::fs::create_dir_all(paths::cache_dir(target))
-        .with_context(|| format!("creating {}", paths::cache_dir(target).display()))?;
     std::fs::create_dir_all(paths::local_skills_dir(target))
         .with_context(|| format!("creating {}", paths::local_skills_dir(target).display()))?;
     Ok(())

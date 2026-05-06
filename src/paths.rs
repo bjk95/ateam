@@ -112,12 +112,8 @@ pub fn manifest_file(repo: &Path) -> PathBuf {
     repo.join(".ateam").join("manifest.toml")
 }
 
-pub fn cache_dir(repo: &Path) -> PathBuf {
-    repo.join(".ateam").join("cache")
-}
-
-pub fn cache_tmp_dir(repo: &Path) -> PathBuf {
-    cache_dir(repo).join(".tmp")
+pub fn tmp_dir(repo: &Path) -> PathBuf {
+    repo.join(".ateam").join("tmp")
 }
 
 pub fn local_skills_dir(repo: &Path) -> PathBuf {

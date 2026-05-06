@@ -75,7 +75,7 @@ pub fn discover_unmanaged(
 - Skip rules per directory entry:
   - `name.starts_with('.')` → skip (hidden)
   - Not a directory or symlink → skip
-  - Symlink whose target starts with `paths::cache_dir(repo)` or `paths::local_skills_dir(repo)` → skip (already managed)
+  - Symlink whose target starts with `paths::local_skills_dir(repo)` → skip (already managed)
   - `lock.find(&name).is_some()` → skip (lockfile-listed counts as managed, even if `active: false`)
 - Cross-tool dedup by `name`. Aggregate `dirs` per name.
 - A missing agent dir (`NotFound`) is silently skipped — matches the existing `bulk_import_skills` behavior.
