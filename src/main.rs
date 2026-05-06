@@ -1,7 +1,13 @@
 mod cli;
 mod commands;
 mod config;
+mod discover;
+mod git_sync;
+mod install;
+mod lockfile;
+mod manifest;
 mod paths;
+mod source;
 
 use anyhow::Result;
 use clap::Parser;

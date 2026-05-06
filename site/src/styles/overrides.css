@@ -1,0 +1,232 @@
+/* =========================================================================
+   Map Arcflo tokens onto Starlight's --sl-* variables.
+   Starlight provides a baseline; this just retunes the colors and type.
+   ========================================================================= */
+
+:root {
+  /* Type */
+  --sl-font: var(--font-sans);
+  --sl-font-mono: var(--font-mono);
+
+  /* Content widths — keep the design's tight monochrome feel */
+  --sl-content-width: 56rem;
+  --sl-sidebar-width: 17rem;
+
+  /* Light scheme — map gray scale */
+  --sl-color-white: var(--fg);
+  --sl-color-gray-1: var(--gray-700);
+  --sl-color-gray-2: var(--fg-muted);
+  --sl-color-gray-3: var(--gray-400);
+  --sl-color-gray-4: var(--gray-300);
+  --sl-color-gray-5: var(--border);
+  --sl-color-gray-6: var(--bg-subtle);
+  --sl-color-gray-7: var(--bg-muted);
+  --sl-color-black: var(--bg);
+
+  /* Monochrome accent — no chromatic accent at all. */
+  --sl-color-accent-low: var(--bg-muted);
+  --sl-color-accent: var(--fg);
+  --sl-color-accent-high: var(--fg);
+  --sl-color-text-accent: var(--fg);
+  --sl-color-text-invert: var(--bg);
+
+  /* Strip every chromatic palette Starlight uses for asides/badges/etc.
+     Everything goes monochrome. */
+  --sl-color-blue: var(--fg);
+  --sl-color-blue-low: var(--bg-muted);
+  --sl-color-blue-high: var(--fg);
+  --sl-color-purple: var(--fg);
+  --sl-color-purple-low: var(--bg-muted);
+  --sl-color-purple-high: var(--fg);
+  --sl-color-green: var(--fg);
+  --sl-color-green-low: var(--bg-muted);
+  --sl-color-green-high: var(--fg);
+  --sl-color-orange: var(--fg);
+  --sl-color-orange-low: var(--bg-muted);
+  --sl-color-orange-high: var(--fg);
+  --sl-color-red: var(--fg);
+  --sl-color-red-low: var(--bg-muted);
+  --sl-color-red-high: var(--fg);
+
+  /* Background tokens */
+  --sl-color-bg: var(--bg);
+  --sl-color-bg-nav: color-mix(in oklch, var(--bg) 85%, transparent);
+  --sl-color-bg-sidebar: var(--bg);
+  --sl-color-bg-inline-code: var(--bg-muted);
+  --sl-color-bg-accent: var(--fg);
+
+  /* Borders */
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-shade: var(--border-strong);
+
+  /* Code blocks — match the dark-on-dark look from the design */
+  --sl-color-text: var(--fg);
+  --sl-color-text-accent: var(--accent);
+
+  /* Type scale — small + precise */
+  --sl-text-xs: 12px;
+  --sl-text-sm: 13px;
+  --sl-text-base: 14px;
+  --sl-text-lg: 16px;
+  --sl-text-xl: 18px;
+  --sl-text-2xl: 22px;
+  --sl-text-3xl: 28px;
+  --sl-text-4xl: 36px;
+  --sl-text-5xl: 48px;
+
+  --sl-text-h1: 36px;
+  --sl-text-h2: 22px;
+  --sl-text-h3: 16px;
+  --sl-text-h4: 14px;
+  --sl-text-h5: 13px;
+
+  --sl-text-code: 13px;
+
+  --sl-line-height: 1.65;
+  --sl-line-height-headings: 1.25;
+}
+
+/* Match Starlight's `[data-theme=light]:root` selector specificity (0,0,2,0)
+   so we win the cascade in both schemes. The values are identical to :root above. */
+:root[data-theme='light'],
+[data-theme='light']:root {
+  --sl-color-accent-low: var(--bg-muted);
+  --sl-color-accent: var(--fg);
+  --sl-color-accent-high: var(--fg);
+  --sl-color-text-accent: var(--fg);
+  --sl-color-text-invert: var(--bg);
+
+  --sl-color-blue: var(--fg);
+  --sl-color-blue-low: var(--bg-muted);
+  --sl-color-blue-high: var(--fg);
+  --sl-color-purple: var(--fg);
+  --sl-color-purple-low: var(--bg-muted);
+  --sl-color-purple-high: var(--fg);
+  --sl-color-green: var(--fg);
+  --sl-color-green-low: var(--bg-muted);
+  --sl-color-green-high: var(--fg);
+  --sl-color-orange: var(--fg);
+  --sl-color-orange-low: var(--bg-muted);
+  --sl-color-orange-high: var(--fg);
+  --sl-color-red: var(--fg);
+  --sl-color-red-low: var(--bg-muted);
+  --sl-color-red-high: var(--fg);
+
+  --sl-color-bg-accent: var(--fg);
+}
+
+:root[data-theme='dark'],
+[data-theme='dark']:root {
+  --sl-color-white: var(--fg);
+  --sl-color-black: var(--bg);
+  --sl-color-bg: var(--bg);
+  --sl-color-bg-sidebar: var(--bg);
+  --sl-color-bg-nav: color-mix(in oklch, var(--bg) 85%, transparent);
+  --sl-color-bg-inline-code: var(--bg-muted);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-shade: var(--border-strong);
+
+  --sl-color-accent-low: var(--bg-muted);
+  --sl-color-accent: var(--fg);
+  --sl-color-accent-high: var(--fg);
+  --sl-color-text-accent: var(--fg);
+  --sl-color-text-invert: var(--bg);
+
+  --sl-color-blue: var(--fg);
+  --sl-color-blue-low: var(--bg-muted);
+  --sl-color-blue-high: var(--fg);
+  --sl-color-purple: var(--fg);
+  --sl-color-purple-low: var(--bg-muted);
+  --sl-color-purple-high: var(--fg);
+  --sl-color-green: var(--fg);
+  --sl-color-green-low: var(--bg-muted);
+  --sl-color-green-high: var(--fg);
+  --sl-color-orange: var(--fg);
+  --sl-color-orange-low: var(--bg-muted);
+  --sl-color-orange-high: var(--fg);
+  --sl-color-red: var(--fg);
+  --sl-color-red-low: var(--bg-muted);
+  --sl-color-red-high: var(--fg);
+}
+
+/* ----- Typography fine-tuning to match design ----- */
+
+body {
+  font-feature-settings: 'ss01', 'cv11', 'tnum';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+h1 { letter-spacing: -0.025em; }
+
+/* h2 gets a top border like the design */
+.sl-markdown-content h2:not(:where(.not-content *)) {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  margin-top: 56px;
+}
+
+/* Inline code — bordered chip */
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.88em;
+  letter-spacing: -0.01em;
+}
+
+/* Code blocks — dark surface w/ subtle border */
+.expressive-code {
+  --ec-brdRad: 10px;
+  --ec-brdCol: var(--border);
+}
+
+/* Sidebar — eyebrow caps for group labels */
+.sidebar-pane .group-label > span {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* Active sidebar item — left bar accent */
+.sl-sidebar-state-persist a[aria-current='page'] {
+  border-left: 2px solid var(--fg);
+  padding-left: calc(var(--sl-sidebar-item-padding-inline) - 2px);
+  font-weight: 500;
+  background: var(--bg-muted);
+}
+
+/* Sidebar slim scrollbars */
+.sidebar-pane::-webkit-scrollbar { width: 6px; }
+.sidebar-pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+.sidebar-pane::-webkit-scrollbar-track { background: transparent; }
+
+/* Right TOC active marker */
+starlight-toc nav a[aria-current='true'] {
+  border-left: 1px solid var(--fg);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+/* Header tweaks */
+.header {
+  background: color-mix(in oklch, var(--bg) 80%, transparent);
+  backdrop-filter: saturate(180%) blur(8px);
+  -webkit-backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Selection */
+::selection { background: oklch(0 0 0); color: oklch(1 0 0); }
+[data-theme='dark'] ::selection { background: oklch(1 0 0); color: oklch(0 0 0); }

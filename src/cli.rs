@@ -157,27 +157,26 @@ pub struct ImportArgs {
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Add or update an alias→path mapping for this machine.
-    Register { alias: String, path: PathBuf },
+    #[command(alias = "register")]
+    Add { alias: String, path: PathBuf },
     /// Show this machine's alias→path map.
     List,
     /// Remove an alias from this machine's map.
+    #[command(alias = "rm")]
     Remove { alias: String },
 }
 
 pub fn dispatch(cli: Cli) -> Result<()> {
+    let no_sync = cli.no_sync;
     match cli.command {
         Command::Init(args) => crate::commands::init::run(args),
-        Command::Add(_) => unimplemented("add"),
-        Command::Apply(_) => unimplemented("apply"),
-        Command::Update(_) => unimplemented("update"),
-        Command::Remove(_) => unimplemented("remove"),
-        Command::List(_) => unimplemented("list"),
-        Command::Status => unimplemented("status"),
-        Command::Import(_) => unimplemented("import"),
-        Command::Project(_) => unimplemented("project"),
+        Command::Add(args) => crate::commands::add::run(args, no_sync),
+        Command::Apply(args) => crate::commands::apply::run(args, no_sync),
+        Command::Update(args) => crate::commands::update::run(args, no_sync),
+        Command::Remove(args) => crate::commands::remove::run(args, no_sync),
+        Command::List(args) => crate::commands::list::run(args),
+        Command::Status => crate::commands::status::run(),
+        Command::Import(args) => crate::commands::import::run(args, no_sync),
+        Command::Project(cmd) => crate::commands::project::run(cmd),
     }
-}
-
-fn unimplemented(name: &str) -> Result<()> {
-    anyhow::bail!("`ateam {}` is not implemented yet", name)
 }

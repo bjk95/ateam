@@ -65,10 +65,18 @@ pub fn remove_pointer() -> Result<()> {
     Ok(())
 }
 
+/// XDG-style `~/.config`. We don't use `directories::BaseDirs::config_dir()`
+/// because on macOS that returns `~/Library/Application Support`, which
+/// breaks parity with the plan and surprises users who expect `~/.config`.
+/// Honors `$XDG_CONFIG_HOME` if set.
 pub fn config_home() -> Result<PathBuf> {
-    let dirs = directories::BaseDirs::new()
-        .ok_or_else(|| anyhow!("could not determine user config home"))?;
-    Ok(dirs.config_dir().to_path_buf())
+    if let Some(custom) = std::env::var_os("XDG_CONFIG_HOME") {
+        let p = PathBuf::from(custom);
+        if !p.as_os_str().is_empty() {
+            return Ok(p);
+        }
+    }
+    Ok(home_dir()?.join(".config"))
 }
 
 fn expand_tilde(p: &Path) -> PathBuf {
@@ -101,7 +109,7 @@ pub fn machine_config(repo: &Path) -> PathBuf {
 }
 
 pub fn manifest_file(repo: &Path) -> PathBuf {
-    repo.join(".ateam").join("manifest.json")
+    repo.join(".ateam").join("manifest.toml")
 }
 
 pub fn cache_dir(repo: &Path) -> PathBuf {

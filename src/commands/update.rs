@@ -1,0 +1,166 @@
+use crate::cli::UpdateArgs;
+use crate::git_sync;
+use crate::install;
+use crate::lockfile::Lockfile;
+use crate::paths;
+use crate::source::{github, Source};
+use anyhow::{Context, Result};
+use std::path::Path;
+
+pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
+    let repo = paths::resolve_repo()?;
+
+    if git_sync::enabled(no_sync) {
+        git_sync::pre_pull(&repo)?;
+    }
+
+    let mut lock = Lockfile::load(&repo)?;
+    let names: Vec<String> = if args.names.is_empty() {
+        lock.skills.iter().map(|s| s.name.clone()).collect()
+    } else {
+        args.names.clone()
+    };
+
+    let mut changed: Vec<(String, String, String)> = Vec::new(); // (name, old, new)
+
+    for name in &names {
+        let entry_idx = match lock.skills.iter().position(|s| &s.name == name) {
+            Some(i) => i,
+            None => {
+                eprintln!("ateam: warning — `{}` not in lockfile", name);
+                continue;
+            }
+        };
+
+        let entry = lock.skills[entry_idx].clone();
+        let source = match Source::from_lockfile_string(&entry.source) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("ateam: warning — bad source for `{}`: {:#}", name, e);
+                continue;
+            }
+        };
+
+        match check_and_refetch(&repo, &source, &entry) {
+            Ok(Some(new_sha)) => {
+                let old = entry.tree_sha.clone().unwrap_or_default();
+                lock.skills[entry_idx].tree_sha = Some(new_sha.clone());
+                changed.push((name.clone(), old, new_sha));
+            }
+            Ok(None) => {
+                tracing::debug!("{} up to date", name);
+            }
+            Err(e) => {
+                eprintln!("ateam: warning — couldn't check `{}`: {:#}", name, e);
+            }
+        }
+    }
+
+    if changed.is_empty() {
+        println!("ateam: all skills up to date");
+        return Ok(());
+    }
+
+    lock.write(&repo).context("writing updated lockfile")?;
+    for (name, old, new) in &changed {
+        println!("updated {} ({} → {})", name, short(old), short(new));
+    }
+
+    if git_sync::enabled(no_sync) {
+        let msg = if changed.len() == 1 {
+            git_sync::msg_update_one(&changed[0].0, &changed[0].1, &changed[0].2)
+        } else {
+            git_sync::msg_update_bulk(changed.len())
+        };
+        let _ = git_sync::commit_and_push(&repo, &msg);
+    }
+
+    Ok(())
+}
+
+fn check_and_refetch(
+    repo: &Path,
+    source: &Source,
+    entry: &crate::lockfile::SkillEntry,
+) -> Result<Option<String>> {
+    let path = match &entry.path {
+        Some(p) => p.clone(),
+        None => return Ok(None),
+    };
+    match source {
+        Source::Github { owner, repo: r } => {
+            let r_ref = entry
+                .git_ref
+                .clone()
+                .unwrap_or_else(|| github::default_branch_fallback().to_string());
+            let commit_sha = github::resolve_ref(owner, r, &r_ref)?;
+            let latest = match github::subtree_sha(owner, r, &commit_sha, &path)? {
+                Some(s) => s,
+                None => return Ok(None),
+            };
+            if Some(&latest) == entry.tree_sha.as_ref() {
+                return Ok(None);
+            }
+            // Refetch.
+            refetch_github(repo, owner, r, &commit_sha, &path, &entry.name)?;
+            Ok(Some(latest))
+        }
+        Source::Git { url } => {
+            let r_ref = entry.git_ref.clone().unwrap_or_else(|| "HEAD".into());
+            let latest = match crate::source::git::ls_remote_sha(url, &r_ref)? {
+                Some(s) => s,
+                None => return Ok(None),
+            };
+            if Some(&latest) == entry.tree_sha.as_ref() {
+                return Ok(None);
+            }
+            // Refetch via fresh shallow clone.
+            let tmp_root = paths::cache_tmp_dir(repo);
+            std::fs::create_dir_all(&tmp_root)?;
+            let suffix: u64 = rand::random();
+            let work = tmp_root.join(format!("git-{:016x}", suffix));
+            crate::source::git::clone(url, entry.git_ref.as_deref(), &work)?;
+            let src_dir = work.join(&path);
+            let slot = install::prepare_cache_slot(repo, &entry.name)?;
+            install::copy_dir_recursive(&src_dir, &slot.tmp)?;
+            slot.commit()?;
+            let _ = std::fs::remove_dir_all(&work);
+            Ok(Some(latest))
+        }
+        Source::Local { path: p } => {
+            let abs = crate::source::local::resolve(repo, p)?;
+            let latest = crate::source::local::content_hash(&abs)?;
+            if Some(&latest) == entry.tree_sha.as_ref() {
+                Ok(None)
+            } else {
+                Ok(Some(latest))
+            }
+        }
+    }
+}
+
+fn refetch_github(
+    repo: &Path,
+    owner: &str,
+    repo_name: &str,
+    commit_sha: &str,
+    sub_path: &str,
+    skill_name: &str,
+) -> Result<()> {
+    let tmp_root = paths::cache_tmp_dir(repo);
+    std::fs::create_dir_all(&tmp_root)?;
+    let suffix: u64 = rand::random();
+    let work = tmp_root.join(format!("fetch-{:016x}", suffix));
+    std::fs::create_dir_all(&work)?;
+    let pkg_root = github::fetch_tarball(owner, repo_name, commit_sha, &work)?;
+    let src_dir = pkg_root.join(sub_path);
+    let slot = install::prepare_cache_slot(repo, skill_name)?;
+    install::copy_dir_recursive(&src_dir, &slot.tmp)?;
+    slot.commit()?;
+    let _ = std::fs::remove_dir_all(&work);
+    Ok(())
+}
+
+fn short(s: &str) -> String {
+    s.chars().take(7).collect()
+}

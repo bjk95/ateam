@@ -1,0 +1,70 @@
+/* =========================================================================
+   ateam docs — Arcflo design tokens, fully monochrome.
+   No chromatic accent — emphasis comes from contrast, weight, and spacing.
+   Adapted from defrost/project/tokens.css.
+   ========================================================================= */
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/Geist-Variable.ttf') format('truetype-variations'),
+       url('/fonts/Geist-Variable.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GeistMono-Variable.ttf') format('truetype-variations'),
+       url('/fonts/GeistMono-Variable.ttf') format('truetype');
+}
+
+:root {
+  /* Neutrals (Vercel-style) */
+  --gray-0:    oklch(1 0 0);
+  --gray-50:   oklch(0.985 0 0);
+  --gray-100:  oklch(0.97 0 0);
+  --gray-200:  oklch(0.935 0 0);
+  --gray-300:  oklch(0.88 0 0);
+  --gray-400:  oklch(0.74 0 0);
+  --gray-500:  oklch(0.62 0 0);
+  --gray-600:  oklch(0.52 0 0);
+  --gray-700:  oklch(0.38 0 0);
+  --gray-800:  oklch(0.24 0 0);
+  --gray-900:  oklch(0.16 0 0);
+  --gray-1000: oklch(0.09 0 0);
+
+  /* Foreground/background */
+  --bg:            var(--gray-0);
+  --bg-subtle:     var(--gray-50);
+  --bg-muted:      var(--gray-100);
+  --bg-inverse:    var(--gray-1000);
+  --fg:            var(--gray-900);
+  --fg-muted:      var(--gray-500);
+  --fg-subtle:     var(--gray-400);
+  --fg-inverse:    var(--gray-0);
+  --border:        var(--gray-200);
+  --border-strong: var(--gray-300);
+  --ring:          var(--gray-400);
+  /* Monochrome accent — no color, just contrast. */
+  --accent:        var(--fg);
+  --accent-fg:     var(--bg);
+
+  /* Type */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+[data-theme='dark'] {
+  --bg:            var(--gray-1000);
+  --bg-subtle:     var(--gray-900);
+  --bg-muted:      var(--gray-800);
+  --fg:            var(--gray-50);
+  --fg-muted:      var(--gray-400);
+  --fg-subtle:     var(--gray-500);
+  --fg-inverse:    var(--gray-1000);
+  --border:        oklch(1 0 0 / 0.10);
+  --border-strong: oklch(1 0 0 / 0.15);
+}
