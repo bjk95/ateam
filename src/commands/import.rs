@@ -173,6 +173,7 @@ pub(crate) fn bulk_import_skills(
 ) -> Result<BulkOutcome> {
     let mut outcome = BulkOutcome::default();
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    let upstream_index = crate::upstream::build_index(home);
 
     for dir in agent_skill_dirs(home) {
         let entries = match std::fs::read_dir(&dir) {
@@ -235,7 +236,7 @@ pub(crate) fn bulk_import_skills(
                 profiles: vec![],
                 project: None,
                 active: true,
-                upstream: crate::upstream::discover(&name, home),
+                upstream: upstream_index.get(&name).cloned(),
             });
             outcome.imported += 1;
             if already_snapshotted {
@@ -251,8 +252,8 @@ pub(crate) fn bulk_import_skills(
     // wasn't being recorded when they first imported.
     for entry in lock.skills.iter_mut() {
         if entry.upstream.is_none() && entry.source.starts_with("local:") {
-            if let Some(up) = crate::upstream::discover(&entry.name, home) {
-                entry.upstream = Some(up);
+            if let Some(up) = upstream_index.get(&entry.name) {
+                entry.upstream = Some(up.clone());
                 outcome.discovered_upstream += 1;
             }
         }
