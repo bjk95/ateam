@@ -10,6 +10,10 @@ permissions:
 jobs:
   tag:
     runs-on: ubuntu-latest
+    # Loop guard: skip our own release commits so the bump push doesn't
+    # retrigger another bump. The workflow's commit subject is
+    # "release: vX.Y.Z" — any commit starting with "release:" is ours.
+    if: ${{ !startsWith(github.event.head_commit.message, 'release:') }}
     steps:
       # `token: RELEASE_TAG_PAT` makes the PAT the credential for git
       # operations on this checkout, so the bump commit and tag push below
@@ -23,43 +27,62 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TAG_PAT }}
 
-      # Compute the next semver from conventional-commit prefixes
-      # (feat:, fix:, BREAKING CHANGE:) since the last tag *without*
-      # creating the tag. We need to bump Cargo.toml and Cargo.lock first
-      # so the eventual tag points at a commit where the package version
-      # matches the tag — cargo-dist refuses to release otherwise.
-      # `default_bump: false` means non-conventional commits produce empty
-      # outputs, which we treat as "skip release".
+      # Always patch-bump from the latest tag, unless Cargo.toml is already
+      # ahead — in that case the user did a deliberate manual minor/major
+      # bump, so we use Cargo.toml's version as-is and skip the bump step.
       - name: Compute next version
         id: version
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.RELEASE_TAG_PAT }}
-          release_branches: main
-          default_bump: false
-          dry_run: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_tag=$(git tag --list 'v*' --sort=-version:refname | head -n1)
+          latest_tag=${latest_tag:-v0.0.0}
+          latest_ver=${latest_tag#v}
+
+          cargo_ver=$(awk -F'"' '/^version/ { print $2; exit }' Cargo.toml)
+
+          highest=$(printf '%s\n%s\n' "$latest_ver" "$cargo_ver" | sort -V | tail -n1)
+          if [ "$highest" = "$cargo_ver" ] && [ "$latest_ver" != "$cargo_ver" ]; then
+            new_version="$cargo_ver"
+            need_bump=false
+          else
+            IFS=. read -r major minor patch <<< "$latest_ver"
+            new_version="$major.$minor.$((patch + 1))"
+            need_bump=true
+          fi
+
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "new_tag=v$new_version" >> "$GITHUB_OUTPUT"
+          echo "need_bump=$need_bump" >> "$GITHUB_OUTPUT"
 
       - name: Install cargo-edit
-        if: steps.version.outputs.new_version != ''
+        if: steps.version.outputs.need_bump == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-edit
 
       # `cargo set-version` updates both Cargo.toml and Cargo.lock in lockstep.
       - name: Bump package version
-        if: steps.version.outputs.new_version != ''
+        if: steps.version.outputs.need_bump == 'true'
         run: cargo set-version ${{ steps.version.outputs.new_version }}
 
-      # Commit message uses a non-conventional prefix so this push does not
-      # re-trigger another bump in the next workflow run.
       - name: Commit, tag, and push
-        if: steps.version.outputs.new_version != ''
+        shell: bash
         env:
           NEW_TAG: ${{ steps.version.outputs.new_tag }}
+          NEED_BUMP: ${{ steps.version.outputs.need_bump }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
-          git commit -m "release: $NEW_TAG"
-          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
-          git push origin HEAD:main "$NEW_TAG"
+          if [ "$NEED_BUMP" = "true" ]; then
+            git add Cargo.toml Cargo.lock
+            git commit -m "release: $NEW_TAG"
+            git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+            git push origin HEAD:main "$NEW_TAG"
+          else
+            # Manual minor/major bump path: Cargo.toml is already at
+            # $NEW_TAG, so just tag the existing HEAD and push the tag.
+            git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+            git push origin "$NEW_TAG"
+          fi
