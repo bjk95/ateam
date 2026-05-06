@@ -12,7 +12,7 @@ pub struct RepoConfig {
 }
 
 fn default_agents() -> Vec<String> {
-    vec!["claude-code".into(), "codex".into()]
+    crate::agents::ids().map(String::from).collect()
 }
 
 impl Default for RepoConfig {
@@ -78,5 +78,22 @@ impl MachineConfig {
             .context("serializing machine config")?;
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_agents_includes_claude_and_codex() {
+        let defaults = default_agents();
+        assert!(defaults.contains(&"claude-code".to_string()));
+        assert!(defaults.contains(&"codex".to_string()));
+    }
+
+    #[test]
+    fn default_agents_count_matches_registry() {
+        assert_eq!(default_agents().len(), crate::agents::REGISTRY.len());
     }
 }
