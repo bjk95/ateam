@@ -19,7 +19,7 @@ pub fn run(args: ListArgs) -> Result<()> {
         })
         .collect();
 
-    if entries.is_empty() && lock.instructions.is_none() {
+    if entries.is_empty() {
         ui::plain("(no skills locked)");
         return Ok(());
     }
@@ -51,21 +51,6 @@ pub fn run(args: ListArgs) -> Result<()> {
             .collect();
         if !parts.is_empty() {
             ui::detail(parts.join(" · "));
-        }
-    }
-
-    if args.project.is_none() {
-        if let Some(entry) = &lock.instructions {
-            let label = "[instructions]";
-            let padded_label = format!("{:<width$}", label, width = width.max(label.len()));
-            let source = style("instructions/instructions.md.hbs").cyan();
-            ui::plain(format!("{}  {}", style(padded_label).bold(), source));
-            let agents = if entry.agents.iter().any(|a| a == "*") {
-                "*".into()
-            } else {
-                entry.agents.join(",")
-            };
-            ui::detail(format!("agents: {}", agents));
         }
     }
 
