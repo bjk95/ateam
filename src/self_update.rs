@@ -41,6 +41,10 @@ fn touch_cache(path: &Path) -> Result<()> {
 
 fn build_updater() -> AxoUpdater {
     let mut u = AxoUpdater::new_for(APP_NAME);
+    // Populates install_prefix (and source/current_version) from the receipt
+    // the cargo-dist shell installer writes. Without this, run_sync fails with
+    // NotConfigured { missing_field: "install_prefix" }.
+    let _ = u.load_receipt();
     u.set_release_source(ReleaseSource {
         release_type: ReleaseSourceType::GitHub,
         owner: REPO_OWNER.into(),
