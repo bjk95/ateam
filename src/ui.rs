@@ -35,6 +35,11 @@ pub fn plain(msg: impl AsRef<str>) {
     println!("{}", msg.as_ref());
 }
 
+/// Vercel-skills-CLI-style step marker: cyan ◇ + message.
+pub fn diamond(msg: impl AsRef<str>) {
+    println!("{}", format_diamond(msg.as_ref()));
+}
+
 pub fn step(msg: impl Into<String>) -> Step {
     let msg = msg.into();
     if Term::stdout().is_term() {
@@ -114,6 +119,10 @@ fn format_detail(msg: &str) -> String {
     format!("{}  {}", style("·").dim(), style(msg).dim())
 }
 
+fn format_diamond(msg: &str) -> String {
+    format!("{}  {}", style("◇").cyan(), msg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,6 +159,12 @@ mod tests {
     fn detail_format_no_color() {
         init();
         assert_eq!(format_detail("source: github:vercel-labs/agent-skills"), "·  source: github:vercel-labs/agent-skills");
+    }
+
+    #[test]
+    fn diamond_format_no_color() {
+        init();
+        assert_eq!(format_diamond("Source: foo/bar"), "◇  Source: foo/bar");
     }
 
     #[test]

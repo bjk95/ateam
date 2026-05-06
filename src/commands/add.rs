@@ -23,18 +23,22 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
 
     let source = Source::parse(&args.source)?;
 
+    ui::diamond(format!("Source: {}", args.source));
+
     // Fetch the package into a tmp working dir so we can discover its skills.
     let work_dir = tempdir(&repo)?;
-    let package_root = {
-        let _step = ui::step(format!("fetching {}", args.source));
-        fetch_package(&source, args.r#ref.as_deref(), &work_dir.path)?
-    };
-    ui::ok(format!("fetched {}", args.source));
+    let package_root = fetch_package(&source, args.r#ref.as_deref(), &work_dir.path)?;
+    ui::diamond("Repository cloned");
     let discovered = walk_package(&package_root)
         .with_context(|| format!("scanning package at {}", package_root.display()))?;
+    ui::diamond(format!(
+        "Found {} skill{}",
+        discovered.len(),
+        if discovered.len() == 1 { "" } else { "s" }
+    ));
 
     if args.list {
-        print_listing(&args.source, &discovered);
+        print_listing(&discovered);
         return Ok(());
     }
 
@@ -120,24 +124,19 @@ fn fetch_package(source: &Source, git_ref: Option<&str>, dest: &Path) -> Result<
     }
 }
 
-fn print_listing(input: &str, skills: &[DiscoveredSkill]) {
+fn print_listing(skills: &[DiscoveredSkill]) {
     if skills.is_empty() {
-        ui::plain(format!("(no skills found in {})", input));
         return;
     }
-    ui::plain(format!("skills in {}", input));
     ui::plain("");
-    let width = skills.iter().map(|s| s.name.len()).max().unwrap_or(0);
+    ui::diamond("Available Skills");
+    ui::plain("");
     for s in skills {
-        match &s.description {
-            Some(desc) => ui::plain(format!(
-                "  {:<width$}  {}",
-                s.name,
-                style(desc).dim(),
-                width = width
-            )),
-            None => ui::plain(format!("  {}", s.name)),
+        ui::plain(format!("   {}", style(&s.name).cyan()));
+        if let Some(desc) = &s.description {
+            ui::plain(format!("       {}", desc));
         }
+        ui::plain("");
     }
 }
 
