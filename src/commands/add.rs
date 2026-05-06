@@ -29,7 +29,7 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
     let work_dir = tempdir(&repo)?;
     let package_root = fetch_package(&source, args.r#ref.as_deref(), &work_dir.path)?;
     ui::diamond("Repository cloned");
-    let discovered = walk_package(&package_root)
+    let mut discovered = walk_package(&package_root)
         .with_context(|| format!("scanning package at {}", package_root.display()))?;
     ui::diamond(format!(
         "Found {} skill{}",
@@ -41,6 +41,11 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
         print_listing(&discovered);
         return Ok(());
     }
+
+    // Registry fallback: for any --skill <name> not in the cloned tree, consult
+    // skills.sh's blob endpoint. Covers skills that have been renamed or moved
+    // upstream but are still served from the registry's snapshot cache.
+    resolve_via_registry(&source, &args, &package_root, &mut discovered);
 
     ui::detail(format!("source: {}", source.lockfile_string()));
 
@@ -169,13 +174,157 @@ fn pick_skills<'a>(
     let found_names: HashSet<&str> = out.iter().map(|s| s.name.as_str()).collect();
     let missing: Vec<&String> = wanted.iter().filter(|w| !found_names.contains(w.as_str())).collect();
     if !missing.is_empty() {
-        ui::warn(format!(
-            "skills not found in source: {}",
-            missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-        ));
+        let available: Vec<&str> = discovered.iter().map(|s| s.name.as_str()).collect();
+        for name in &missing {
+            let suggestions = closest_matches(name, &available, 3);
+            if suggestions.is_empty() {
+                ui::warn(format!("skill `{}` not found in source", name));
+            } else {
+                ui::warn(format!(
+                    "skill `{}` not found in source — did you mean: {}?",
+                    name,
+                    suggestions.join(", ")
+                ));
+            }
+        }
+        ui::detail("run with `--list` to see all available skills");
     }
 
     Ok(out)
+}
+
+/// For every `--skill <name>` not satisfied by the cloned tree, fall back to
+/// skills.sh's blob-download endpoint. On a hit, materialize the snapshot
+/// files into the package_root and append a synthetic `DiscoveredSkill` so the
+/// existing install pipeline picks it up unchanged.
+fn resolve_via_registry(
+    source: &Source,
+    args: &AddArgs,
+    package_root: &Path,
+    discovered: &mut Vec<DiscoveredSkill>,
+) {
+    let (owner, repo) = match source {
+        Source::Github { owner, repo } => (owner.clone(), repo.clone()),
+        _ => return, // registry only knows GitHub-hosted skills
+    };
+
+    let want_all = args.all || args.skill.iter().any(|s| s == "*");
+    if want_all || args.skill.is_empty() {
+        return;
+    }
+
+    let mut found_names: HashSet<String> = discovered.iter().map(|s| s.name.clone()).collect();
+
+    for raw in &args.skill {
+        let normalized = match crate::lockfile::normalize_skill_name(raw) {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        if found_names.contains(&normalized) {
+            continue;
+        }
+
+        let slug = crate::source::skills_sh::to_slug(&normalized);
+        let download = match crate::source::skills_sh::fetch(&owner, &repo, &slug) {
+            Ok(Some(d)) => d,
+            Ok(None) => continue,
+            Err(e) => {
+                ui::warn(format!("registry lookup failed for `{}`: {:#}", normalized, e));
+                continue;
+            }
+        };
+
+        let skill_dir = package_root.join(&normalized);
+        if let Err(e) = std::fs::create_dir_all(&skill_dir) {
+            ui::warn(format!("registry write failed for `{}`: {:#}", normalized, e));
+            continue;
+        }
+        let mut wrote_skill_md = false;
+        let mut write_err = None;
+        for file in &download.files {
+            let dest = skill_dir.join(&file.path);
+            if let Some(parent) = dest.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    write_err = Some(e);
+                    break;
+                }
+            }
+            if let Err(e) = std::fs::write(&dest, &file.contents) {
+                write_err = Some(e);
+                break;
+            }
+            if file.path == "SKILL.md" {
+                wrote_skill_md = true;
+            }
+        }
+        if let Some(e) = write_err {
+            ui::warn(format!("registry write failed for `{}`: {:#}", normalized, e));
+            continue;
+        }
+        if !wrote_skill_md {
+            ui::warn(format!(
+                "registry response for `{}` had no SKILL.md — skipping",
+                normalized
+            ));
+            continue;
+        }
+
+        match crate::discover::walk_package(&skill_dir) {
+            Ok(mut new_skills) if !new_skills.is_empty() => {
+                ui::diamond(format!("Resolved `{}` via skills.sh", normalized));
+                let added = new_skills.remove(0);
+                found_names.insert(added.name.clone());
+                discovered.push(added);
+            }
+            _ => {
+                ui::warn(format!(
+                    "registry SKILL.md for `{}` failed to parse — skipping",
+                    normalized
+                ));
+            }
+        }
+    }
+}
+
+fn closest_matches<'a>(wanted: &str, available: &[&'a str], n: usize) -> Vec<&'a str> {
+    let mut scored: Vec<(usize, &'a str)> = available
+        .iter()
+        .map(|s| (levenshtein(wanted, s), *s))
+        .collect();
+    scored.sort_by_key(|(d, _)| *d);
+    scored
+        .into_iter()
+        // Edit distance must fit within roughly half the longer of the two
+        // names — keeps noise out for things like "azure-observability"
+        // when no skill is actually close.
+        .filter(|(d, name)| *d <= (wanted.len().max(name.len()) / 2).max(2))
+        .take(n)
+        .map(|(_, s)| s)
+        .collect()
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let n = a.len();
+    let m = b.len();
+    if n == 0 {
+        return m;
+    }
+    if m == 0 {
+        return n;
+    }
+    let mut prev: Vec<usize> = (0..=m).collect();
+    let mut curr = vec![0; m + 1];
+    for i in 1..=n {
+        curr[0] = i;
+        for j in 1..=m {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[m]
 }
 
 fn resolve_install_root(args: &AddArgs, machine: &MachineConfig) -> Result<InstallRoot> {
