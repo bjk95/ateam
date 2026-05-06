@@ -10,7 +10,7 @@ pub fn run(args: ListArgs) -> Result<()> {
     let repo = paths::resolve_repo()?;
     let lock = Lockfile::load(&repo)?;
 
-    let entries: Vec<&SkillEntry> = lock
+    let mut entries: Vec<&SkillEntry> = lock
         .skills
         .iter()
         .filter(|s| match (&args.project, &s.project) {
@@ -19,6 +19,7 @@ pub fn run(args: ListArgs) -> Result<()> {
             (Some(_), None) => false,
         })
         .collect();
+    sort_entries(&mut entries);
 
     if args.json {
         return print_json(&entries);
@@ -64,6 +65,10 @@ pub fn run(args: ListArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn sort_entries(entries: &mut [&SkillEntry]) {
+    entries.sort_by(|a, b| a.source.cmp(&b.source).then_with(|| a.name.cmp(&b.name)));
 }
 
 fn print_json(entries: &[&SkillEntry]) -> Result<()> {
@@ -214,6 +219,33 @@ mod tests {
         let view = JsonSkill::from(&e);
         let v = serde_json::to_value(&view).unwrap();
         assert_eq!(v["ref"], "v1.2.3");
+    }
+
+    #[test]
+    fn sort_entries_orders_by_source_then_name() {
+        let mut a = entry("zebra");
+        a.source = "github:aa/aa".into();
+        let mut b = entry("alpha");
+        b.source = "github:bb/bb".into();
+        let mut c = entry("beta");
+        c.source = "github:aa/aa".into();
+        let mut d = entry("alpha");
+        d.source = "github:aa/aa".into();
+        let mut entries: Vec<&SkillEntry> = vec![&a, &b, &c, &d];
+        sort_entries(&mut entries);
+        let got: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|e| (e.source.as_str(), e.name.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("github:aa/aa", "alpha"),
+                ("github:aa/aa", "beta"),
+                ("github:aa/aa", "zebra"),
+                ("github:bb/bb", "alpha"),
+            ]
+        );
     }
 
     #[test]

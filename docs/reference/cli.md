@@ -175,6 +175,9 @@ ateam skills list --json           # versioned JSON for editor integrations
 ateam skills list --names          # one name per line, no styling (pipe-friendly)
 ```
 
+Entries are sorted by source (remote) alphabetically, then by name within each
+source. This applies to all output modes (default, `--names`, `--json`).
+
 `--names` and `--json` are mutually exclusive. `--names` prints nothing when
 the lockfile is empty (instead of `(no skills locked)`), so it composes cleanly
 with `xargs` and `ateam skills remove`:
