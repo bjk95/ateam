@@ -109,7 +109,9 @@ pub enum Command {
     /// Show what's locked vs installed vs drifted.
     Status,
 
-    /// Adopt a locally-installed skill into the lockfile.
+    /// Adopt locally-installed skills (and global instructions) into the lockfile.
+    /// With no arguments: bulk-import every skill in ~/.claude/skills,
+    /// ~/.codex/skills, ~/.agents/skills plus the global CLAUDE.md / AGENTS.md.
     Import(ImportArgs),
 
     /// Manage per-machine project alias map.
@@ -118,6 +120,13 @@ pub enum Command {
 
     /// Self-update: download the latest ateam release and replace this binary.
     Upgrade,
+
+    /// Manage the ateam-config repo's git remote.
+    #[command(subcommand)]
+    Remote(RemoteCommand),
+
+    /// Validate the instructions template against declared profiles.
+    Validate,
 }
 
 #[derive(Parser)]
@@ -219,15 +228,29 @@ pub struct ListArgs {
 
 #[derive(Parser)]
 pub struct ImportArgs {
-    pub name: String,
+    /// Skill name to adopt. Omit for bulk import (every skill on disk + instructions).
+    pub name: Option<String>,
 
-    /// Override detected upstream source.
+    /// Only import the global ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md as the
+    /// instructions template — skip skills.
+    #[arg(long, conflicts_with_all = ["upstream", "project"])]
+    pub instructions: bool,
+
+    /// Override detected upstream source. Single-skill mode only.
     #[arg(long, value_name = "SOURCE")]
     pub upstream: Option<String>,
 
-    /// Tag the imported entry with a project alias.
+    /// Tag the imported entry with a project alias. Single-skill mode only.
     #[arg(long, value_name = "ALIAS")]
     pub project: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum RemoteCommand {
+    /// Set `origin` to the given git URL and push the current branch upstream.
+    Add { url: String },
+    /// Print the current remote(s).
+    List,
 }
 
 #[derive(Subcommand)]
@@ -255,5 +278,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Import(args) => crate::commands::import::run(args, no_sync),
         Command::Project(cmd) => crate::commands::project::run(cmd),
         Command::Upgrade => crate::self_update::force_upgrade(),
+        Command::Remote(cmd) => crate::commands::remote::run(cmd),
+        Command::Validate => crate::commands::validate::run(),
     }
 }

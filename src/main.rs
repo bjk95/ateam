@@ -4,6 +4,7 @@ mod config;
 mod discover;
 mod git_sync;
 mod install;
+mod instructions;
 mod lockfile;
 mod manifest;
 mod paths;

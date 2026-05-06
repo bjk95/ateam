@@ -27,6 +27,8 @@ rand = "0.8"
 axoupdater = { version = "0.10.0", default-features = false, features = ["blocking", "github_releases"] }
 console = "0.15"
 indicatif = "0.17"
+handlebars = "6"
+gethostname = "0.5"
 
 [profile.release]
 lto = true
