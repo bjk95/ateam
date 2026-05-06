@@ -8,7 +8,8 @@ backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
 - **One lockfile, one repo, zero project pollution.** Skills declared in
   `~/.config/ateam/ateam.lock.toml`; project repos gain nothing ateam-specific.
 - **Project scope by alias.** Same project lives at different paths on
-  different machines — register once per machine, sync everywhere.
+  different machines. Run `ateam skills add` from inside a git repo and
+  ateam offers to auto-register it — no manual setup step.
 - **Soft-disable for lean libraries.** `ateam skills deactivate <name>` unlinks
   a skill from your agents but keeps the lockfile entry — quarantine-then-delete
   for skills you suspect you don't use, no usage tracking required.

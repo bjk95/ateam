@@ -37,6 +37,12 @@ ateam skills add canva/agent-skills --skill style-guide -y
 ateam walks up from the current directory; if a parent matches a registered
 project's path, it tags the install with that alias.
 
+If cwd is inside a git repo that has *not* been registered, `ateam skills add`
+prompts to install project-scoped (auto-registering the repo's directory name
+as the alias) or globally — defaulting to project. Pass `-g`/`--global` to
+skip the prompt and force global. With `-y` and no TTY, the prompt
+auto-resolves to project; without `-y` and no TTY, it falls through to global.
+
 ## On a machine that hasn't registered the alias
 
 `ateam apply` skips the entry silently and prints a nudge:
