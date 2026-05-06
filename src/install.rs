@@ -119,15 +119,26 @@ pub struct CacheSlot {
 
 impl CacheSlot {
     pub fn commit(self) -> Result<PathBuf> {
-        if self.final_path.exists() {
-            std::fs::remove_dir_all(&self.final_path).with_context(|| {
-                format!("removing existing {}", self.final_path.display())
-            })?;
-        }
         if let Some(parent) = self.final_path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("creating {}", parent.display()))?;
         }
+        // Three-step atomic swap: `final_path` is never absent between steps,
+        // so concurrent apply runs (cron + interactive, etc.) can't observe a
+        // gap that leaves their symlinks dangling.
+        let quarantine = quarantine_path(&self.tmp);
+        let displaced = match std::fs::rename(&self.final_path, &quarantine) {
+            Ok(()) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => {
+                return Err(anyhow!(
+                    "moving aside {} → {}: {}",
+                    self.final_path.display(),
+                    quarantine.display(),
+                    e
+                ))
+            }
+        };
         std::fs::rename(&self.tmp, &self.final_path).with_context(|| {
             format!(
                 "renaming {} → {}",
@@ -135,8 +146,21 @@ impl CacheSlot {
                 self.final_path.display()
             )
         })?;
+        if displaced {
+            // Best-effort; `sweep_cache_tmp` cleans up any straggler.
+            let _ = std::fs::remove_dir_all(&quarantine);
+        }
         Ok(self.final_path)
     }
+}
+
+fn quarantine_path(tmp: &Path) -> PathBuf {
+    let mut name = tmp
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    name.push_str(".quarantine");
+    tmp.with_file_name(name)
 }
 
 /// Sweep stale dirs out of `<repo>/.ateam/cache/.tmp/` from previous failed apply runs.
@@ -291,4 +315,64 @@ fn backup_path(p: &Path) -> PathBuf {
     let name = p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let ts = crate::manifest::now_unix();
     parent.join(format!("{}.bak.{}", name, ts))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write_marker(dir: &Path, body: &str) {
+        std::fs::write(dir.join("marker"), body).unwrap();
+    }
+
+    #[test]
+    fn commit_replaces_existing_directory() {
+        let tmp = TempDir::new().unwrap();
+        let repo = tmp.path();
+
+        let first = prepare_cache_slot(repo, "demo").unwrap();
+        write_marker(&first.tmp, "v1");
+        let final_path = first.commit().unwrap();
+        assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v1");
+
+        let second = prepare_cache_slot(repo, "demo").unwrap();
+        write_marker(&second.tmp, "v2");
+        let final_path = second.commit().unwrap();
+        assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v2");
+    }
+
+    #[test]
+    fn commit_creates_when_absent() {
+        let tmp = TempDir::new().unwrap();
+        let repo = tmp.path();
+
+        let slot = prepare_cache_slot(repo, "demo").unwrap();
+        write_marker(&slot.tmp, "v1");
+        let final_path = slot.commit().unwrap();
+        assert!(final_path.exists());
+        assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v1");
+    }
+
+    #[test]
+    fn commit_leaves_no_quarantine_in_tmp() {
+        let tmp = TempDir::new().unwrap();
+        let repo = tmp.path();
+
+        let first = prepare_cache_slot(repo, "demo").unwrap();
+        write_marker(&first.tmp, "v1");
+        first.commit().unwrap();
+
+        let second = prepare_cache_slot(repo, "demo").unwrap();
+        write_marker(&second.tmp, "v2");
+        second.commit().unwrap();
+
+        let cache_tmp = crate::paths::cache_tmp_dir(repo);
+        let leftovers: Vec<_> = std::fs::read_dir(&cache_tmp)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .collect();
+        assert!(leftovers.is_empty(), "cache tmp not empty: {:?}", leftovers);
+    }
 }
