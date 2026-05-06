@@ -56,6 +56,12 @@ pub struct SkillEntry {
 
     #[serde(default = "default_active", skip_serializing_if = "is_active")]
     pub active: bool,
+
+    /// Origin repo for snapshotted (`local:`) entries — populated automatically
+    /// by `ateam skills import` when discoverable. None for non-local sources
+    /// (where `source` already encodes the upstream) or when discovery failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream: Option<String>,
 }
 
 fn default_agents() -> Vec<String> {
@@ -198,6 +204,7 @@ mod tests {
                     profiles: vec![],
                     project: None,
                     active: true,
+                    upstream: None,
                 },
                 SkillEntry {
                     name: "a".into(),
@@ -209,6 +216,7 @@ mod tests {
                     profiles: vec![],
                     project: None,
                     active: true,
+                    upstream: None,
                 },
             ],
             instructions: None,
@@ -241,6 +249,7 @@ mod tests {
                 profiles: vec![],
                 project: None,
                 active: true,
+                upstream: None,
             }],
             instructions: None,
         };
@@ -263,6 +272,7 @@ mod tests {
                 profiles: vec![],
                 project: None,
                 active: false,
+                upstream: None,
             }],
             instructions: None,
         };

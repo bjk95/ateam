@@ -11,6 +11,7 @@ mod paths;
 mod self_update;
 mod source;
 mod ui;
+mod upstream;
 
 fn main() {
     tracing_subscriber::fmt()

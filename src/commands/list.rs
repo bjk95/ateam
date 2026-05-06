@@ -76,7 +76,11 @@ fn render_source(s: &SkillEntry) -> String {
     let base: String = if let Some(rest) = s.source.strip_prefix("github:") {
         format!("{}", style(rest).cyan())
     } else if s.source.starts_with("local:") {
-        format!("{}", style("local").dim())
+        let local = format!("{}", style("local").dim());
+        match &s.upstream {
+            Some(up) => format!("{}  {}  {}", local, style("←").dim(), render_upstream(up)),
+            None => local,
+        }
     } else if let Some(url) = s.source.strip_prefix("git:") {
         format!("{}", style(url).cyan())
     } else {
@@ -85,5 +89,15 @@ fn render_source(s: &SkillEntry) -> String {
     match &s.git_ref {
         Some(r) => format!("{} {}", base, style(format!("@ {}", r)).dim()),
         None => base,
+    }
+}
+
+fn render_upstream(up: &str) -> String {
+    if let Some(rest) = up.strip_prefix("github:") {
+        format!("{}", style(rest).cyan())
+    } else if let Some(url) = up.strip_prefix("git:") {
+        format!("{}", style(url).cyan())
+    } else {
+        format!("{}", style(up).cyan())
     }
 }

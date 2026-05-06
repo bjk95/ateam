@@ -121,6 +121,13 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
         "ateam: imported {} skill(s); skipped {} already managed",
         outcome.imported, outcome.skipped_managed
     );
+    if outcome.discovered_upstream > 0 {
+        println!(
+            "  + discovered upstream for {} existing entr{}",
+            outcome.discovered_upstream,
+            if outcome.discovered_upstream == 1 { "y" } else { "ies" }
+        );
+    }
     if !outcome.errors.is_empty() {
         println!("  errors:");
         for (name, err) in &outcome.errors {
@@ -155,6 +162,7 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
 pub(crate) struct BulkOutcome {
     pub imported: usize,
     pub skipped_managed: usize,
+    pub discovered_upstream: usize,
     pub errors: Vec<(String, String)>,
 }
 
@@ -227,6 +235,7 @@ pub(crate) fn bulk_import_skills(
                 profiles: vec![],
                 project: None,
                 active: true,
+                upstream: crate::upstream::discover(&name, home),
             });
             outcome.imported += 1;
             if already_snapshotted {
@@ -236,6 +245,19 @@ pub(crate) fn bulk_import_skills(
             }
         }
     }
+
+    // Backfill: re-discover upstream for any local entry that doesn't have one.
+    // Lets the user re-run `ateam skills import` to pick up upstream info that
+    // wasn't being recorded when they first imported.
+    for entry in lock.skills.iter_mut() {
+        if entry.upstream.is_none() && entry.source.starts_with("local:") {
+            if let Some(up) = crate::upstream::discover(&entry.name, home) {
+                entry.upstream = Some(up);
+                outcome.discovered_upstream += 1;
+            }
+        }
+    }
+
     Ok(outcome)
 }
 
@@ -404,6 +426,7 @@ fn build_entry(
             profiles: vec![],
             project: args.project.clone(),
             active: true,
+            upstream: None,
         });
     }
 
@@ -426,6 +449,7 @@ fn build_entry(
         profiles: vec![],
         project: args.project.clone(),
         active: true,
+        upstream: None,
     })
 }
 
@@ -567,6 +591,7 @@ mod tests {
             profiles: vec![],
             project: None,
             active: true,
+            upstream: None,
         });
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
         assert_eq!(outcome.imported, 0);

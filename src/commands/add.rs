@@ -334,6 +334,7 @@ fn install_one(
             profiles: args.profile.clone(),
             project,
             active: true,
+            upstream: None,
         },
         linked,
     ))
