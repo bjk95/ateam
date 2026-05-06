@@ -1,4 +1,4 @@
-# ateam
+# A-Team
 
 Multi-machine AI skills sync. A Rust CLI that's a drop-in for `npx skills add`,
 backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
