@@ -304,8 +304,8 @@ mod tests {
         assert!(outcome.lockfile_dirty, "should mark lockfile dirty when auto-adding entry");
         assert!(lock.instructions.is_some());
 
-        let claude = fx.read_output(Tool::Claude).unwrap();
-        let codex = fx.read_output(Tool::Codex).unwrap();
+        let claude = fx.read_output(Tool::CLAUDE).unwrap();
+        let codex = fx.read_output(Tool::CODEX).unwrap();
         assert!(claude.contains("WORK"), "got: {}", claude);
         assert!(!claude.contains("HOME"));
         assert_eq!(claude, codex, "no tool branching → identical content");
@@ -320,8 +320,8 @@ mod tests {
         let prev = Manifest::default();
         let mut new = Manifest::default();
         fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
-        assert_eq!(fx.read_output(Tool::Claude).unwrap().trim(), "CLAUDE");
-        assert_eq!(fx.read_output(Tool::Codex).unwrap().trim(), "CODEX");
+        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap().trim(), "CLAUDE");
+        assert_eq!(fx.read_output(Tool::CODEX).unwrap().trim(), "CODEX");
     }
 
     #[test]
@@ -335,8 +335,8 @@ mod tests {
         let mut new = Manifest::default();
         let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
         assert_eq!(outcome.written, 0);
-        assert!(fx.read_output(Tool::Claude).is_none());
-        assert!(fx.read_output(Tool::Codex).is_none());
+        assert!(fx.read_output(Tool::CLAUDE).is_none());
+        assert!(fx.read_output(Tool::CODEX).is_none());
     }
 
     #[test]
@@ -344,7 +344,7 @@ mod tests {
         let fx = Fixture::new(&["work"], &["work"]);
         fx.write_template("template body\n");
         // Pre-create a colliding file outside ateam's manifest.
-        let claude_out = fx.output_path(Tool::Claude);
+        let claude_out = fx.output_path(Tool::CLAUDE);
         std::fs::create_dir_all(claude_out.parent().unwrap()).unwrap();
         std::fs::write(&claude_out, "user-managed content").unwrap();
 
@@ -364,7 +364,7 @@ mod tests {
     fn force_backs_up_and_writes() {
         let fx = Fixture::new(&["work"], &["work"]);
         fx.write_template("template body\n");
-        let claude_out = fx.output_path(Tool::Claude);
+        let claude_out = fx.output_path(Tool::CLAUDE);
         std::fs::create_dir_all(claude_out.parent().unwrap()).unwrap();
         std::fs::write(&claude_out, "stale local").unwrap();
 
@@ -374,7 +374,7 @@ mod tests {
         let mut new = Manifest::default();
         let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, true).unwrap();
         assert!(outcome.written >= 1);
-        assert_eq!(fx.read_output(Tool::Claude).unwrap(), "template body\n");
+        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap(), "template body\n");
 
         // Backup file should exist alongside.
         let parent = claude_out.parent().unwrap();
@@ -400,14 +400,14 @@ mod tests {
         let mut new = Manifest::default();
         // First apply
         fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
-        assert_eq!(fx.read_output(Tool::Claude).unwrap(), "v1\n");
+        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap(), "v1\n");
 
         // Carry forward: prev = previous new.
         prev = new;
         fx.write_template("v2\n");
         let mut new2 = Manifest::default();
         fx.run(&mut lock, &mut machine, &prev, &mut new2, false).unwrap();
-        assert_eq!(fx.read_output(Tool::Claude).unwrap(), "v2\n");
+        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap(), "v2\n");
     }
 
     #[test]

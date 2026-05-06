@@ -306,8 +306,8 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
         );
     }
 
-    let claude_path = instructions::output_path(home, Tool::Claude);
-    let codex_path = instructions::output_path(home, Tool::Codex);
+    let claude_path = instructions::output_path(home, Tool::CLAUDE);
+    let codex_path = instructions::output_path(home, Tool::CODEX);
     let claude = read_optional(&claude_path)?;
     let codex = read_optional(&codex_path)?;
 
