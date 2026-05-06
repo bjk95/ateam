@@ -22,6 +22,7 @@ fn main() {
         .init();
 
     if cli::shows_help() {
+        eprintln!();
         eprintln!("{}", cli::banner());
         eprintln!();
     }
