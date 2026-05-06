@@ -95,6 +95,8 @@ impl Lockfile {
             .with_context(|| format!("parsing {}", path.display()))?;
         validate_no_duplicate_names(&lock.skills)
             .with_context(|| format!("in {}", path.display()))?;
+        validate_subpaths(&lock.skills)
+            .with_context(|| format!("in {}", path.display()))?;
         Ok(lock)
     }
 
@@ -141,6 +143,22 @@ fn validate_no_duplicate_names(skills: &[SkillEntry]) -> Result<()> {
         if !seen.insert(s.name.as_str()) {
             bail!("duplicate skill name `{}` in lockfile", s.name);
         }
+    }
+    Ok(())
+}
+
+/// Reject `path` fields that could escape the package root during extraction.
+/// Skipped for `local:` sources, where `path` records the source location
+/// itself (legitimately absolute or containing `..`) rather than a subpath
+/// within an extracted tarball.
+fn validate_subpaths(skills: &[SkillEntry]) -> Result<()> {
+    for s in skills {
+        let Some(p) = s.path.as_deref() else { continue };
+        if s.source.starts_with("local:") {
+            continue;
+        }
+        crate::source::sanitize_subpath(p)
+            .with_context(|| format!("invalid `path` for skill `{}`", s.name))?;
     }
     Ok(())
 }
@@ -290,5 +308,42 @@ source = "local:skills/a"
 "#;
         let parsed: Lockfile = toml::from_str(legacy).unwrap();
         assert!(parsed.skills[0].active, "missing field should default to active=true");
+    }
+
+    #[test]
+    fn rejects_parent_dir_subpath_for_remote_source() {
+        let entries = vec![SkillEntry {
+            name: "a".into(),
+            source: "github:foo/bar".into(),
+            path: Some("../../etc/passwd".into()),
+            git_ref: None,
+            tree_sha: None,
+            agents: vec!["*".into()],
+            profiles: vec![],
+            project: None,
+            active: true,
+            upstream: None,
+        }];
+        let err = validate_subpaths(&entries).unwrap_err();
+        let msg = format!("{:#}", err);
+        assert!(msg.contains(".."), "error should mention `..`: {}", msg);
+        assert!(msg.contains('a'), "error should name the skill: {}", msg);
+    }
+
+    #[test]
+    fn allows_parent_dir_path_for_local_source() {
+        let entries = vec![SkillEntry {
+            name: "a".into(),
+            source: "local:../external".into(),
+            path: Some("../external/skills/a".into()),
+            git_ref: None,
+            tree_sha: None,
+            agents: vec!["*".into()],
+            profiles: vec![],
+            project: None,
+            active: true,
+            upstream: None,
+        }];
+        validate_subpaths(&entries).expect("local sources may carry .. in path");
     }
 }
