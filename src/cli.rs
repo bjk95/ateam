@@ -140,6 +140,9 @@ pub enum SkillsCommand {
 
     /// Reactivate a previously-deactivated skill.
     Activate(ActivateArgs),
+
+    /// Print a skill's SKILL.md contents to stdout.
+    Show(ShowArgs),
 }
 
 #[derive(Parser)]
@@ -243,6 +246,11 @@ pub struct ActivateArgs {
 }
 
 #[derive(Parser)]
+pub struct ShowArgs {
+    pub name: String,
+}
+
+#[derive(Parser)]
 pub struct ListArgs {
     /// Show only entries scoped to this project alias.
     #[arg(long, value_name = "ALIAS")]
@@ -302,6 +310,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             SkillsCommand::Import(args) => crate::commands::import::run(args, no_sync),
             SkillsCommand::Deactivate(args) => crate::commands::deactivate::run(args, no_sync),
             SkillsCommand::Activate(args) => crate::commands::activate::run(args, no_sync),
+            SkillsCommand::Show(args) => crate::commands::show::run(args),
         },
         Command::Project(cmd) => crate::commands::project::run(cmd),
         Command::Upgrade => crate::self_update::force_upgrade(),

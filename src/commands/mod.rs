@@ -9,6 +9,7 @@ pub mod list;
 pub mod project;
 pub mod remote;
 pub mod remove;
+pub mod show;
 pub mod status;
 pub mod update;
 pub mod validate;
