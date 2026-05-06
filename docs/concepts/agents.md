@@ -16,13 +16,21 @@ All four use the same `SKILL.md` format ([agentskills.io](https://agentskills.io
 
 ## Default-enabled set
 
-By default, all four agents are enabled. ateam's `apply` will write instructions files and install skill symlinks for each one — even if the agent itself isn't installed on this machine. To opt out, edit `ateam.toml`:
+By default, all four agents are enabled. ateam's `apply` will write instructions files and install skill symlinks for each one — even if the agent itself isn't installed on this machine.
 
-```toml
-enabled_agents = ["claude-code", "codex"]  # only these two
+## Managing the enabled set
+
+Use the `ateam agents` subcommand to toggle agents on and off. The commands edit `enabled_agents` in `ateam.toml` for you, then re-render instructions and re-install skill symlinks so the filesystem matches the new state immediately.
+
+```bash
+ateam agents list                  # show every agent + enabled/disabled status
+ateam agents add gemini opencode   # enable one or more
+ateam agents remove gemini         # disable one or more
 ```
 
-Existing users upgrading from v0.2.x with an explicit `enabled_agents` line keep their list unchanged. Only users on the default (no line, or fresh `ateam init`) get the four-agent default.
+Both `add` and `remove` are idempotent — adding an already-enabled agent or removing one that isn't enabled is a no-op with an informational message, not an error. ateam refuses to remove the last enabled agent (that would disable ateam itself); if you really want an empty list, edit `ateam.toml` by hand.
+
+Existing users upgrading from v0.2.x with an explicit `enabled_agents` line keep their list unchanged. Only users on the default (no line, or fresh `ateam init`) get the four-agent default. To pick up OpenCode and Gemini after upgrading, run `ateam agents add opencode gemini`.
 
 ## Per-skill agent gating
 

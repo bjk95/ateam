@@ -1,5 +1,6 @@
 pub mod activate;
 pub mod add;
+pub mod agents;
 pub mod apply;
 pub mod apply_instructions;
 pub mod deactivate;

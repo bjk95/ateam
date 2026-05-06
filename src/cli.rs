@@ -115,6 +115,30 @@ pub enum Command {
     /// Manage the instructions template (CLAUDE.md / AGENTS.md source).
     #[command(subcommand)]
     Instructions(InstructionsCommand),
+
+    /// Manage which AI agents ateam syncs to (claude-code, codex, opencode, gemini).
+    #[command(subcommand)]
+    Agents(AgentsCommand),
+}
+
+#[derive(Subcommand)]
+pub enum AgentsCommand {
+    /// List every registered agent and whether it's enabled on this repo.
+    List,
+
+    /// Enable one or more agents (writes to ateam.toml and re-applies).
+    Add {
+        /// Agent ids to enable. See `ateam agents list` for valid ids.
+        #[arg(required = true)]
+        ids: Vec<String>,
+    },
+
+    /// Disable one or more agents (writes to ateam.toml and re-applies).
+    Remove {
+        /// Agent ids to disable. See `ateam agents list` for valid ids.
+        #[arg(required = true)]
+        ids: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -402,6 +426,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Validate => crate::commands::validate::run(),
         Command::Edit => crate::commands::edit::run(no_sync),
         Command::Instructions(cmd) => crate::commands::instructions::run(cmd, no_sync),
+        Command::Agents(cmd) => crate::commands::agents::run(cmd, no_sync),
     }
 }
 
@@ -429,6 +454,10 @@ fn is_mutating(cmd: &Command) -> bool {
         Command::Instructions(i) => match i {
             InstructionsCommand::Edit => true,
             InstructionsCommand::Diff | InstructionsCommand::Show => false,
+        },
+        Command::Agents(a) => match a {
+            AgentsCommand::Add { .. } | AgentsCommand::Remove { .. } => true,
+            AgentsCommand::List => false,
         },
     }
 }
