@@ -1,25 +1,41 @@
 # A-Team
 
-Multi-machine AI skills sync. A Rust CLI that's a drop-in for `npx skills add`,
-backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
-`push` happening invisibly so you never type `git` directly.
+**Install an AI skill once. Run it on every agent, on every machine.**
 
-- **Vercel-compatible** — every flag from `npx skills add` works as `ateam skills add`.
-- **One lockfile, one repo, zero project pollution.** Skills declared in
-  `~/.config/ateam/ateam.lock.toml`; project repos gain nothing ateam-specific.
-- **Project scope by alias.** Same project lives at different paths on
-  different machines. Run `ateam skills add` from inside a git repo and
-  ateam offers to auto-register it — no manual setup step.
-- **Soft-disable for lean libraries.** `ateam skills deactivate <name>` unlinks
-  a skill from your agents but keeps the lockfile entry — quarantine-then-delete
-  for skills you suspect you don't use, no usage tracking required.
-- **Auto-sync.** Every mutating command pulls before mutating, commits the
-  result, and pushes. Soft-fails offline, never blocks your local change.
+Add a skill — or edit your `CLAUDE.md` — on your laptop and it appears on
+your work box. Claude Code sees it. Codex sees it. No re-installing, no
+copy-pasting between `~/.claude/skills`, no maintaining `CLAUDE.md` and
+`AGENTS.md` side by side, no `git push` — ateam syncs everything invisibly.
 
-> **Status:** v1, macOS + Linux. Tested end-to-end against the live
-> [skills.sh](https://skills.sh) registry. CLAUDE.md / AGENTS.md sync from a single
-> Handlebars template ships in v0.2. See [WISHLIST.md](./WISHLIST.md) for what's
-> coming next (subagents, settings, hooks, MCP server config).
+## What ateam gives you
+
+- **One install, every tool.** `ateam skills add deploy-to-vercel` lands in
+  Claude Code *and* Codex from a single command. No more installing the same
+  skill twice.
+- **One source for `CLAUDE.md` and `AGENTS.md`.** A single Handlebars template
+  at `instructions/instructions.md.hbs` renders to both files, with
+  profile-gated fragments so your work laptop and home machine read different
+  instructions from the same source. Adopt your existing globals with
+  `ateam skills import --instructions`.
+- **One install, every machine.** Wire a git remote and every `add` /
+  `update` / `remove` propagates. Open a fresh laptop, run `ateam apply`, and
+  your full skill library is there in seconds.
+- **Invisible git.** Pull, commit, and push happen in the background on every
+  command. Soft-fails offline so you're never blocked from working locally.
+- **Profiles.** Tag skills `work` or `personal`. Work laptop gets the work
+  skills; home machine doesn't. One source of truth, profile-gated outputs.
+- **Project scope.** Drop a skill into one repo's `.claude/skills` without
+  polluting your globals. The same project lives at different paths on
+  different machines — ateam handles the alias.
+- **Soft-disable.** `ateam skills deactivate` unlinks a skill from your
+  agents but keeps the lockfile entry. No usage tracking; reversible cleanup
+  for skills you suspect you don't need.
+- **Drop-in for `npx skills`.** Every flag from Vercel's CLI works as
+  `ateam skills add`. Already using the Vercel one? Switch in a minute.
+
+> **Status:** v1, stable on macOS + Linux. Tested end-to-end against the live
+> [skills.sh](https://skills.sh) registry. Roadmap in
+> [WISHLIST.md](./WISHLIST.md).
 
 ## Install
 
@@ -27,78 +43,49 @@ backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
 curl -fsSL https://github.com/bjk95/ateam/releases/latest/download/ateam-installer.sh | sh
 ```
 
-Drops a single static binary at `~/.local/bin/ateam` on macOS (Apple Silicon
-or Intel) and Linux (x86_64 or aarch64, musl-static — works on glibc and musl
-distros alike). To build from source instead, see [docs/install.md](./docs/install.md).
-
-After install, `ateam` keeps itself up to date: every command checks GitHub
+Single static binary at `~/.local/bin/ateam`. macOS (Apple Silicon or Intel)
+and Linux (x86_64 or aarch64, musl-static — works on glibc and musl distros
+alike). After install, `ateam` self-updates: every command checks GitHub
 Releases at most once every 24 hours and replaces the binary in place when a
-newer version is found. To trigger explicitly, run `ateam upgrade`.
+newer version ships. To trigger explicitly: `ateam upgrade`.
 
-## Quickstart
+To build from source, see [docs/install.md](./docs/install.md).
+
+## 5-minute quickstart
 
 ```bash
-# Bootstrap a fresh ateam-config repo at ~/.config/ateam/
-ateam init --scaffold --profiles personal
+# 1. Bootstrap a config repo at ~/.config/ateam/
+ateam init --scaffold
 
-# Install a skill from skills.sh
+# 2. Install a skill — it appears in Claude Code AND Codex
 ateam skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
+ls ~/.claude/skills/ ~/.codex/skills/   # both now have it
 
-# Verify both Claude Code and Codex see it
-ls ~/.claude/skills/ ~/.codex/skills/
+# 3. Wire a remote so other machines can sync
+ateam remote add git@github.com:you/ateam-config.git
 ```
 
-To sync to a second machine, point ateam at a git remote first:
+On a second machine:
 
 ```bash
-# On machine A
-ateam remote add git@github.com:you/ateam-config.git
-ateam skills add vercel-labs/agent-skills --skill web-design-guidelines -y
-# auto-pushes the lockfile change
-
-# On machine B
-ateam init git@github.com:you/ateam-config.git --profiles work
+ateam init git@github.com:you/ateam-config.git
 ateam apply
+# every skill from machine A now lives on machine B
 ```
 
-That's it. From now on every `ateam skills add` / `update` / `remove` syncs invisibly.
+That's it. From now on every `ateam skills add` / `update` / `remove` syncs
+invisibly.
 
 ## Docs
 
-Full docs at <https://bjk95.github.io/ateam/>, or browse the markdown directly:
+Full docs at <https://bjk95.github.io/ateam/>, or browse the markdown
+directly:
 
 - [Installation](./docs/install.md)
 - [Quickstart](./docs/quickstart.md)
 - Concepts: [Auto-sync](./docs/concepts/auto-sync.md) · [Profiles](./docs/concepts/profiles.md) · [Project scope](./docs/concepts/project-scope.md)
 - Reference: [CLI](./docs/reference/cli.md) · [Lockfile format](./docs/reference/lockfile.md)
 - [Troubleshooting](./docs/operate/troubleshooting.md)
-
-The docs site is built with Astro + Starlight from this same `docs/` directory
-via a symlink, so the markdown is the single source of truth — GitHub renders
-it natively when you click `docs/` above, and the published site stays in sync
-on every push.
-
-## Repo layout
-
-```
-ateam/
-├── src/                       Rust CLI source
-│   ├── commands/              clap subcommand handlers
-│   ├── source/                github / git / local source fetchers
-│   ├── lockfile.rs            ateam.lock.toml read/write
-│   ├── install.rs             symlink + atomic cache materialization
-│   ├── manifest.rs            per-machine install tracking
-│   ├── git_sync.rs            invisible auto pull/commit/push
-│   └── …
-├── docs/                      Markdown source for the docs site
-├── site/                      Astro + Starlight build (symlinks docs/ in)
-└── .github/workflows/         GitHub Pages deploy
-```
-
-## Contributing
-
-PRs welcome on anything in [WISHLIST.md](./WISHLIST.md), or anything that
-makes the v1 surface tighter. Run `cargo test` before submitting.
 
 ## License
 
