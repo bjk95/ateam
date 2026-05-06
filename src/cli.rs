@@ -323,8 +323,13 @@ pub struct ListArgs {
     pub project: Option<String>,
 
     /// Emit a versioned JSON document instead of styled text.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "names")]
     pub json: bool,
+
+    /// Print only skill names, one per line, with no styling. For piping into
+    /// `ateam skills remove`.
+    #[arg(long)]
+    pub names: bool,
 }
 
 #[derive(Parser)]

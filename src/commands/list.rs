@@ -24,6 +24,13 @@ pub fn run(args: ListArgs) -> Result<()> {
         return print_json(&entries);
     }
 
+    if args.names {
+        for s in &entries {
+            println!("{}", s.name);
+        }
+        return Ok(());
+    }
+
     if entries.is_empty() {
         ui::plain("(no skills locked)");
         return Ok(());
