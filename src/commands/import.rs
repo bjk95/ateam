@@ -104,7 +104,7 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     let mut lock = Lockfile::load(repo)?;
     let outcome = bulk_import_skills(repo, home, &mut lock)?;
 
-    if outcome.imported > 0 || outcome.collisions > 0 || !outcome.errors.is_empty() {
+    if outcome.imported > 0 || !outcome.errors.is_empty() {
         lock.write(repo)?;
     }
 
@@ -121,12 +121,6 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
         "ateam: imported {} skill(s); skipped {} already managed",
         outcome.imported, outcome.skipped_managed
     );
-    if outcome.collisions > 0 {
-        println!(
-            "  {} collision(s) — `<repo>/skills/<name>/` already existed; lockfile entry skipped",
-            outcome.collisions
-        );
-    }
     if !outcome.errors.is_empty() {
         println!("  errors:");
         for (name, err) in &outcome.errors {
@@ -161,7 +155,6 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
 pub(crate) struct BulkOutcome {
     pub imported: usize,
     pub skipped_managed: usize,
-    pub collisions: usize,
     pub errors: Vec<(String, String)>,
 }
 
@@ -203,29 +196,25 @@ pub(crate) fn bulk_import_skills(
             }
 
             let dest = paths::local_skills_dir(repo).join(&name);
-            if dest.exists() {
-                outcome.collisions += 1;
-                outcome
-                    .errors
-                    .push((name.clone(), format!("{} already exists", dest.display())));
-                continue;
-            }
-            if let Err(e) = std::fs::create_dir_all(paths::local_skills_dir(repo)) {
-                outcome.errors.push((name.clone(), format!("{e:#}")));
-                continue;
-            }
+            let already_snapshotted = dest.exists();
 
-            // Resolve symlinks before snapshotting so we copy the real content.
-            let src = std::fs::canonicalize(&installed).unwrap_or_else(|_| installed.clone());
-            if !src.is_dir() {
-                outcome
-                    .errors
-                    .push((name.clone(), format!("{} is not a directory", src.display())));
-                continue;
-            }
-            if let Err(e) = crate::install::copy_dir_recursive(&src, &dest) {
-                outcome.errors.push((name.clone(), format!("{e:#}")));
-                continue;
+            if !already_snapshotted {
+                if let Err(e) = std::fs::create_dir_all(paths::local_skills_dir(repo)) {
+                    outcome.errors.push((name.clone(), format!("{e:#}")));
+                    continue;
+                }
+                // Resolve symlinks before snapshotting so we copy real content.
+                let src = std::fs::canonicalize(&installed).unwrap_or_else(|_| installed.clone());
+                if !src.is_dir() {
+                    outcome
+                        .errors
+                        .push((name.clone(), format!("{} is not a directory", src.display())));
+                    continue;
+                }
+                if let Err(e) = crate::install::copy_dir_recursive(&src, &dest) {
+                    outcome.errors.push((name.clone(), format!("{e:#}")));
+                    continue;
+                }
             }
 
             lock.upsert(SkillEntry {
@@ -239,7 +228,11 @@ pub(crate) fn bulk_import_skills(
                 project: None,
             });
             outcome.imported += 1;
-            println!("  + {name}");
+            if already_snapshotted {
+                println!("  + {name} (adopted existing snapshot)");
+            } else {
+                println!("  + {name}");
+            }
         }
     }
     Ok(outcome)
@@ -574,6 +567,28 @@ mod tests {
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
         assert_eq!(outcome.imported, 0);
         assert_eq!(outcome.skipped_managed, 1);
+    }
+
+    #[test]
+    fn bulk_adopts_orphan_snapshot_dirs() {
+        // Simulate a partial earlier import: dir exists in <repo>/skills/<name>/
+        // but lockfile has no entry for it. Re-running import should adopt it.
+        let fx = Fixture::new();
+        fx.write_skill("claude", "alpha", "fresh body");
+        let dest = paths::local_skills_dir(fx.repo.path()).join("alpha");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(dest.join("SKILL.md"), "stale orphan body").unwrap();
+
+        let mut lock = Lockfile::load(fx.repo.path()).unwrap();
+        assert!(lock.find("alpha").is_none());
+        let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
+
+        assert_eq!(outcome.imported, 1, "orphan should be adopted");
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+        assert!(lock.find("alpha").is_some());
+        // Adoption preserves the existing snapshot — does NOT clobber with fresh body.
+        let body = std::fs::read_to_string(dest.join("SKILL.md")).unwrap();
+        assert_eq!(body, "stale orphan body");
     }
 
     #[test]
