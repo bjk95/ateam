@@ -100,6 +100,25 @@ pub enum Command {
 
     /// Validate the instructions template against declared profiles.
     Validate,
+
+    /// Open `$EDITOR` on the ateam state directory.
+    Edit,
+
+    /// Manage the instructions template (CLAUDE.md / AGENTS.md source).
+    #[command(subcommand)]
+    Instructions(InstructionsCommand),
+}
+
+#[derive(Subcommand)]
+pub enum InstructionsCommand {
+    /// Open the instructions template in `$EDITOR`.
+    Edit,
+
+    /// Show a unified diff of new render vs current CLAUDE.md / AGENTS.md.
+    Diff,
+
+    /// Print the rendered instructions for each enabled tool to stdout.
+    Show,
 }
 
 #[derive(Subcommand)]
@@ -312,5 +331,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Upgrade => crate::self_update::force_upgrade(),
         Command::Remote(cmd) => crate::commands::remote::run(cmd),
         Command::Validate => crate::commands::validate::run(),
+        Command::Edit => crate::commands::edit::run(no_sync),
+        Command::Instructions(cmd) => crate::commands::instructions::run(cmd, no_sync),
     }
 }

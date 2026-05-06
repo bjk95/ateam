@@ -39,12 +39,17 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
 
     let mut updated_lock = lock.clone();
 
+    let scan_step = (!args.dry_run).then(|| ui::step("checking skills"));
+
     for entry in &lock.skills {
         if !entry.active {
             continue;
         }
         if !profile_match(&machine, &entry.profiles) {
             continue;
+        }
+        if let Some(s) = &scan_step {
+            s.set_msg(format!("checking {}", entry.name));
         }
 
         let install_root = match &entry.project {
@@ -174,6 +179,10 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 }
             }
         }
+    }
+
+    if let Some(s) = scan_step {
+        s.finish();
     }
 
     // Instructions render-and-write pass.

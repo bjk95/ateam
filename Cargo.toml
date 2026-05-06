@@ -30,6 +30,7 @@ crossterm = "0.28"
 indicatif = "0.17"
 handlebars = "6"
 gethostname = "0.5"
+similar = "3"
 
 [profile.release]
 lto = true
