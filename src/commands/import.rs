@@ -121,6 +121,13 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
         "ateam: imported {} skill(s); skipped {} already managed",
         outcome.imported, outcome.skipped_managed
     );
+    if outcome.discovered_upstream > 0 {
+        println!(
+            "  + discovered upstream for {} existing entr{}",
+            outcome.discovered_upstream,
+            if outcome.discovered_upstream == 1 { "y" } else { "ies" }
+        );
+    }
     if !outcome.errors.is_empty() {
         println!("  errors:");
         for (name, err) in &outcome.errors {
@@ -155,6 +162,7 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
 pub(crate) struct BulkOutcome {
     pub imported: usize,
     pub skipped_managed: usize,
+    pub discovered_upstream: usize,
     pub errors: Vec<(String, String)>,
 }
 
@@ -165,6 +173,7 @@ pub(crate) fn bulk_import_skills(
 ) -> Result<BulkOutcome> {
     let mut outcome = BulkOutcome::default();
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    let upstream_index = crate::upstream::build_index(home);
 
     for dir in agent_skill_dirs(home) {
         let entries = match std::fs::read_dir(&dir) {
@@ -226,6 +235,8 @@ pub(crate) fn bulk_import_skills(
                 agents: vec!["*".into()],
                 profiles: vec![],
                 project: None,
+                active: true,
+                upstream: upstream_index.get(&name).cloned(),
             });
             outcome.imported += 1;
             if already_snapshotted {
@@ -235,6 +246,19 @@ pub(crate) fn bulk_import_skills(
             }
         }
     }
+
+    // Backfill: re-discover upstream for any local entry that doesn't have one.
+    // Lets the user re-run `ateam skills import` to pick up upstream info that
+    // wasn't being recorded when they first imported.
+    for entry in lock.skills.iter_mut() {
+        if entry.upstream.is_none() && entry.source.starts_with("local:") {
+            if let Some(up) = upstream_index.get(&entry.name) {
+                entry.upstream = Some(up.clone());
+                outcome.discovered_upstream += 1;
+            }
+        }
+    }
+
     Ok(outcome)
 }
 
@@ -402,6 +426,8 @@ fn build_entry(
             agents: vec!["*".into()],
             profiles: vec![],
             project: args.project.clone(),
+            active: true,
+            upstream: None,
         });
     }
 
@@ -423,6 +449,8 @@ fn build_entry(
         agents: vec!["*".into()],
         profiles: vec![],
         project: args.project.clone(),
+        active: true,
+        upstream: None,
     })
 }
 
@@ -563,6 +591,8 @@ mod tests {
             agents: vec!["*".into()],
             profiles: vec![],
             project: None,
+            active: true,
+            upstream: None,
         });
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
         assert_eq!(outcome.imported, 0);

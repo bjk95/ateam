@@ -1,12 +1,15 @@
+pub mod activate;
 pub mod add;
 pub mod apply;
 pub mod apply_instructions;
+pub mod deactivate;
 pub mod import;
 pub mod init;
 pub mod list;
 pub mod project;
 pub mod remote;
 pub mod remove;
+pub mod show;
 pub mod status;
 pub mod update;
 pub mod validate;

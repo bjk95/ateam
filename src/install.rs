@@ -13,12 +13,20 @@ pub enum LinkOutcome {
     Replaced,
     /// Existing real file/dir was moved aside (only with `force`).
     MovedAside { backup: PathBuf },
+    /// Existing real dir's content matched our snapshot byte-for-byte and was
+    /// removed in place (no `force` needed — the data is already in the
+    /// snapshot, so the redundant copy is safe to delete).
+    AutoHealed,
     /// Refused because a real file/dir exists. Caller should escalate or skip.
     Refused,
 }
 
 /// Create a symlink at `link` pointing at `target`. Idempotent.
-/// Replaces existing symlinks unconditionally; refuses on real files unless `force`.
+/// Replaces existing symlinks unconditionally; refuses on real files unless
+/// `force`, with one exception: if the existing real directory's content is
+/// byte-for-byte identical to `target`, it's removed silently (covers the
+/// "skill installed pre-ateam, then imported" case where both copies still
+/// exist on disk).
 pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOutcome> {
     if let Some(parent) = link.parent() {
         std::fs::create_dir_all(parent)
@@ -39,6 +47,22 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
                 .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
             return Ok(LinkOutcome::Replaced);
         } else {
+            // Auto-heal: byte-identical copy is redundant; safe to drop.
+            if content_matches(link, target).unwrap_or(false) {
+                if meta.is_dir() {
+                    std::fs::remove_dir_all(link).with_context(|| {
+                        format!("removing redundant copy at {}", link.display())
+                    })?;
+                } else {
+                    std::fs::remove_file(link).with_context(|| {
+                        format!("removing redundant copy at {}", link.display())
+                    })?;
+                }
+                symlink(target, link).with_context(|| {
+                    format!("creating symlink {} → {}", link.display(), target.display())
+                })?;
+                return Ok(LinkOutcome::AutoHealed);
+            }
             if !force {
                 return Ok(LinkOutcome::Refused);
             }
@@ -56,16 +80,24 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
     Ok(LinkOutcome::Created)
 }
 
-/// Atomically materialize a fetched skill into the cache.
+fn content_matches(a: &Path, b: &Path) -> Result<bool> {
+    let ha = crate::source::local::content_hash(a)?;
+    let hb = crate::source::local::content_hash(b)?;
+    Ok(ha == hb)
+}
+
+/// Atomically materialize a fetched skill into `<repo>/skills/<name>/`.
 ///
 /// `prepare()` returns a unique tmp dir to write into. `commit()` renames it
-/// into the final cache slot. Failure between the two leaves the tmp untouched
-/// (caller can call `sweep_tmp` on next apply to clean up).
+/// into the final snapshot slot. Failure between the two leaves the tmp
+/// untouched (caller can call `sweep_tmp` on next apply to clean up). The
+/// snapshot lives under `skills/` so it's tracked by git and travels to other
+/// machines as part of the ateam-config repo — no per-machine refetch needed.
 pub fn prepare_cache_slot(repo: &Path, skill_name: &str) -> Result<CacheSlot> {
-    let cache = crate::paths::cache_dir(repo);
+    let dest_root = crate::paths::local_skills_dir(repo);
     let tmp_root = crate::paths::cache_tmp_dir(repo);
-    std::fs::create_dir_all(&cache)
-        .with_context(|| format!("creating {}", cache.display()))?;
+    std::fs::create_dir_all(&dest_root)
+        .with_context(|| format!("creating {}", dest_root.display()))?;
     std::fs::create_dir_all(&tmp_root)
         .with_context(|| format!("creating {}", tmp_root.display()))?;
     let suffix: u64 = rand::random();
@@ -76,7 +108,7 @@ pub fn prepare_cache_slot(repo: &Path, skill_name: &str) -> Result<CacheSlot> {
     std::fs::create_dir_all(&tmp).with_context(|| format!("creating {}", tmp.display()))?;
     Ok(CacheSlot {
         tmp,
-        final_path: cache.join(skill_name),
+        final_path: dest_root.join(skill_name),
     })
 }
 

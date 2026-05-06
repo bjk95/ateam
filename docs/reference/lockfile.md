@@ -19,7 +19,17 @@ tree_sha = "1378aa50…"                # GitHub tree SHA at install time
 agents = ["*"]                        # which agents to install for; "*" = all
 profiles = ["work"]                   # optional; absent = all machines
 project = "canva"                     # optional; absent = global scope
+active = false                        # optional; absent or true = install; false = soft-disabled
 ```
+
+## The `active` flag
+
+Every entry has an implicit `active = true`. `ateam skills deactivate <name>`
+sets it to `false`, which causes `apply` and `update` to skip that entry and
+unlinks it from `~/.claude/skills/` and `~/.codex/skills/`. The lockfile entry
+(and the cached source content) stays put so `ateam skills activate <name>`
+re-materializes it without refetching. The flag rides with the skill across
+the team — deactivating in one machine syncs everywhere.
 
 ## Source types
 
@@ -31,7 +41,7 @@ project = "canva"                     # optional; absent = global scope
 
 ## Update detection
 
-For `github:` entries, `ateam update` calls
+For `github:` entries, `ateam skills update` calls
 `GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1`, walks the tree to find
 the entry matching `path`, and compares its SHA with `tree_sha`. One API call
 per skill. `git:` entries use `git ls-remote`; `local:` entries hash the source

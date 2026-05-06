@@ -40,6 +40,9 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     let mut updated_lock = lock.clone();
 
     for entry in &lock.skills {
+        if !entry.active {
+            continue;
+        }
         if !profile_match(&machine, &entry.profiles) {
             continue;
         }
@@ -149,7 +152,8 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced
                 | install::LinkOutcome::AlreadyCorrect
-                | install::LinkOutcome::MovedAside { .. } => {
+                | install::LinkOutcome::MovedAside { .. }
+                | install::LinkOutcome::AutoHealed => {
                     new_manifest.entries.push(ManifestEntry {
                         path: link.clone(),
                         kind: EntryKind::Symlink,
@@ -279,13 +283,13 @@ fn resolve_canonical(repo: &Path, entry: &SkillEntry) -> Result<PathBuf> {
     match source {
         Source::Local { path } => crate::source::local::resolve(repo, &path),
         Source::Github { .. } | Source::Git { .. } => {
-            let cache = paths::cache_dir(repo).join(&entry.name);
-            if cache.exists() {
-                Ok(cache)
+            let snapshot = paths::local_skills_dir(repo).join(&entry.name);
+            if snapshot.exists() {
+                Ok(snapshot)
             } else {
-                // Cold cache — refetch from upstream.
-                refetch_for_entry(repo, entry).context("fetching cold cache")?;
-                Ok(paths::cache_dir(repo).join(&entry.name))
+                // Cold install — refetch from upstream into the synced snapshot.
+                refetch_for_entry(repo, entry).context("fetching cold snapshot")?;
+                Ok(paths::local_skills_dir(repo).join(&entry.name))
             }
         }
     }
@@ -293,6 +297,15 @@ fn resolve_canonical(repo: &Path, entry: &SkillEntry) -> Result<PathBuf> {
 
 fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
     let source = Source::from_lockfile_string(&entry.source)?;
+
+    // Registry-resolved entries (skills.sh blob fallback at add time) lack an
+    // upstream subpath. Refetch them from skills.sh, not the upstream tree.
+    if entry.path.is_none() {
+        if let Source::Github { owner, repo: r } = &source {
+            return refetch_via_registry(repo, owner, r, &entry.name);
+        }
+    }
+
     let path = entry
         .path
         .clone()
@@ -301,7 +314,14 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
         Source::Github { owner, repo: r } => {
             let r_ref = entry.git_ref.clone().unwrap_or_else(|| github::default_branch_fallback().to_string());
             let commit_sha = github::resolve_ref(&owner, &r, &r_ref)?;
-            refetch_github(repo, &owner, &r, &commit_sha, &path, &entry.name)
+            // If the upstream subpath has moved/been removed, fall through to
+            // skills.sh — the registry's blob endpoint often still serves a
+            // snapshot. Heals lockfile entries left over from before the
+            // skills/<name>/ snapshot migration.
+            match refetch_github(repo, &owner, &r, &commit_sha, &path, &entry.name) {
+                Ok(()) => Ok(()),
+                Err(_) => refetch_via_registry(repo, &owner, &r, &entry.name),
+            }
         }
         Source::Git { url } => {
             let tmp_root = paths::cache_tmp_dir(repo);
@@ -318,6 +338,22 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
         }
         Source::Local { .. } => Ok(()),
     }
+}
+
+fn refetch_via_registry(repo: &Path, owner: &str, repo_name: &str, skill_name: &str) -> Result<()> {
+    let slug = crate::source::skills_sh::to_slug(skill_name);
+    let download = crate::source::skills_sh::fetch(owner, repo_name, &slug)?
+        .ok_or_else(|| anyhow!("skills.sh has no entry for {}/{}/{}", owner, repo_name, slug))?;
+    let slot = install::prepare_cache_slot(repo, skill_name)?;
+    for file in &download.files {
+        let dest = slot.tmp.join(&file.path);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&dest, &file.contents)?;
+    }
+    slot.commit()?;
+    Ok(())
 }
 
 fn refetch_github(

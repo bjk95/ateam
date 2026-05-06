@@ -1,6 +1,7 @@
-pub mod github;
 pub mod git;
+pub mod github;
 pub mod local;
+pub mod skills_sh;
 
 use anyhow::{anyhow, bail, Result};
 use std::fmt;

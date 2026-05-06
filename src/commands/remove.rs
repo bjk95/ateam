@@ -41,12 +41,23 @@ pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
     manifest.entries.retain(|m| m.skill != args.name);
     manifest.write(&repo)?;
 
-    // Wipe cache copy if there is one. Local sources stay on disk.
-    if !removed.source.starts_with("local:") {
-        let cache = paths::cache_dir(&repo).join(&args.name);
-        if cache.exists() {
-            let _ = std::fs::remove_dir_all(&cache);
-        }
+    // Wipe the synced snapshot. Local sources whose path points elsewhere
+    // (e.g., a hand-authored skill the user keeps in their own dir) stay put;
+    // the snapshot under skills/<name>/ is the only thing ateam manages.
+    let snapshot = paths::local_skills_dir(&repo).join(&args.name);
+    let snapshot_managed = if removed.source.starts_with("local:") {
+        // Only delete if source explicitly pointed at skills/<name>.
+        removed.source == format!("local:skills/{}", args.name)
+    } else {
+        true
+    };
+    if snapshot_managed && snapshot.exists() {
+        let _ = std::fs::remove_dir_all(&snapshot);
+    }
+    // Legacy cache copy from before the snapshot-into-skills/ migration.
+    let legacy_cache = paths::cache_dir(&repo).join(&args.name);
+    if legacy_cache.exists() {
+        let _ = std::fs::remove_dir_all(&legacy_cache);
     }
 
     if git_sync::enabled(no_sync) {

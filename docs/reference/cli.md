@@ -15,9 +15,26 @@ ateam init --repo <path>           # use a non-default location
 ateam init ... --profiles a,b      # set this machine's profile list
 ```
 
-## `ateam add` (Vercel-compatible)
+## `ateam apply`
 
-Drop-in replacement for `npx skills add`.
+Materialize the lockfile (active entries only).
+
+```bash
+ateam apply [--dry-run] [-a <agent>...] [--project <alias>] [--force]
+```
+
+`--force` moves any existing real directory at a target path aside to
+`<name>.bak.<unix-ts>` instead of refusing.
+
+## `ateam status`
+
+```bash
+ateam status                       # repo path, profiles, manifest health
+```
+
+## `ateam skills add` (Vercel-compatible)
+
+Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 
 | Flag | Behavior |
 |---|---|
@@ -33,53 +50,56 @@ Drop-in replacement for `npx skills add`.
 | `--ref <ref>` | Pin to a specific git ref/tag/commit |
 | `--no-sync` | Skip auto pull/commit/push for this run |
 
-## `ateam apply`
+## `ateam skills update`
 
-Materialize the lockfile.
-
-```bash
-ateam apply [--dry-run] [-a <agent>...] [--project <alias>] [--force]
-```
-
-`--force` moves any existing real directory at a target path aside to
-`<name>.bak.<unix-ts>` instead of refusing.
-
-## `ateam update`
-
-Check GitHub tree SHAs and refetch any drifted skills.
+Check GitHub tree SHAs and refetch any drifted skills. Skips deactivated entries.
 
 ```bash
-ateam update                       # all entries
-ateam update <name>...             # specific entries
+ateam skills update                # all active entries
+ateam skills update <name>...      # specific entries
 ```
 
-## `ateam remove`
+## `ateam skills remove`
 
 Delete a skill from the lockfile and uninstall its symlinks.
 
 ```bash
-ateam remove <name>
+ateam skills remove <name>
 ```
 
 Local-source directories under `<repo>/skills/` are never deleted by ateam — you
 remove them yourself if you want them gone.
 
-## `ateam list` / `ateam status`
+## `ateam skills deactivate` / `ateam skills activate`
+
+Soft-disable a skill without losing its lockfile entry. Deactivating immediately
+unlinks the skill from `~/.claude/skills/` and `~/.codex/skills/`; activating
+re-materializes it.
 
 ```bash
-ateam list                         # all locked skills
-ateam list --project canva         # only entries scoped to one project
-ateam status                       # repo path, profiles, manifest health
+ateam skills deactivate <name>
+ateam skills activate <name>
 ```
 
-## `ateam import`
+The `active` flag rides with the skill in the lockfile, so deactivating on one
+machine deactivates everywhere after the next sync. `ateam skills list` marks
+deactivated entries with `[off]`.
+
+## `ateam skills list`
+
+```bash
+ateam skills list                  # all locked skills (active + [off])
+ateam skills list --project canva  # only entries scoped to one project
+```
+
+## `ateam skills import`
 
 Adopt an installed-locally skill into the synced lockfile.
 
 ```bash
-ateam import <name>                            # snapshot into <repo>/skills/
-ateam import <name> --upstream github:foo/bar  # track upstream instead
-ateam import <name> --project canva            # tag with project alias
+ateam skills import <name>                            # snapshot into <repo>/skills/
+ateam skills import <name> --upstream github:foo/bar  # track upstream instead
+ateam skills import <name> --project canva            # tag with project alias
 ```
 
 ## `ateam upgrade`

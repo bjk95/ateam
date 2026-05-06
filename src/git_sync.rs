@@ -157,6 +157,14 @@ pub fn msg_remove(skill: &str) -> String {
     format!("remove :: {}", skill)
 }
 
+pub fn msg_deactivate(skill: &str) -> String {
+    format!("deactivate :: {}", skill)
+}
+
+pub fn msg_activate(skill: &str) -> String {
+    format!("activate :: {}", skill)
+}
+
 pub fn msg_update_one(skill: &str, from_sha: &str, to_sha: &str) -> String {
     format!(
         "update :: {} (sha {} → {})",

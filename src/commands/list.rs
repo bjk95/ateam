@@ -19,7 +19,7 @@ pub fn run(args: ListArgs) -> Result<()> {
         })
         .collect();
 
-    if entries.is_empty() && lock.instructions.is_none() {
+    if entries.is_empty() {
         ui::plain("(no skills locked)");
         return Ok(());
     }
@@ -30,7 +30,13 @@ pub fn run(args: ListArgs) -> Result<()> {
     let width = entries.iter().map(|s| s.name.len()).max().unwrap_or(0);
     for s in &entries {
         let padded_name = format!("{:<width$}", s.name, width = width);
-        ui::plain(format!("{}  {}", style(padded_name).bold(), render_source(s)));
+        let head = format!("{}  {}", style(padded_name).bold(), render_source(s));
+        let line = if s.active {
+            head
+        } else {
+            format!("{}  {}", head, style("[off]").dim())
+        };
+        ui::plain(line);
 
         // Verbose: append a dim qualifier line if scope or profiles is non-default.
         let scope_part = s.project.as_ref().map(|p| format!("scope: project={}", p));
@@ -48,21 +54,6 @@ pub fn run(args: ListArgs) -> Result<()> {
         }
     }
 
-    if args.project.is_none() {
-        if let Some(entry) = &lock.instructions {
-            let label = "[instructions]";
-            let padded_label = format!("{:<width$}", label, width = width.max(label.len()));
-            let source = style("instructions/instructions.md.hbs").cyan();
-            ui::plain(format!("{}  {}", style(padded_label).bold(), source));
-            let agents = if entry.agents.iter().any(|a| a == "*") {
-                "*".into()
-            } else {
-                entry.agents.join(",")
-            };
-            ui::detail(format!("agents: {}", agents));
-        }
-    }
-
     Ok(())
 }
 
@@ -70,7 +61,11 @@ fn render_source(s: &SkillEntry) -> String {
     let base: String = if let Some(rest) = s.source.strip_prefix("github:") {
         format!("{}", style(rest).cyan())
     } else if s.source.starts_with("local:") {
-        format!("{}", style("local").dim())
+        let local = format!("{}", style("local").dim());
+        match &s.upstream {
+            Some(up) => format!("{}  {}  {}", local, style("←").dim(), render_upstream(up)),
+            None => local,
+        }
     } else if let Some(url) = s.source.strip_prefix("git:") {
         format!("{}", style(url).cyan())
     } else {
@@ -79,5 +74,15 @@ fn render_source(s: &SkillEntry) -> String {
     match &s.git_ref {
         Some(r) => format!("{} {}", base, style(format!("@ {}", r)).dim()),
         None => base,
+    }
+}
+
+fn render_upstream(up: &str) -> String {
+    if let Some(rest) = up.strip_prefix("github:") {
+        format!("{}", style(rest).cyan())
+    } else if let Some(url) = up.strip_prefix("git:") {
+        format!("{}", style(url).cyan())
+    } else {
+        format!("{}", style(up).cyan())
     }
 }

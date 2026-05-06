@@ -17,6 +17,8 @@ your work machine appears on your personal machine after `ateam apply`.
 - One lockfile, one `~/.config/ateam/` repo, zero pollution of project repos.
 - Project-scoped skills via per-machine path aliases — different filesystem
   layout on every machine, same identifiers.
+- Soft-disable via `skills deactivate` / `skills activate` — quarantine a skill
+  team-wide before deleting it, no telemetry needed.
 - Auto-sync wraps every mutating command. You never type `git`.
 
 ## Status

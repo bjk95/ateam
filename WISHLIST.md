@@ -8,7 +8,7 @@ This file captures what comes next, what's parked, and what's explicitly out.
 
 - **Instructions file sync** — `CLAUDE.md` / `AGENTS.md` from a single canonical source with profile-gated fragments and Handlebars templating. Replaces today's hand-mirroring.
 - **Subagents** — Claude `~/.claude/agents/*.md` ↔ Codex `~/.codex/agents/*.toml` with format translation.
-- **Claude plugin marketplace** as a source type — `ateam add marketplace:<url>` so marketplace-installed skills can be tracked in the lockfile.
+- **Claude plugin marketplace** as a source type — `ateam skills add marketplace:<url>` so marketplace-installed skills can be tracked in the lockfile.
 - **`settings.json` sync** — profile-gated. Work and personal need different settings; this collapses two hand-edited files into one source.
 - **Hooks sync** — `~/.claude/hooks/`.
 - **MCP server config sync** — profile-gated (e.g. work has Canva-internal MCPs, personal has different ones).
@@ -36,7 +36,7 @@ This file captures what comes next, what's parked, and what's explicitly out.
 ## Skill authoring
 
 - Local skill publishing helper — push a `local:` skill to a git remote and (eventually) register it on skills.sh
-- Version pinning — `ateam add foo/bar --version ^1.2` with semver-style updates
+- Version pinning — `ateam skills add foo/bar --version ^1.2` with semver-style updates
 
 ## Migration
 

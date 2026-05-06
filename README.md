@@ -4,11 +4,14 @@ Multi-machine AI skills sync. A Rust CLI that's a drop-in for `npx skills add`,
 backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
 `push` happening invisibly so you never type `git` directly.
 
-- **Vercel-compatible** — every flag from `npx skills add` works as `ateam add`.
+- **Vercel-compatible** — every flag from `npx skills add` works as `ateam skills add`.
 - **One lockfile, one repo, zero project pollution.** Skills declared in
   `~/.config/ateam/ateam.lock.toml`; project repos gain nothing ateam-specific.
 - **Project scope by alias.** Same project lives at different paths on
   different machines — register once per machine, sync everywhere.
+- **Soft-disable for lean libraries.** `ateam skills deactivate <name>` unlinks
+  a skill from your agents but keeps the lockfile entry — quarantine-then-delete
+  for skills you suspect you don't use, no usage tracking required.
 - **Auto-sync.** Every mutating command pulls before mutating, commits the
   result, and pushes. Soft-fails offline, never blocks your local change.
 
@@ -37,7 +40,7 @@ newer version is found. To trigger explicitly, run `ateam upgrade`.
 ateam init --scaffold --profiles personal
 
 # Install a skill from skills.sh
-ateam add vercel-labs/agent-skills --skill deploy-to-vercel -y
+ateam skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
 
 # Verify both Claude Code and Codex see it
 ls ~/.claude/skills/ ~/.codex/skills/
@@ -49,7 +52,7 @@ To sync to a second machine, point ateam at a git remote first:
 # On machine A
 git -C ~/.config/ateam remote add origin git@github.com:you/ateam-config.git
 git -C ~/.config/ateam push -u origin main
-ateam add vercel-labs/agent-skills --skill web-design-guidelines -y
+ateam skills add vercel-labs/agent-skills --skill web-design-guidelines -y
 # auto-pushes the lockfile change
 
 # On machine B
@@ -57,7 +60,7 @@ ateam init git@github.com:you/ateam-config.git --profiles work
 ateam apply
 ```
 
-That's it. From now on every `ateam add` / `update` / `remove` syncs invisibly.
+That's it. From now on every `ateam skills add` / `update` / `remove` syncs invisibly.
 
 ## Docs
 
