@@ -70,6 +70,10 @@ pub struct Cli {
     /// Show extra detail (paths, SHAs, per-agent links).
     #[arg(short = 'v', long, global = true)]
     pub verbose: bool,
+
+    /// Suppress non-error output (banner, success lines, progress).
+    #[arg(short = 'q', long, global = true)]
+    pub quiet: bool,
 }
 
 #[derive(Subcommand)]
@@ -269,6 +273,10 @@ pub struct ListArgs {
     /// Show only entries scoped to this project alias.
     #[arg(long, value_name = "ALIAS")]
     pub project: Option<String>,
+
+    /// Emit a versioned JSON document instead of styled text.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Parser)]

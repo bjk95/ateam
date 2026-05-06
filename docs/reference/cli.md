@@ -11,6 +11,7 @@ These work on every subcommand.
 |---|---|
 | `--no-sync` | Skip auto pull/commit/push for this invocation. Equivalent: `ATEAM_NO_SYNC=1`. |
 | `-v` / `--verbose` | Show extra detail (paths, SHAs, per-agent links). |
+| `-q` / `--quiet` | Suppress non-error output: banner, success lines, progress spinners, plain text. Errors and warnings still print to stderr. |
 
 ## `ateam init`
 
@@ -113,7 +114,52 @@ deactivated entries with `[off]`.
 ```bash
 ateam skills list                  # all locked skills (active + [off])
 ateam skills list --project canva  # only entries scoped to one project
+ateam skills list --json           # versioned JSON for editor integrations
 ```
+
+### `--json` schema
+
+`--json` emits a single JSON document on stdout. Banner and other UI output are
+suppressed automatically so the document is the only thing on stdout.
+
+```json
+{
+  "version": 1,
+  "skills": [
+    {
+      "name": "deploy-to-vercel",
+      "source": "github:vercel-labs/agent-skills",
+      "ref": null,
+      "tree_sha": null,
+      "path": null,
+      "agents": ["*"],
+      "profiles": [],
+      "project": null,
+      "active": true,
+      "upstream": null
+    }
+  ]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `version` | integer | Schema version. Currently `1`. Bumped on incompatible changes. |
+| `skills[]` | array | One entry per locked skill. Empty array if none. |
+| `skills[].name` | string | Skill name (matches lockfile `name`). |
+| `skills[].source` | string | `github:owner/repo`, `git:<url>`, or `local:<path>`. |
+| `skills[].ref` | string \| null | Git ref/tag/commit pin. |
+| `skills[].tree_sha` | string \| null | Last fetched tree SHA (for drift detection). |
+| `skills[].path` | string \| null | Subpath inside the source repo, when applicable. |
+| `skills[].agents` | string[] | Targeted agents. `["*"]` = all enabled. |
+| `skills[].profiles` | string[] | Profile gates. Empty = always active. |
+| `skills[].project` | string \| null | Project alias scope. |
+| `skills[].active` | bool | False when the skill is deactivated (`[off]`). |
+| `skills[].upstream` | string \| null | Origin source for snapshotted (`local:`) entries. |
+
+Every field is always present, even when null/empty, so consumers can rely on
+the shape without defaulting. New fields may be added without bumping the
+version; renames or semantic changes will bump it.
 
 ## `ateam skills show`
 
