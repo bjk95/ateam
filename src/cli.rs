@@ -4,12 +4,12 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 const BANNER_LINES: &[&str] = &[
-    " █████╗ ████████╗███████╗ █████╗ ███╗   ███╗",
-    "██╔══██╗╚══██╔══╝██╔════╝██╔══██╗████╗ ████║",
-    "███████║   ██║   █████╗  ███████║██╔████╔██║",
-    "██╔══██║   ██║   ██╔══╝  ██╔══██║██║╚██╔╝██║",
-    "██║  ██║   ██║   ███████╗██║  ██║██║ ╚═╝ ██║",
-    "╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝",
+    " █████╗         ████████╗███████╗ █████╗ ███╗   ███╗",
+    "██╔══██╗        ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║",
+    "███████║ █████╗    ██║   █████╗  ███████║██╔████╔██║",
+    "██╔══██║ ╚════╝    ██║   ██╔══╝  ██╔══██║██║╚██╔╝██║",
+    "██║  ██║           ██║   ███████╗██║  ██║██║ ╚═╝ ██║",
+    "╚═╝  ╚═╝           ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝",
 ];
 
 // Subtle truecolor gradient from darker teal-cyan (top) to lighter cyan (bottom).
@@ -40,20 +40,6 @@ pub fn banner() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-/// True when the invocation will land in clap's help/error renderer
-/// (bare `ateam`, `--help`, `-h`). Banner is printed before clap takes
-/// over so its rendering doesn't touch cursor state in a way that
-/// overwrites lines above (some terminals + clap's error path
-/// interact badly with `before_help`).
-pub fn shows_help() -> bool {
-    let mut args = std::env::args().skip(1);
-    let first = match args.next() {
-        Some(a) => a,
-        None => return true, // bare invocation
-    };
-    matches!(first.as_str(), "--help" | "-h" | "help")
 }
 
 pub fn parse() -> Cli {
