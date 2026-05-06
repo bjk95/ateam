@@ -38,11 +38,6 @@ This file captures what comes next, what's parked, and what's explicitly out.
 - Local skill publishing helper — push a `local:` skill to a git remote and (eventually) register it on skills.sh
 - Version pinning — `ateam add foo/bar --version ^1.2` with semver-style updates
 
-## Distribution
-
-- One-line install shell script
-- Linux support (devboxes run Linux — this is required, not optional)
-
 ## Migration
 
 - Importer from `npx skills` lockfile format — for users already using the Vercel CLI

@@ -2,6 +2,9 @@
 name = "ateam"
 version = "0.1.0"
 edition = "2021"
+description = "Multi-machine AI skills sync via a single git repo."
+repository = "https://github.com/bjk95/ateam"
+license = "MIT"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -21,3 +24,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dialoguer = "0.11"
 rand = "0.8"
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"

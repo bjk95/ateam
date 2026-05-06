@@ -12,20 +12,19 @@ backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
 - **Auto-sync.** Every mutating command pulls before mutating, commits the
   result, and pushes. Soft-fails offline, never blocks your local change.
 
-> **Status:** v1, macOS-only. Tested end-to-end against the live
+> **Status:** v1, macOS + Linux. Tested end-to-end against the live
 > [skills.sh](https://skills.sh) registry. See [WISHLIST.md](./WISHLIST.md) for
 > what's coming next (CLAUDE.md/AGENTS.md sync, subagents, settings, hooks).
 
 ## Install
 
 ```bash
-git clone https://github.com/bjk95/ateam ~/dev/ateam
-cd ~/dev/ateam
-cargo build --release
-cp target/release/ateam /usr/local/bin/
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/bjk95/ateam/releases/latest/download/ateam-installer.sh | sh
 ```
 
-Requires Rust 1.90+. Get rustup at <https://rustup.rs>.
+Drops a single static binary at `~/.local/bin/ateam` on macOS (Apple Silicon
+or Intel) and Linux (x86_64 or aarch64, musl-static — works on glibc and musl
+distros alike). To build from source instead, see [docs/install.md](./docs/install.md).
 
 ## Quickstart
 
