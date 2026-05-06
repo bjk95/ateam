@@ -34,36 +34,50 @@ struct SearchSkill {
 
 pub fn run(args: FindArgs, no_sync: bool) -> Result<()> {
     let query = args.query.join(" ");
-
-    if !query.is_empty() {
-        return run_non_interactive(&query);
-    }
-
     let stdin_is_tty = std::io::stdin().is_terminal();
     let stdout_is_tty = std::io::stdout().is_terminal();
-    if !stdin_is_tty || !stdout_is_tty {
-        ui::plain(format!(
-            "{}",
-            style("Tip: if running in a coding agent, follow these steps:").dim()
-        ));
-        ui::plain(format!(
-            "{}",
-            style("  1) ateam find [query]").dim()
-        ));
-        ui::plain(format!(
-            "{}",
-            style("  2) ateam add <owner/repo> --skill <name>").dim()
-        ));
-        return Ok(());
-    }
 
-    match run_interactive_picker()? {
-        None => {
-            ui::plain(format!("{}", style("Search cancelled").dim()));
+    match select_mode(&query, stdin_is_tty, stdout_is_tty) {
+        FindMode::NonInteractive => run_non_interactive(&query),
+        FindMode::EmptyNonTty => {
+            ui::plain(format!(
+                "{}",
+                style("Tip: if running in a coding agent, follow these steps:").dim()
+            ));
+            ui::plain(format!("{}", style("  1) ateam skills find <query>").dim()));
+            ui::plain(format!(
+                "{}",
+                style("  2) ateam skills add <owner/repo> --skill <name>").dim()
+            ));
             Ok(())
         }
-        Some(skill) => install_selected(skill, no_sync),
+        FindMode::Interactive => match run_interactive_picker()? {
+            None => {
+                ui::plain(format!("{}", style("Search cancelled").dim()));
+                Ok(())
+            }
+            Some(skill) => install_selected(skill, no_sync),
+        },
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum FindMode {
+    NonInteractive,
+    EmptyNonTty,
+    Interactive,
+}
+
+fn select_mode(query: &str, stdin_is_tty: bool, stdout_is_tty: bool) -> FindMode {
+    // A non-empty query short-circuits the TTY check: results stream to stdout
+    // in any context so `ateam skills find foo | head` works in pipes/agents.
+    if !query.is_empty() {
+        return FindMode::NonInteractive;
+    }
+    if !stdin_is_tty || !stdout_is_tty {
+        return FindMode::EmptyNonTty;
+    }
+    FindMode::Interactive
 }
 
 fn run_non_interactive(query: &str) -> Result<()> {
@@ -362,7 +376,11 @@ fn render(out: &mut impl Write, state: &mut PickerState) -> Result<()> {
     if state.last_lines > 0 {
         execute!(out, cursor::MoveUp(state.last_lines))?;
     }
-    execute!(out, cursor::MoveToColumn(0), Clear(ClearType::FromCursorDown))?;
+    execute!(
+        out,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::FromCursorDown)
+    )?;
 
     let mut lines: Vec<String> = Vec::new();
 
@@ -501,5 +519,37 @@ mod tests {
     #[test]
     fn format_installs_million_with_decimal() {
         assert_eq!(format_installs(1_500_000), "1.5M installs");
+    }
+
+    #[test]
+    fn non_empty_query_runs_non_interactive_in_any_tty_context() {
+        // Regression: `ateam skills find foo | head` must hit the search API
+        // and stream results to stdout regardless of stdin/stdout TTY status.
+        for stdin_tty in [true, false] {
+            for stdout_tty in [true, false] {
+                assert_eq!(
+                    select_mode("foo", stdin_tty, stdout_tty),
+                    FindMode::NonInteractive,
+                    "non-empty query must run non-interactive (stdin_tty={}, stdout_tty={})",
+                    stdin_tty,
+                    stdout_tty,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn empty_query_with_full_tty_runs_interactive() {
+        assert_eq!(select_mode("", true, true), FindMode::Interactive);
+    }
+
+    #[test]
+    fn empty_query_without_stdin_tty_uses_empty_non_tty_path() {
+        assert_eq!(select_mode("", false, true), FindMode::EmptyNonTty);
+    }
+
+    #[test]
+    fn empty_query_without_stdout_tty_uses_empty_non_tty_path() {
+        assert_eq!(select_mode("", true, false), FindMode::EmptyNonTty);
     }
 }
