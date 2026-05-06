@@ -23,8 +23,8 @@ pub type UpstreamIndexer = fn(&Path, &mut HashMap<String, String>);
 /// warning, and id-equality is the right semantic anyway (two rows with the
 /// same id are the same agent).
 #[derive(Debug, Clone, Copy)]
-pub struct AgentDef {
-    /// Stable agent identifier used in `ateam.toml` `enabled_agents` and
+pub struct HarnessDef {
+    /// Stable agent identifier used in `ateam.toml` `enabled_harnesses` and
     /// in lockfile `agents` lists. Examples: `"claude-code"`, `"codex"`.
     pub id: &'static str,
     /// Human-readable name for UI surfaces.
@@ -42,7 +42,7 @@ pub struct AgentDef {
     pub upstream_indexer: Option<UpstreamIndexer>,
 }
 
-pub const CLAUDE_CODE: AgentDef = AgentDef {
+pub const CLAUDE_CODE: HarnessDef = HarnessDef {
     id: "claude-code",
     display: "Claude Code",
     skills_subdir: Some(".claude/skills"),
@@ -51,7 +51,7 @@ pub const CLAUDE_CODE: AgentDef = AgentDef {
     upstream_indexer: Some(crate::upstream::index_claude_marketplaces),
 };
 
-pub const CODEX: AgentDef = AgentDef {
+pub const CODEX: HarnessDef = HarnessDef {
     id: "codex",
     display: "Codex",
     skills_subdir: Some(".codex/skills"),
@@ -60,7 +60,7 @@ pub const CODEX: AgentDef = AgentDef {
     upstream_indexer: None,
 };
 
-pub const OPENCODE: AgentDef = AgentDef {
+pub const OPENCODE: HarnessDef = HarnessDef {
     id: "opencode",
     display: "OpenCode",
     skills_subdir: Some(".config/opencode/skills"),
@@ -69,7 +69,7 @@ pub const OPENCODE: AgentDef = AgentDef {
     upstream_indexer: None,
 };
 
-pub const GEMINI: AgentDef = AgentDef {
+pub const GEMINI: HarnessDef = HarnessDef {
     id: "gemini",
     display: "Gemini CLI",
     skills_subdir: Some(".gemini/skills"),
@@ -78,23 +78,23 @@ pub const GEMINI: AgentDef = AgentDef {
     upstream_indexer: None,
 };
 
-pub const REGISTRY: &[&AgentDef] = &[&CLAUDE_CODE, &CODEX, &OPENCODE, &GEMINI];
+pub const REGISTRY: &[&HarnessDef] = &[&CLAUDE_CODE, &CODEX, &OPENCODE, &GEMINI];
 
-impl PartialEq for AgentDef {
+impl PartialEq for HarnessDef {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl Eq for AgentDef {}
+impl Eq for HarnessDef {}
 
 /// Look up an agent definition by its stable id.
-pub fn lookup(id: &str) -> Option<&'static AgentDef> {
+pub fn lookup(id: &str) -> Option<&'static HarnessDef> {
     REGISTRY.iter().copied().find(|a| a.id == id)
 }
 
 /// All registered agents in registry order.
-pub fn all() -> impl Iterator<Item = &'static AgentDef> {
+pub fn all() -> impl Iterator<Item = &'static HarnessDef> {
     REGISTRY.iter().copied()
 }
 

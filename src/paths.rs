@@ -136,8 +136,8 @@ pub fn instructions_template(repo: &Path) -> PathBuf {
 // Per-agent install targets
 
 /// Per-agent skill install path under a given install root (`~` or a project root).
-pub fn agent_skill_path(install_root: &Path, agent: &str, skill_name: &str) -> Result<PathBuf> {
-    let def = crate::agents::lookup(agent)
+pub fn harness_skill_path(install_root: &Path, agent: &str, skill_name: &str) -> Result<PathBuf> {
+    let def = crate::harness::lookup(agent)
         .ok_or_else(|| anyhow!("unknown agent `{}`", agent))?;
     let subdir = def
         .skills_subdir
@@ -174,19 +174,19 @@ mod tests {
     fn agent_skill_path_matches_known_layout() {
         let root = PathBuf::from("/tmp/install-root");
         assert_eq!(
-            agent_skill_path(&root, "claude-code", "foo").unwrap(),
+            harness_skill_path(&root, "claude-code", "foo").unwrap(),
             PathBuf::from("/tmp/install-root/.claude/skills/foo"),
         );
         assert_eq!(
-            agent_skill_path(&root, "codex", "foo").unwrap(),
+            harness_skill_path(&root, "codex", "foo").unwrap(),
             PathBuf::from("/tmp/install-root/.codex/skills/foo"),
         );
         assert_eq!(
-            agent_skill_path(&root, "opencode", "foo").unwrap(),
+            harness_skill_path(&root, "opencode", "foo").unwrap(),
             PathBuf::from("/tmp/install-root/.config/opencode/skills/foo"),
         );
         assert_eq!(
-            agent_skill_path(&root, "gemini", "foo").unwrap(),
+            harness_skill_path(&root, "gemini", "foo").unwrap(),
             PathBuf::from("/tmp/install-root/.gemini/skills/foo"),
         );
     }
@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn agent_skill_path_rejects_unknown_agent() {
         let root = PathBuf::from("/tmp/install-root");
-        let err = agent_skill_path(&root, "no-such-agent", "foo").unwrap_err();
+        let err = harness_skill_path(&root, "no-such-agent", "foo").unwrap_err();
         assert!(format!("{err}").contains("unknown agent"));
     }
 }

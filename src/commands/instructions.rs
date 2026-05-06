@@ -70,10 +70,10 @@ fn diff() -> Result<()> {
     let hostname = instructions::current_hostname();
 
     let mut printed = false;
-    for tool in tools {
-        let ctx = instructions::build_context(&repo_cfg, &machine, &hostname, tool);
+    for harness in tools {
+        let ctx = instructions::build_context(&repo_cfg, &machine, &hostname, harness);
         let rendered = instructions::render(&template_src, &ctx)?;
-        let out = instructions::output_path(&home, tool);
+        let out = instructions::output_path(&home, harness);
         let current = std::fs::read_to_string(&out).unwrap_or_default();
         if current == rendered {
             continue;
@@ -113,15 +113,15 @@ fn show() -> Result<()> {
     let template_src = instructions::read_template(&repo)?;
     let hostname = instructions::current_hostname();
 
-    for (i, tool) in tools.iter().enumerate() {
+    for (i, harness) in tools.iter().enumerate() {
         if i > 0 {
             println!();
         }
-        let ctx = instructions::build_context(&repo_cfg, &machine, &hostname, *tool);
+        let ctx = instructions::build_context(&repo_cfg, &machine, &hostname, *harness);
         let rendered = instructions::render(&template_src, &ctx)?;
         println!(
             "{}",
-            style(format!("# {} ({})", tool.output_subpath(), tool.display())).bold()
+            style(format!("# {} ({})", harness.output_subpath(), harness.display())).bold()
         );
         print!("{}", rendered);
     }

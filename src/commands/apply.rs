@@ -31,10 +31,10 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     let mut materialized = 0usize;
     let mut lockfile_dirty = false;
 
-    let target_agents: Option<BTreeSet<String>> = if args.agents.is_empty() {
+    let target_harnesses: Option<BTreeSet<String>> = if args.harnesses.is_empty() {
         None
     } else {
-        Some(args.agents.iter().cloned().collect())
+        Some(args.harnesses.iter().cloned().collect())
     };
 
     let mut updated_lock = lock.clone();
@@ -88,7 +88,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             }
         };
 
-        let agents = resolve_agents(entry, &repo_cfg);
+        let harnesses = resolve_harnesses(entry, &repo_cfg);
         let canonical = match resolve_canonical(&repo, entry) {
             Ok(p) => p,
             Err(e) => {
@@ -129,13 +129,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         }
 
         if args.dry_run {
-            for agent in &agents {
-                if let Some(filter) = &target_agents {
-                    if !filter.contains(agent) {
+            for harness in &harnesses {
+                if let Some(filter) = &target_harnesses {
+                    if !filter.contains(harness) {
                         continue;
                     }
                 }
-                let link = paths::agent_skill_path(&install_root, agent, &entry.name)?;
+                let link = paths::harness_skill_path(&install_root, harness, &entry.name)?;
                 ui::detail(format!(
                     "{} → {}",
                     paths::display_path(&link),
@@ -146,13 +146,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             continue;
         }
 
-        for agent in &agents {
-            if let Some(filter) = &target_agents {
-                if !filter.contains(agent) {
+        for harness in &harnesses {
+            if let Some(filter) = &target_harnesses {
+                if !filter.contains(harness) {
                     continue;
                 }
             }
-            let link = paths::agent_skill_path(&install_root, agent, &entry.name)?;
+            let link = paths::harness_skill_path(&install_root, harness, &entry.name)?;
             if args.copy {
                 let was_managed = prev_manifest
                     .entries
@@ -167,7 +167,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                             path: link.clone(),
                             kind: EntryKind::Copy,
                             skill: entry.name.clone(),
-                            agent: agent.clone(),
+                            harness: harness.clone(),
                             target: canonical.clone(),
                             applied_at: manifest::now_unix(),
                         });
@@ -177,7 +177,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                         ui::warn(format!(
                             "refused to install {} for {}: real dir at {} (rerun with --force)",
                             entry.name,
-                            agent,
+                            harness,
                             paths::display_path(&link)
                         ));
                     }
@@ -194,7 +194,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                         path: link.clone(),
                         kind: EntryKind::Symlink,
                         skill: entry.name.clone(),
-                        agent: agent.clone(),
+                        harness: harness.clone(),
                         target: canonical.clone(),
                         applied_at: manifest::now_unix(),
                     });
@@ -204,7 +204,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                     ui::warn(format!(
                         "refused to install {} for {}: real dir at {} (rerun with --force)",
                         entry.name,
-                        agent,
+                        harness,
                         paths::display_path(&link)
                     ));
                 }
@@ -310,11 +310,11 @@ fn profile_match(machine: &MachineConfig, gates: &[String]) -> bool {
     gates.iter().any(|g| machine.profiles.iter().any(|p| p == g))
 }
 
-fn resolve_agents(entry: &SkillEntry, repo_cfg: &RepoConfig) -> Vec<String> {
-    if entry.agents.iter().any(|a| a == "*") {
-        repo_cfg.enabled_agents.clone()
+fn resolve_harnesses(entry: &SkillEntry, repo_cfg: &RepoConfig) -> Vec<String> {
+    if entry.harnesses.iter().any(|a| a == "*") {
+        repo_cfg.enabled_harnesses.clone()
     } else {
-        entry.agents.clone()
+        entry.harnesses.clone()
     }
 }
 

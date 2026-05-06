@@ -1,4 +1,4 @@
-use crate::cli::{AgentsCommand, ApplyArgs};
+use crate::cli::{HarnessCommand, ApplyArgs};
 use crate::config::RepoConfig;
 use crate::git_sync;
 use crate::paths;
@@ -6,11 +6,11 @@ use crate::ui;
 use anyhow::{anyhow, Result};
 use console::style;
 
-pub fn run(cmd: AgentsCommand, no_sync: bool) -> Result<()> {
+pub fn run(cmd: HarnessCommand, no_sync: bool) -> Result<()> {
     match cmd {
-        AgentsCommand::List => list(),
-        AgentsCommand::Add { ids } => add(ids, no_sync),
-        AgentsCommand::Remove { ids } => remove(ids, no_sync),
+        HarnessCommand::List => list(),
+        HarnessCommand::Add { ids } => add(ids, no_sync),
+        HarnessCommand::Remove { ids } => remove(ids, no_sync),
     }
 }
 
@@ -20,11 +20,11 @@ fn list() -> Result<()> {
 
     // Column widths sized to header+content. Held outside of styled() because
     // ANSI escape codes from console::style break width-based padding.
-    let id_w = std::cmp::max("ID".len(), crate::agents::all().map(|a| a.id.len()).max().unwrap_or(0));
+    let id_w = std::cmp::max("ID".len(), crate::harness::all().map(|a| a.id.len()).max().unwrap_or(0));
     let status_w = "disabled".len();
     let skills_w = std::cmp::max(
         "SKILLS DIR".len(),
-        crate::agents::all()
+        crate::harness::all()
             .filter_map(|a| a.skills_subdir.map(|s| s.len() + 2)) // +2 for "~/"
             .max()
             .unwrap_or(0),
@@ -37,8 +37,8 @@ fn list() -> Result<()> {
     );
     println!("{}", style(header).bold());
 
-    for def in crate::agents::all() {
-        let enabled = repo_cfg.enabled_agents.iter().any(|a| a == def.id);
+    for def in crate::harness::all() {
+        let enabled = repo_cfg.enabled_harnesses.iter().any(|a| a == def.id);
         let status = if enabled { "enabled" } else { "disabled" };
         let skills = def
             .skills_subdir
@@ -63,7 +63,7 @@ fn list() -> Result<()> {
 }
 
 fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
-    validate_agent_ids(&ids)?;
+    validate_harness_ids(&ids)?;
 
     let repo = paths::resolve_repo()?;
     if git_sync::enabled(no_sync) {
@@ -71,7 +71,7 @@ fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
     }
 
     let mut repo_cfg = RepoConfig::load(&repo)?;
-    let plan = plan_add(&repo_cfg.enabled_agents, &ids);
+    let plan = plan_add(&repo_cfg.enabled_harnesses, &ids);
 
     if plan.added.is_empty() {
         for id in &plan.already_present {
@@ -80,7 +80,7 @@ fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
         return Ok(());
     }
 
-    repo_cfg.enabled_agents = plan.next;
+    repo_cfg.enabled_harnesses = plan.next;
     repo_cfg.write(&repo)?;
 
     for id in &plan.already_present {
@@ -93,7 +93,7 @@ fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
     crate::commands::apply::run(
         ApplyArgs {
             dry_run: false,
-            agents: Vec::new(),
+            harnesses: Vec::new(),
             project: None,
             force: false,
             copy: false,
@@ -102,7 +102,7 @@ fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
     )?;
 
     if git_sync::enabled(no_sync) {
-        let msg = git_sync::msg_agents_add(&plan.added);
+        let msg = git_sync::msg_harness_add(&plan.added);
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
@@ -110,7 +110,7 @@ fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
 }
 
 fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
-    validate_agent_ids(&ids)?;
+    validate_harness_ids(&ids)?;
 
     let repo = paths::resolve_repo()?;
     if git_sync::enabled(no_sync) {
@@ -118,7 +118,7 @@ fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
     }
 
     let mut repo_cfg = RepoConfig::load(&repo)?;
-    let plan = plan_remove(&repo_cfg.enabled_agents, &ids)?;
+    let plan = plan_remove(&repo_cfg.enabled_harnesses, &ids)?;
 
     if plan.removed.is_empty() {
         for id in &plan.already_absent {
@@ -127,7 +127,7 @@ fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
         return Ok(());
     }
 
-    repo_cfg.enabled_agents = plan.next;
+    repo_cfg.enabled_harnesses = plan.next;
     repo_cfg.write(&repo)?;
 
     for id in &plan.already_absent {
@@ -140,7 +140,7 @@ fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
     crate::commands::apply::run(
         ApplyArgs {
             dry_run: false,
-            agents: Vec::new(),
+            harnesses: Vec::new(),
             project: None,
             force: false,
             copy: false,
@@ -149,7 +149,7 @@ fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
     )?;
 
     if git_sync::enabled(no_sync) {
-        let msg = git_sync::msg_agents_remove(&plan.removed);
+        let msg = git_sync::msg_harness_remove(&plan.removed);
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
@@ -159,12 +159,12 @@ fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Pure helpers (testable without filesystem)
 
-fn validate_agent_ids(ids: &[String]) -> Result<()> {
-    let valid: Vec<&'static str> = crate::agents::ids().collect();
+fn validate_harness_ids(ids: &[String]) -> Result<()> {
+    let valid: Vec<&'static str> = crate::harness::ids().collect();
     for id in ids {
         if !valid.iter().any(|v| v == id) {
             return Err(anyhow!(
-                "unknown agent `{}`\n  valid: {}",
+                "unknown harness `{}`\n  valid: {}",
                 id,
                 valid.join(", ")
             ));
@@ -220,7 +220,7 @@ fn plan_remove(current: &[String], to_remove: &[String]) -> Result<RemovePlan> {
     }
     if !removed.is_empty() && next.is_empty() {
         return Err(anyhow!(
-            "cannot remove last enabled agent (would disable ateam).\n  use 'ateam agents add <id>' first, or edit ateam.toml manually if you really want this."
+            "cannot remove last enabled harness (would disable ateam).\n  use 'ateam harness add <id>' first, or edit ateam.toml manually if you really want this."
         ));
     }
     Ok(RemovePlan {
@@ -240,23 +240,23 @@ mod tests {
 
     #[test]
     fn validate_accepts_registry_ids() {
-        assert!(validate_agent_ids(&s(&["claude-code", "codex"])).is_ok());
-        assert!(validate_agent_ids(&s(&["opencode", "gemini"])).is_ok());
+        assert!(validate_harness_ids(&s(&["claude-code", "codex"])).is_ok());
+        assert!(validate_harness_ids(&s(&["opencode", "gemini"])).is_ok());
     }
 
     #[test]
     fn validate_rejects_unknown_id() {
-        let err = validate_agent_ids(&s(&["not-an-agent"])).unwrap_err();
+        let err = validate_harness_ids(&s(&["not-an-agent"])).unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("unknown agent `not-an-agent`"), "got: {msg}");
+        assert!(msg.contains("unknown harness `not-an-agent`"), "got: {msg}");
         assert!(msg.contains("claude-code"), "got: {msg}");
         assert!(msg.contains("gemini"), "got: {msg}");
     }
 
     #[test]
     fn validate_rejects_when_any_unknown_in_batch() {
-        let err = validate_agent_ids(&s(&["claude-code", "fake"])).unwrap_err();
-        assert!(format!("{err}").contains("unknown agent `fake`"));
+        let err = validate_harness_ids(&s(&["claude-code", "fake"])).unwrap_err();
+        assert!(format!("{err}").contains("unknown harness `fake`"));
     }
 
     #[test]
@@ -303,7 +303,7 @@ mod tests {
     fn plan_remove_refuses_to_empty_the_list() {
         let err = plan_remove(&s(&["claude-code"]), &s(&["claude-code"])).unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("cannot remove last enabled agent"), "got: {msg}");
+        assert!(msg.contains("cannot remove last enabled harness"), "got: {msg}");
     }
 
     #[test]

@@ -137,7 +137,7 @@ fn install_selected(skill: SearchSkill, no_sync: bool) -> Result<()> {
         list: false,
         skill: vec![skill.name.clone()],
         all: false,
-        agents: vec![],
+        harnesses: vec![],
         yes: false,
         global: false,
         profile: vec![],

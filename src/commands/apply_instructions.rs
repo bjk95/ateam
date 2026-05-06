@@ -1,6 +1,6 @@
 use crate::config::{MachineConfig, RepoConfig};
 use crate::install::{self, CopyOutcome};
-use crate::instructions::{self, Tool};
+use crate::instructions::{self, Harness};
 use crate::lockfile::{InstructionsEntry, Lockfile};
 use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
 use crate::paths;
@@ -73,10 +73,10 @@ pub fn apply(
 
     let hostname = instructions::current_hostname();
 
-    for tool in tools {
-        let ctx = instructions::build_context(repo_cfg, machine, &hostname, tool);
+    for harness in tools {
+        let ctx = instructions::build_context(repo_cfg, machine, &hostname, harness);
         let rendered = instructions::render(&template_src, &ctx)?;
-        let out = instructions::output_path(home, tool);
+        let out = instructions::output_path(home, harness);
         let was_managed = prev_paths.contains(&out);
 
         if dry_run {
@@ -84,13 +84,13 @@ pub fn apply(
                 "would write {} ({} bytes) [{}]",
                 out.display(),
                 rendered.len(),
-                tool.agent()
+                harness.id()
             );
             new_manifest.entries.push(ManifestEntry {
                 path: out,
                 kind: EntryKind::Copy,
                 skill: "_instructions".into(),
-                agent: tool.agent().into(),
+                harness: harness.id().into(),
                 target: template_path.clone(),
                 applied_at: manifest::now_unix(),
             });
@@ -113,7 +113,7 @@ pub fn apply(
                     path: out,
                     kind: EntryKind::Copy,
                     skill: "_instructions".into(),
-                    agent: tool.agent().into(),
+                    harness: harness.id().into(),
                     target: template_path.clone(),
                     applied_at: manifest::now_unix(),
                 });
@@ -145,19 +145,19 @@ pub fn apply(
     Ok(outcome)
 }
 
-pub fn resolve_tools(repo_cfg: &RepoConfig, entry: &InstructionsEntry) -> Vec<Tool> {
-    let agents: Vec<&String> = if entry.agents.iter().any(|a| a == "*") {
-        repo_cfg.enabled_agents.iter().collect()
+pub fn resolve_tools(repo_cfg: &RepoConfig, entry: &InstructionsEntry) -> Vec<Harness> {
+    let harnesses: Vec<&String> = if entry.harnesses.iter().any(|a| a == "*") {
+        repo_cfg.enabled_harnesses.iter().collect()
     } else {
         entry
-            .agents
+            .harnesses
             .iter()
-            .filter(|a| repo_cfg.enabled_agents.contains(a))
+            .filter(|a| repo_cfg.enabled_harnesses.contains(a))
             .collect()
     };
-    agents
+    harnesses
         .into_iter()
-        .filter_map(|a| Tool::from_agent(a))
+        .filter_map(|a| Harness::from_id(a))
         .collect()
 }
 
@@ -213,7 +213,7 @@ mod tests {
             let home = tempfile::tempdir().unwrap();
             let repo_cfg = RepoConfig {
                 declared_profiles: declared.iter().map(|s| (*s).to_string()).collect(),
-                enabled_agents: vec!["claude-code".into(), "codex".into()],
+                enabled_harnesses: vec!["claude-code".into(), "codex".into()],
             };
             repo_cfg.write(repo.path()).unwrap();
             std::fs::create_dir_all(repo.path().join(".ateam")).unwrap();
@@ -246,13 +246,13 @@ mod tests {
             }
         }
 
-        fn read_output(&self, tool: Tool) -> Option<String> {
-            let p = self.home.path().join(tool.output_subpath());
+        fn read_output(&self, harness: Harness) -> Option<String> {
+            let p = self.home.path().join(harness.output_subpath());
             std::fs::read_to_string(p).ok()
         }
 
-        fn output_path(&self, tool: Tool) -> PathBuf {
-            self.home.path().join(tool.output_subpath())
+        fn output_path(&self, harness: Harness) -> PathBuf {
+            self.home.path().join(harness.output_subpath())
         }
 
         fn run(
@@ -304,8 +304,8 @@ mod tests {
         assert!(outcome.lockfile_dirty, "should mark lockfile dirty when auto-adding entry");
         assert!(lock.instructions.is_some());
 
-        let claude = fx.read_output(Tool::CLAUDE).unwrap();
-        let codex = fx.read_output(Tool::CODEX).unwrap();
+        let claude = fx.read_output(Harness::CLAUDE).unwrap();
+        let codex = fx.read_output(Harness::CODEX).unwrap();
         assert!(claude.contains("WORK"), "got: {}", claude);
         assert!(!claude.contains("HOME"));
         assert_eq!(claude, codex, "no tool branching → identical content");
@@ -320,8 +320,8 @@ mod tests {
         let prev = Manifest::default();
         let mut new = Manifest::default();
         fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
-        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap().trim(), "CLAUDE");
-        assert_eq!(fx.read_output(Tool::CODEX).unwrap().trim(), "CODEX");
+        assert_eq!(fx.read_output(Harness::CLAUDE).unwrap().trim(), "CLAUDE");
+        assert_eq!(fx.read_output(Harness::CODEX).unwrap().trim(), "CODEX");
     }
 
     #[test]
@@ -335,8 +335,8 @@ mod tests {
         let mut new = Manifest::default();
         let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
         assert_eq!(outcome.written, 0);
-        assert!(fx.read_output(Tool::CLAUDE).is_none());
-        assert!(fx.read_output(Tool::CODEX).is_none());
+        assert!(fx.read_output(Harness::CLAUDE).is_none());
+        assert!(fx.read_output(Harness::CODEX).is_none());
     }
 
     #[test]
@@ -344,7 +344,7 @@ mod tests {
         let fx = Fixture::new(&["work"], &["work"]);
         fx.write_template("template body\n");
         // Pre-create a colliding file outside ateam's manifest.
-        let claude_out = fx.output_path(Tool::CLAUDE);
+        let claude_out = fx.output_path(Harness::CLAUDE);
         std::fs::create_dir_all(claude_out.parent().unwrap()).unwrap();
         std::fs::write(&claude_out, "user-managed content").unwrap();
 
@@ -364,7 +364,7 @@ mod tests {
     fn force_backs_up_and_writes() {
         let fx = Fixture::new(&["work"], &["work"]);
         fx.write_template("template body\n");
-        let claude_out = fx.output_path(Tool::CLAUDE);
+        let claude_out = fx.output_path(Harness::CLAUDE);
         std::fs::create_dir_all(claude_out.parent().unwrap()).unwrap();
         std::fs::write(&claude_out, "stale local").unwrap();
 
@@ -374,7 +374,7 @@ mod tests {
         let mut new = Manifest::default();
         let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, true).unwrap();
         assert!(outcome.written >= 1);
-        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap(), "template body\n");
+        assert_eq!(fx.read_output(Harness::CLAUDE).unwrap(), "template body\n");
 
         // Backup file should exist alongside.
         let parent = claude_out.parent().unwrap();
@@ -400,14 +400,14 @@ mod tests {
         let mut new = Manifest::default();
         // First apply
         fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
-        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap(), "v1\n");
+        assert_eq!(fx.read_output(Harness::CLAUDE).unwrap(), "v1\n");
 
         // Carry forward: prev = previous new.
         prev = new;
         fx.write_template("v2\n");
         let mut new2 = Manifest::default();
         fx.run(&mut lock, &mut machine, &prev, &mut new2, false).unwrap();
-        assert_eq!(fx.read_output(Tool::CLAUDE).unwrap(), "v2\n");
+        assert_eq!(fx.read_output(Harness::CLAUDE).unwrap(), "v2\n");
     }
 
     #[test]

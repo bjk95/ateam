@@ -7,19 +7,19 @@ use std::path::{Path, PathBuf};
 pub struct RepoConfig {
     #[serde(default)]
     pub declared_profiles: Vec<String>,
-    #[serde(default = "default_agents")]
-    pub enabled_agents: Vec<String>,
+    #[serde(default = "default_harnesses")]
+    pub enabled_harnesses: Vec<String>,
 }
 
-fn default_agents() -> Vec<String> {
-    crate::agents::ids().map(String::from).collect()
+fn default_harnesses() -> Vec<String> {
+    crate::harness::ids().map(String::from).collect()
 }
 
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
             declared_profiles: Vec::new(),
-            enabled_agents: default_agents(),
+            enabled_harnesses: default_harnesses(),
         }
     }
 }
@@ -87,19 +87,19 @@ mod tests {
 
     #[test]
     fn default_agents_includes_claude_and_codex() {
-        let defaults = default_agents();
+        let defaults = default_harnesses();
         assert!(defaults.contains(&"claude-code".to_string()));
         assert!(defaults.contains(&"codex".to_string()));
     }
 
     #[test]
     fn default_agents_count_matches_registry() {
-        assert_eq!(default_agents().len(), crate::agents::REGISTRY.len());
+        assert_eq!(default_harnesses().len(), crate::harness::REGISTRY.len());
     }
 
     #[test]
     fn default_agents_includes_all_four() {
-        let defaults = default_agents();
+        let defaults = default_harnesses();
         assert_eq!(defaults.len(), 4);
         assert!(defaults.contains(&"claude-code".to_string()));
         assert!(defaults.contains(&"codex".to_string()));

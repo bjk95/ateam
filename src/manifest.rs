@@ -14,7 +14,7 @@ pub struct ManifestEntry {
     pub path: PathBuf,
     pub kind: EntryKind,
     pub skill: String,
-    pub agent: String,
+    pub harness: String,
     pub target: PathBuf,
     pub applied_at: u64,
 }

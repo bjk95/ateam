@@ -147,8 +147,8 @@ fn normalize_all_flag(args: &mut AddArgs) {
     if !args.all {
         return;
     }
-    if args.agents.is_empty() {
-        args.agents = vec!["*".into()];
+    if args.harnesses.is_empty() {
+        args.harnesses = vec!["*".into()];
     }
     args.yes = true;
 }
@@ -459,10 +459,10 @@ enum InstallRoot {
 }
 
 fn resolve_agents(args: &AddArgs, repo_cfg: &RepoConfig) -> Vec<String> {
-    if args.agents.is_empty() || args.agents.iter().any(|a| a == "*") {
-        repo_cfg.enabled_agents.clone()
+    if args.harnesses.is_empty() || args.harnesses.iter().any(|a| a == "*") {
+        repo_cfg.enabled_harnesses.clone()
     } else {
-        args.agents.clone()
+        args.harnesses.clone()
     }
 }
 
@@ -473,7 +473,7 @@ fn install_one(
     skill: &DiscoveredSkill,
     package_root: &Path,
     install_root: &InstallRoot,
-    agents: &[String],
+    harnesses: &[String],
 ) -> Result<(SkillEntry, Vec<PathBuf>)> {
     // Path of the skill's directory relative to the package root, used for
     // both lockfile recording and update-detection later.
@@ -502,10 +502,10 @@ fn install_one(
     };
     ui::detail(format!("snapshotted to {}", paths::display_path(&canonical)));
 
-    let agent_list: Vec<String> = if args.agents.is_empty() || args.agents.iter().any(|a| a == "*") {
+    let harness_list: Vec<String> = if args.harnesses.is_empty() || args.harnesses.iter().any(|a| a == "*") {
         vec!["*".into()]
     } else {
-        args.agents.clone()
+        args.harnesses.clone()
     };
 
     // For now, install to local-machine paths only. `apply` does the same
@@ -517,15 +517,15 @@ fn install_one(
     };
 
     let mut linked: Vec<PathBuf> = Vec::new();
-    for agent in agents {
-        let link = paths::agent_skill_path(&install_root_path, agent, &skill.name)?;
+    for harness in harnesses {
+        let link = paths::harness_skill_path(&install_root_path, harness, &skill.name)?;
         if args.copy {
             match install::install_copy_dir(&link, &canonical, false, false)? {
                 install::CopyDirOutcome::Refused => {
                     ui::warn(format!(
                         "refused to install {} for {}: real dir at {} (rerun with `ateam apply --copy --force`)",
                         skill.name,
-                        agent,
+                        harness,
                         paths::display_path(&link)
                     ));
                 }
@@ -540,7 +540,7 @@ fn install_one(
                 ui::warn(format!(
                     "refused to install {} for {}: real dir at {} (rerun with `ateam apply --force`)",
                     skill.name,
-                    agent,
+                    harness,
                     paths::display_path(&link)
                 ));
             }
@@ -607,7 +607,7 @@ fn install_one(
             path: entry_path,
             git_ref: args.r#ref.clone(),
             tree_sha,
-            agents: agent_list,
+            harnesses: harness_list,
             profiles: args.profile.clone(),
             project,
             active: true,
@@ -661,7 +661,7 @@ mod tests {
             list: false,
             skill: names.iter().map(|s| (*s).into()).collect(),
             all: false,
-            agents: vec![],
+            harnesses: vec![],
             yes: false,
             global: false,
             profile: vec![],
@@ -699,7 +699,7 @@ mod tests {
             list: false,
             skill: vec![],
             all: false,
-            agents: vec![],
+            harnesses: vec![],
             yes: false,
             global: false,
             profile: vec![],
@@ -715,7 +715,7 @@ mod tests {
         let mut args = empty_args();
         args.all = true;
         normalize_all_flag(&mut args);
-        assert_eq!(args.agents, vec!["*".to_string()]);
+        assert_eq!(args.harnesses, vec!["*".to_string()]);
         assert!(args.yes);
     }
 
@@ -723,9 +723,9 @@ mod tests {
     fn normalize_all_flag_preserves_explicit_agents() {
         let mut args = empty_args();
         args.all = true;
-        args.agents = vec!["claude".into()];
+        args.harnesses = vec!["claude".into()];
         normalize_all_flag(&mut args);
-        assert_eq!(args.agents, vec!["claude".to_string()]);
+        assert_eq!(args.harnesses, vec!["claude".to_string()]);
         assert!(args.yes);
     }
 
@@ -734,7 +734,7 @@ mod tests {
         let mut args = empty_args();
         args.skill = vec!["foo".into()];
         normalize_all_flag(&mut args);
-        assert!(args.agents.is_empty());
+        assert!(args.harnesses.is_empty());
         assert!(!args.yes);
     }
 }

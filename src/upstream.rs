@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 /// one productive iteration and the rest no-op.
 pub fn build_index(home: &Path) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    for def in crate::agents::all() {
+    for def in crate::harness::all() {
         if let Some(indexer) = def.upstream_indexer {
             indexer(home, &mut map);
         }

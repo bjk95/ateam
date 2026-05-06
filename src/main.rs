@@ -1,4 +1,4 @@
-mod agents;
+mod harness;
 mod cli;
 mod commands;
 mod config;

@@ -14,18 +14,18 @@ pub struct Lockfile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstructionsEntry {
-    #[serde(default = "default_instructions_agents", skip_serializing_if = "is_default_agents")]
-    pub agents: Vec<String>,
+    #[serde(default = "default_instructions_harnesses", skip_serializing_if = "is_default_harnesses")]
+    pub harnesses: Vec<String>,
 }
 
-fn default_instructions_agents() -> Vec<String> {
+fn default_instructions_harnesses() -> Vec<String> {
     vec!["*".into()]
 }
 
 impl Default for InstructionsEntry {
     fn default() -> Self {
         Self {
-            agents: default_instructions_agents(),
+            harnesses: default_instructions_harnesses(),
         }
     }
 }
@@ -45,8 +45,8 @@ pub struct SkillEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tree_sha: Option<String>,
 
-    #[serde(default = "default_agents", skip_serializing_if = "is_default_agents")]
-    pub agents: Vec<String>,
+    #[serde(default = "default_harnesses", skip_serializing_if = "is_default_harnesses")]
+    pub harnesses: Vec<String>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub profiles: Vec<String>,
@@ -64,11 +64,11 @@ pub struct SkillEntry {
     pub upstream: Option<String>,
 }
 
-fn default_agents() -> Vec<String> {
+fn default_harnesses() -> Vec<String> {
     vec!["*".into()]
 }
 
-fn is_default_agents(v: &[String]) -> bool {
+fn is_default_harnesses(v: &[String]) -> bool {
     v.len() == 1 && v[0] == "*"
 }
 
@@ -218,7 +218,7 @@ mod tests {
                     path: None,
                     git_ref: None,
                     tree_sha: None,
-                    agents: vec!["*".into()],
+                    harnesses: vec!["*".into()],
                     profiles: vec![],
                     project: None,
                     active: true,
@@ -230,7 +230,7 @@ mod tests {
                     path: None,
                     git_ref: None,
                     tree_sha: None,
-                    agents: vec!["*".into()],
+                    harnesses: vec!["*".into()],
                     profiles: vec![],
                     project: None,
                     active: true,
@@ -263,7 +263,7 @@ mod tests {
                 path: None,
                 git_ref: None,
                 tree_sha: None,
-                agents: vec!["*".into()],
+                harnesses: vec!["*".into()],
                 profiles: vec![],
                 project: None,
                 active: true,
@@ -286,7 +286,7 @@ mod tests {
                 path: None,
                 git_ref: None,
                 tree_sha: None,
-                agents: vec!["*".into()],
+                harnesses: vec!["*".into()],
                 profiles: vec![],
                 project: None,
                 active: false,
@@ -318,7 +318,7 @@ source = "local:skills/a"
             path: Some("../../etc/passwd".into()),
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: None,
             active: true,
@@ -338,7 +338,7 @@ source = "local:skills/a"
             path: Some("../external/skills/a".into()),
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: None,
             active: true,

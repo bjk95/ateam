@@ -216,12 +216,12 @@ pub fn msg_edit(target: &str) -> String {
     format!("edit :: {}", target)
 }
 
-pub fn msg_agents_add(ids: &[String]) -> String {
-    format!("agents add :: {}", ids.join(", "))
+pub fn msg_harness_add(ids: &[String]) -> String {
+    format!("harness add :: {}", ids.join(", "))
 }
 
-pub fn msg_agents_remove(ids: &[String]) -> String {
-    format!("agents remove :: {}", ids.join(", "))
+pub fn msg_harness_remove(ids: &[String]) -> String {
+    format!("harness remove :: {}", ids.join(", "))
 }
 
 fn short(sha: &str) -> String {

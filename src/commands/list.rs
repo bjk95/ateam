@@ -89,7 +89,7 @@ struct JsonSkill<'a> {
     git_ref: Option<&'a str>,
     tree_sha: Option<&'a str>,
     path: Option<&'a str>,
-    agents: &'a [String],
+    harnesses: &'a [String],
     profiles: &'a [String],
     project: Option<&'a str>,
     active: bool,
@@ -104,7 +104,7 @@ impl<'a> From<&'a SkillEntry> for JsonSkill<'a> {
             git_ref: s.git_ref.as_deref(),
             tree_sha: s.tree_sha.as_deref(),
             path: s.path.as_deref(),
-            agents: &s.agents,
+            harnesses: &s.harnesses,
             profiles: &s.profiles,
             project: s.project.as_deref(),
             active: s.active,
@@ -155,7 +155,7 @@ mod tests {
             path: None,
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: None,
             active: true,
@@ -183,8 +183,8 @@ mod tests {
         let v = serde_json::to_value(&view).unwrap();
         // Required fields always present (no skip_serializing_if), nulls explicit.
         for key in [
-            "name", "source", "ref", "tree_sha", "path", "agents", "profiles", "project", "active",
-            "upstream",
+            "name", "source", "ref", "tree_sha", "path", "harnesses", "profiles", "project",
+            "active", "upstream",
         ] {
             assert!(v.get(key).is_some(), "missing key: {}", key);
         }
@@ -193,7 +193,7 @@ mod tests {
         assert!(v["ref"].is_null());
         assert!(v["tree_sha"].is_null());
         assert!(v["path"].is_null());
-        assert_eq!(v["agents"], serde_json::json!(["*"]));
+        assert_eq!(v["harnesses"], serde_json::json!(["*"]));
         assert_eq!(v["profiles"], serde_json::json!([]));
         assert!(v["project"].is_null());
         assert_eq!(v["active"], true);

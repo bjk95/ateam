@@ -1,11 +1,11 @@
 pub mod activate;
 pub mod add;
-pub mod agents;
 pub mod apply;
 pub mod apply_instructions;
 pub mod deactivate;
 pub mod edit;
 pub mod find;
+pub mod harness;
 pub mod import;
 pub mod init;
 pub mod instructions;

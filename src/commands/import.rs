@@ -1,7 +1,7 @@
 use crate::cli::ImportArgs;
 use crate::config::RepoConfig;
 use crate::git_sync;
-use crate::instructions::{self, Tool};
+use crate::instructions::{self, Harness};
 use crate::lockfile::{InstructionsEntry, Lockfile, SkillEntry};
 use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
 use crate::paths;
@@ -60,7 +60,7 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
         anyhow!(
             "no installed skill found named `{}` in {}",
             normalized,
-            crate::discover::agent_skill_dirs(home)
+            crate::discover::harness_skill_dirs(home)
                 .iter()
                 .map(|p| crate::paths::display_path(p))
                 .collect::<Vec<_>>()
@@ -106,7 +106,7 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
 fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     println!(
         "ateam: scanning {}...",
-        crate::discover::agent_skill_dirs(home)
+        crate::discover::harness_skill_dirs(home)
             .iter()
             .map(|p| crate::paths::display_path(p))
             .collect::<Vec<_>>()
@@ -191,7 +191,7 @@ pub(crate) fn bulk_import_skills(
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let upstream_index = crate::upstream::build_index(home);
 
-    for dir in crate::discover::agent_skill_dirs(home) {
+    for dir in crate::discover::harness_skill_dirs(home) {
         let entries = match std::fs::read_dir(&dir) {
             Ok(e) => e,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -249,7 +249,7 @@ pub(crate) fn bulk_import_skills(
                 path: Some(format!("skills/{}", name)),
                 git_ref: None,
                 tree_sha: None,
-                agents: vec!["*".into()],
+                harnesses: vec!["*".into()],
                 profiles: vec![],
                 project: None,
                 active: true,
@@ -280,7 +280,7 @@ pub(crate) fn bulk_import_skills(
 }
 
 fn find_installed(home: &Path, normalized: &str) -> Option<PathBuf> {
-    for dir in crate::discover::agent_skill_dirs(home) {
+    for dir in crate::discover::harness_skill_dirs(home) {
         let candidate = dir.join(normalized);
         if candidate.exists() {
             return Some(candidate);
@@ -318,8 +318,8 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
         );
     }
 
-    let claude_path = instructions::output_path(home, Tool::CLAUDE);
-    let codex_path = instructions::output_path(home, Tool::CODEX);
+    let claude_path = instructions::output_path(home, Harness::CLAUDE);
+    let codex_path = instructions::output_path(home, Harness::CODEX);
     let claude = read_optional(&claude_path)?;
     let codex = read_optional(&codex_path)?;
 
@@ -345,8 +345,8 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
 
     let mut mf = Manifest::load(repo)?;
     let now = manifest::now_unix();
-    for tool in Tool::all() {
-        let path = instructions::output_path(home, tool);
+    for harness in Harness::all() {
+        let path = instructions::output_path(home, harness);
         if !path.exists() {
             continue;
         }
@@ -355,7 +355,7 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
             path,
             kind: EntryKind::Copy,
             skill: "_instructions".into(),
-            agent: tool.agent().into(),
+            harness: harness.id().into(),
             target: template.clone(),
             applied_at: now,
         });
@@ -431,7 +431,7 @@ fn build_entry(repo: &Path, name: &str, installed: &Path, args: &ImportArgs) -> 
             path: None,
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: args.project.clone(),
             active: true,
@@ -454,7 +454,7 @@ fn build_entry(repo: &Path, name: &str, installed: &Path, args: &ImportArgs) -> 
         path: Some(format!("skills/{}", name)),
         git_ref: None,
         tree_sha: None,
-        agents: vec!["*".into()],
+        harnesses: vec!["*".into()],
         profiles: vec![],
         project: args.project.clone(),
         active: true,
@@ -516,7 +516,7 @@ mod tests {
         assert!(lock.instructions.is_some());
         let mf = Manifest::load(fx.repo.path()).unwrap();
         assert_eq!(mf.entries.len(), 1);
-        assert_eq!(mf.entries[0].agent, "claude-code");
+        assert_eq!(mf.entries[0].harness, "claude-code");
     }
 
     #[test]
@@ -594,7 +594,7 @@ mod tests {
             path: Some("skills/alpha".into()),
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: None,
             active: true,

@@ -100,14 +100,14 @@ fn matches_filters(entry: &SkillEntry, args: &RemoveArgs) -> bool {
     if args.global && entry.project.is_some() {
         return false;
     }
-    if !args.agents.is_empty() {
-        let wanted_all = args.agents.iter().any(|a| a == "*");
-        let entry_all = entry.agents.iter().any(|a| a == "*");
+    if !args.harnesses.is_empty() {
+        let wanted_all = args.harnesses.iter().any(|a| a == "*");
+        let entry_all = entry.harnesses.iter().any(|a| a == "*");
         if !wanted_all && !entry_all {
             let hit = args
-                .agents
+                .harnesses
                 .iter()
-                .any(|wanted| entry.agents.iter().any(|have| have == wanted));
+                .any(|wanted| entry.harnesses.iter().any(|have| have == wanted));
             if !hit {
                 return false;
             }
@@ -198,14 +198,14 @@ fn remove_one(repo: &Path, name: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn entry(name: &str, agents: &[&str], project: Option<&str>) -> SkillEntry {
+    fn entry(name: &str, harnesses: &[&str], project: Option<&str>) -> SkillEntry {
         SkillEntry {
             name: name.into(),
             source: format!("local:skills/{}", name),
             path: None,
             git_ref: None,
             tree_sha: None,
-            agents: agents.iter().map(|s| (*s).into()).collect(),
+            harnesses: harnesses.iter().map(|s| (*s).into()).collect(),
             profiles: vec![],
             project: project.map(|s| s.into()),
             active: true,
@@ -213,12 +213,12 @@ mod tests {
         }
     }
 
-    fn args(names: &[&str], all: bool, agents: &[&str], global: bool) -> RemoveArgs {
+    fn args(names: &[&str], all: bool, harnesses: &[&str], global: bool) -> RemoveArgs {
         RemoveArgs {
             names: names.iter().map(|s| (*s).into()).collect(),
             all,
             yes: true,
-            agents: agents.iter().map(|s| (*s).into()).collect(),
+            harnesses: harnesses.iter().map(|s| (*s).into()).collect(),
             global,
         }
     }

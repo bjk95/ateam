@@ -10,13 +10,13 @@ pub const TEMPLATE_FILENAME: &str = "instructions.md.hbs";
 pub const TEMPLATE_DIR: &str = "instructions";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Tool(pub &'static crate::agents::AgentDef);
+pub struct Harness(pub &'static crate::harness::HarnessDef);
 
-impl Tool {
-    pub const CLAUDE: Tool = Tool(&crate::agents::CLAUDE_CODE);
-    pub const CODEX: Tool = Tool(&crate::agents::CODEX);
+impl Harness {
+    pub const CLAUDE: Harness = Harness(&crate::harness::CLAUDE_CODE);
+    pub const CODEX: Harness = Harness(&crate::harness::CODEX);
 
-    pub fn agent(&self) -> &'static str {
+    pub fn id(&self) -> &'static str {
         self.0.id
     }
 
@@ -38,12 +38,12 @@ impl Tool {
             .expect("agent has no instructions_file")
     }
 
-    pub fn from_agent(agent: &str) -> Option<Self> {
-        crate::agents::lookup(agent).map(Tool)
+    pub fn from_id(id: &str) -> Option<Self> {
+        crate::harness::lookup(id).map(Harness)
     }
 
-    pub fn all() -> Vec<Tool> {
-        crate::agents::all().map(Tool).collect()
+    pub fn all() -> Vec<Harness> {
+        crate::harness::all().map(Harness).collect()
     }
 }
 
@@ -51,14 +51,14 @@ pub fn template_path(repo: &Path) -> PathBuf {
     repo.join(TEMPLATE_DIR).join(TEMPLATE_FILENAME)
 }
 
-pub fn output_path(home: &Path, tool: Tool) -> PathBuf {
-    home.join(tool.output_subpath())
+pub fn output_path(home: &Path, harness: Harness) -> PathBuf {
+    home.join(harness.output_subpath())
 }
 
 /// Reserved identifiers always available in the render context.
 /// One ctx_flag per agent in the registry, plus `"hostname"`.
 pub fn reserved_identifiers() -> Vec<&'static str> {
-    let mut v: Vec<&'static str> = crate::agents::all().map(|a| a.ctx_flag).collect();
+    let mut v: Vec<&'static str> = crate::harness::all().map(|a| a.ctx_flag).collect();
     v.push("hostname");
     v
 }
@@ -68,15 +68,15 @@ pub fn build_context(
     repo_cfg: &RepoConfig,
     machine: &MachineConfig,
     hostname: &str,
-    tool: Tool,
+    harness: Harness,
 ) -> Value {
     let mut ctx = serde_json::Map::new();
     for p in &repo_cfg.declared_profiles {
         let on = machine.profiles.iter().any(|m| m == p);
         ctx.insert(p.clone(), Value::Bool(on));
     }
-    for t in Tool::all() {
-        ctx.insert(t.key().into(), Value::Bool(t == tool));
+    for t in Harness::all() {
+        ctx.insert(t.key().into(), Value::Bool(t == harness));
     }
     ctx.insert("hostname".into(), Value::String(hostname.to_string()));
     Value::Object(ctx)
@@ -284,7 +284,7 @@ mod tests {
     fn build_context_sets_profile_booleans() {
         let repo_cfg = RepoConfig {
             declared_profiles: vec!["work".into(), "personal".into(), "devbox".into()],
-            enabled_agents: vec![
+            enabled_harnesses: vec![
                 "claude-code".into(),
                 "codex".into(),
                 "opencode".into(),
@@ -293,7 +293,7 @@ mod tests {
         };
         let mut machine = MachineConfig::default();
         machine.profiles = vec!["work".into()];
-        let ctx = build_context(&repo_cfg, &machine, "host-x", Tool::CLAUDE);
+        let ctx = build_context(&repo_cfg, &machine, "host-x", Harness::CLAUDE);
         assert_eq!(ctx["work"], Value::Bool(true));
         assert_eq!(ctx["personal"], Value::Bool(false));
         assert_eq!(ctx["devbox"], Value::Bool(false));
@@ -308,15 +308,15 @@ mod tests {
     fn build_context_sets_opencode_and_gemini_flags() {
         let repo_cfg = RepoConfig::default();
         let machine = MachineConfig::default();
-        let opencode_tool = Tool::from_agent("opencode").expect("opencode tool");
-        let ctx = build_context(&repo_cfg, &machine, "h", opencode_tool);
+        let opencode_harness = Harness::from_id("opencode").expect("opencode tool");
+        let ctx = build_context(&repo_cfg, &machine, "h", opencode_harness);
         assert_eq!(ctx["opencode"], Value::Bool(true));
         assert_eq!(ctx["gemini"], Value::Bool(false));
         assert_eq!(ctx["claude"], Value::Bool(false));
         assert_eq!(ctx["codex"], Value::Bool(false));
 
-        let gemini_tool = Tool::from_agent("gemini").expect("gemini tool");
-        let ctx = build_context(&repo_cfg, &machine, "h", gemini_tool);
+        let gemini_harness = Harness::from_id("gemini").expect("gemini tool");
+        let ctx = build_context(&repo_cfg, &machine, "h", gemini_harness);
         assert_eq!(ctx["gemini"], Value::Bool(true));
         assert_eq!(ctx["opencode"], Value::Bool(false));
     }
