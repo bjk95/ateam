@@ -121,6 +121,25 @@ fn push_with_retry(repo: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Count commits on HEAD that aren't on the upstream tracking branch.
+/// Returns `None` when the repo has no remote or no upstream tracking branch
+/// configured (i.e., there's nothing to compare against). Soft-fails to `None`
+/// on any git error so callers can treat it as a best-effort UX hint.
+pub fn unpushed_count(repo: &Path) -> Option<usize> {
+    if !is_git_repo(repo) {
+        return None;
+    }
+    if !has_remote(repo).unwrap_or(false) {
+        return None;
+    }
+    let out = run(repo, &["rev-list", "@{u}..HEAD", "--count"]).ok()?;
+    if !out.status.success() {
+        // No upstream tracking branch yet; nothing to compare.
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+}
+
 fn is_git_repo(repo: &Path) -> bool {
     repo.join(".git").exists()
 }
