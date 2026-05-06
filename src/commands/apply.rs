@@ -153,6 +153,37 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 }
             }
             let link = paths::agent_skill_path(&install_root, agent, &entry.name)?;
+            if args.copy {
+                let was_managed = prev_manifest
+                    .entries
+                    .iter()
+                    .any(|e| e.path == link && matches!(e.kind, EntryKind::Copy));
+                match install::install_copy_dir(&link, &canonical, was_managed, args.force)? {
+                    install::CopyDirOutcome::Created
+                    | install::CopyDirOutcome::Replaced
+                    | install::CopyDirOutcome::AlreadyCorrect
+                    | install::CopyDirOutcome::MovedAside { .. } => {
+                        new_manifest.entries.push(ManifestEntry {
+                            path: link.clone(),
+                            kind: EntryKind::Copy,
+                            skill: entry.name.clone(),
+                            agent: agent.clone(),
+                            target: canonical.clone(),
+                            applied_at: manifest::now_unix(),
+                        });
+                        materialized += 1;
+                    }
+                    install::CopyDirOutcome::Refused => {
+                        ui::warn(format!(
+                            "refused to install {} for {}: real dir at {} (rerun with --force)",
+                            entry.name,
+                            agent,
+                            paths::display_path(&link)
+                        ));
+                    }
+                }
+                continue;
+            }
             match install::install_symlink(&link, &canonical, args.force)? {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced

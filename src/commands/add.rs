@@ -22,7 +22,7 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
         git_sync::pre_pull(&repo)?;
     }
 
-    let source = Source::parse(&args.source)?;
+    let source = Source::parse_with(&args.source, args.dangerously_accept_openclaw_risks)?;
 
     ui::diamond(format!("Source: {}", args.source));
 
@@ -519,6 +519,22 @@ fn install_one(
     let mut linked: Vec<PathBuf> = Vec::new();
     for agent in agents {
         let link = paths::agent_skill_path(&install_root_path, agent, &skill.name)?;
+        if args.copy {
+            match install::install_copy_dir(&link, &canonical, false, false)? {
+                install::CopyDirOutcome::Refused => {
+                    ui::warn(format!(
+                        "refused to install {} for {}: real dir at {} (rerun with `ateam apply --copy --force`)",
+                        skill.name,
+                        agent,
+                        paths::display_path(&link)
+                    ));
+                }
+                _ => {
+                    linked.push(link);
+                }
+            }
+            continue;
+        }
         match install::install_symlink(&link, &canonical, false)? {
             install::LinkOutcome::Refused => {
                 ui::warn(format!(
@@ -651,6 +667,8 @@ mod tests {
             profile: vec![],
             project: None,
             r#ref: None,
+            copy: false,
+            dangerously_accept_openclaw_risks: false,
         }
     }
 
@@ -687,6 +705,8 @@ mod tests {
             profile: vec![],
             project: None,
             r#ref: None,
+            copy: false,
+            dangerously_accept_openclaw_risks: false,
         }
     }
 

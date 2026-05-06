@@ -30,7 +30,7 @@ ateam init ... --profiles a,b      # set this machine's profile list
 Materialize the lockfile (active entries only).
 
 ```bash
-ateam apply [--dry-run] [-a <agent>...] [--project <alias>] [--force]
+ateam apply [--dry-run] [-a <agent>...] [--project <alias>] [--force] [--copy]
 ```
 
 If a real directory already sits at a target path (e.g. a skill installed by
@@ -40,6 +40,11 @@ replaces it with a symlink. No `--force` needed and no data loss is possible
 because the snapshot already has the same bytes. If the contents don't match,
 apply refuses — `--force` is the escape hatch and moves the conflicting
 directory aside to `<name>.bak.<unix-ts>` rather than deleting it.
+
+Pass `--copy` to install via recursive copy instead of symlink. Use this on
+filesystems where symlinks misbehave (network mounts, some Docker volumes).
+The copy is recorded in the manifest so the next `apply` without `--copy`
+cleanly swaps it back to a symlink.
 
 ## `ateam status`
 
@@ -63,6 +68,8 @@ Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 | `--profile <name>` | Tag entry with profile gates (repeatable) |
 | `--project <alias>` | Install into a registered project |
 | `--ref <ref>` | Pin to a specific git ref/tag/commit |
+| `--copy` | Install via recursive copy instead of symlink (for filesystems where symlinks misbehave) |
+| `--dangerously-accept-openclaw-risks` | Permit `openclaw/*` sources (which can shell out at runtime) |
 | `--no-sync` | Skip auto pull/commit/push for this run |
 
 ### skills.sh registry fallback

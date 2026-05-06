@@ -143,6 +143,8 @@ fn install_selected(skill: SearchSkill, no_sync: bool) -> Result<()> {
         profile: vec![],
         project: None,
         r#ref: None,
+        copy: false,
+        dangerously_accept_openclaw_risks: false,
     };
     crate::commands::add::run(add_args, no_sync)?;
 
