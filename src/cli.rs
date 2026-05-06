@@ -101,11 +101,24 @@ pub enum Command {
     /// Validate the instructions template against declared profiles.
     Validate,
 
-    /// Open `$EDITOR` on the ateam state dir, or on the instructions template.
-    Edit(EditArgs),
+    /// Open `$EDITOR` on the ateam state directory.
+    Edit,
 
-    /// Show a git-style unified diff of what `apply` would change.
+    /// Manage the instructions template (CLAUDE.md / AGENTS.md source).
+    #[command(subcommand)]
+    Instructions(InstructionsCommand),
+}
+
+#[derive(Subcommand)]
+pub enum InstructionsCommand {
+    /// Open the instructions template in `$EDITOR`.
+    Edit,
+
+    /// Show a unified diff of new render vs current CLAUDE.md / AGENTS.md.
     Diff,
+
+    /// Print the rendered instructions for each enabled tool to stdout.
+    Show,
 }
 
 #[derive(Subcommand)]
@@ -285,18 +298,6 @@ pub enum RemoteCommand {
     List,
 }
 
-#[derive(Parser)]
-pub struct EditArgs {
-    #[command(subcommand)]
-    pub target: Option<EditTarget>,
-}
-
-#[derive(Subcommand)]
-pub enum EditTarget {
-    /// Open the instructions template (`instructions/instructions.md.hbs`).
-    Instructions,
-}
-
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Add or update an alias→path mapping for this machine.
@@ -330,7 +331,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Upgrade => crate::self_update::force_upgrade(),
         Command::Remote(cmd) => crate::commands::remote::run(cmd),
         Command::Validate => crate::commands::validate::run(),
-        Command::Edit(args) => crate::commands::edit::run(args, no_sync),
-        Command::Diff => crate::commands::diff::run(),
+        Command::Edit => crate::commands::edit::run(no_sync),
+        Command::Instructions(cmd) => crate::commands::instructions::run(cmd, no_sync),
     }
 }
