@@ -18,6 +18,12 @@ pub enum Source {
 }
 
 impl Source {
+    /// Parse a Vercel-compatible source spec. Strict: rejects `openclaw/*`
+    /// sources unless the caller routes through [`Source::parse_with`].
+    pub fn parse(input: &str) -> Result<Self> {
+        Self::parse_with(input, false)
+    }
+
     /// Parse a Vercel-compatible source spec.
     ///
     /// Accepts:
@@ -27,42 +33,29 @@ impl Source {
     /// - `git@github.com:owner/repo.git` — SSH GitHub URL (treated as github)
     /// - `https://...` / `git@...` for non-github → `git:` source
     /// - `./path` or `/abs/path` → `local:`
-    pub fn parse(input: &str) -> Result<Self> {
+    ///
+    /// `accept_openclaw` mirrors Vercel's `--dangerously-accept-openclaw-risks`
+    /// gate: openclaw skills can shell out, so the user must explicitly accept.
+    pub fn parse_with(input: &str, accept_openclaw: bool) -> Result<Self> {
         let s = input.trim();
         if s.is_empty() {
             bail!("empty source");
         }
 
-        // Explicit prefix wins.
-        if let Some(rest) = s.strip_prefix("github:") {
-            return parse_github_owner_repo(rest);
+        let parsed = parse_inner(s)?;
+        if !accept_openclaw && parsed.is_openclaw() {
+            bail!("refusing openclaw/* source `{}` — pass --dangerously-accept-openclaw-risks to install anyway", input);
         }
-        if let Some(rest) = s.strip_prefix("git:") {
-            return Ok(Source::Git { url: rest.to_string() });
-        }
-        if let Some(rest) = s.strip_prefix("local:") {
-            return Ok(Source::Local { path: PathBuf::from(rest) });
-        }
+        Ok(parsed)
+    }
 
-        // Local path detection.
-        if s.starts_with("./") || s.starts_with("../") || s.starts_with('/') || s.starts_with("~/") {
-            return Ok(Source::Local { path: PathBuf::from(s) });
+    fn is_openclaw(&self) -> bool {
+        match self {
+            Source::Github { owner, .. } => owner.eq_ignore_ascii_case("openclaw"),
+            Source::Git { url } => url.contains("github.com/openclaw/")
+                || url.contains("github.com:openclaw/"),
+            Source::Local { .. } => false,
         }
-
-        // GitHub HTTPS / SSH detection — normalize to (owner, repo).
-        if let Some((owner, repo)) = strip_github_url(s) {
-            return Ok(Source::Github { owner, repo });
-        }
-
-        // Bare git URL → generic git.
-        if s.starts_with("https://") || s.starts_with("http://") || s.starts_with("ssh://")
-            || s.starts_with("git@") || s.ends_with(".git")
-        {
-            return Ok(Source::Git { url: s.to_string() });
-        }
-
-        // Last resort: `owner/repo` shorthand.
-        parse_github_owner_repo(s)
     }
 
     /// Lockfile string form, *without* a path component.
@@ -74,10 +67,44 @@ impl Source {
         }
     }
 
-    /// Parse the lockfile-string form back into a Source.
+    /// Parse the lockfile-string form back into a Source. Lockfile entries
+    /// were already gated at add-time, so the openclaw block is bypassed here.
     pub fn from_lockfile_string(s: &str) -> Result<Self> {
-        Self::parse(s)
+        Self::parse_with(s, true)
     }
+}
+
+fn parse_inner(s: &str) -> Result<Source> {
+    // Explicit prefix wins.
+    if let Some(rest) = s.strip_prefix("github:") {
+        return parse_github_owner_repo(rest);
+    }
+    if let Some(rest) = s.strip_prefix("git:") {
+        return Ok(Source::Git { url: rest.to_string() });
+    }
+    if let Some(rest) = s.strip_prefix("local:") {
+        return Ok(Source::Local { path: PathBuf::from(rest) });
+    }
+
+    // Local path detection.
+    if s.starts_with("./") || s.starts_with("../") || s.starts_with('/') || s.starts_with("~/") {
+        return Ok(Source::Local { path: PathBuf::from(s) });
+    }
+
+    // GitHub HTTPS / SSH detection — normalize to (owner, repo).
+    if let Some((owner, repo)) = strip_github_url(s) {
+        return Ok(Source::Github { owner, repo });
+    }
+
+    // Bare git URL → generic git.
+    if s.starts_with("https://") || s.starts_with("http://") || s.starts_with("ssh://")
+        || s.starts_with("git@") || s.ends_with(".git")
+    {
+        return Ok(Source::Git { url: s.to_string() });
+    }
+
+    // Last resort: `owner/repo` shorthand.
+    parse_github_owner_repo(s)
 }
 
 impl fmt::Display for Source {
@@ -171,5 +198,29 @@ mod tests {
             Source::Git { url } => assert_eq!(url, "https://gitlab.com/x/y.git"),
             other => panic!("expected Git, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn rejects_openclaw_owner_shorthand() {
+        let err = Source::parse("openclaw/exfil").unwrap_err();
+        assert!(err.to_string().contains("--dangerously-accept-openclaw-risks"));
+    }
+
+    #[test]
+    fn rejects_openclaw_https_url() {
+        assert!(Source::parse("https://github.com/openclaw/x").is_err());
+    }
+
+    #[test]
+    fn accepts_openclaw_when_gated() {
+        let s = Source::parse_with("openclaw/x", true).unwrap();
+        assert_eq!(s, Source::Github { owner: "openclaw".into(), repo: "x".into() });
+    }
+
+    #[test]
+    fn lockfile_load_bypasses_openclaw_block() {
+        // Lockfile entries were blessed at add-time; reload must not fail.
+        let s = Source::from_lockfile_string("github:openclaw/x").unwrap();
+        assert_eq!(s, Source::Github { owner: "openclaw".into(), repo: "x".into() });
     }
 }

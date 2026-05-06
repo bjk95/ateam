@@ -291,23 +291,101 @@ fn write_atomically(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-/// Remove a regular file ateam previously wrote via `install_copy`.
-/// No-op if absent. Refuses to remove anything that's not a regular file.
+/// Remove a regular file or directory ateam previously wrote via
+/// `install_copy` / `install_copy_dir`. No-op if absent. Refuses to remove
+/// symlinks (those go through `uninstall_path`) or other unexpected types.
 pub fn uninstall_copy(path: &Path) -> Result<()> {
     let meta = match std::fs::symlink_metadata(path) {
         Ok(m) => m,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(anyhow!("stat {}: {}", path.display(), e)),
     };
-    if meta.file_type().is_file() {
+    let ft = meta.file_type();
+    if ft.is_file() {
         std::fs::remove_file(path)
             .with_context(|| format!("removing {}", path.display()))?;
         return Ok(());
     }
+    if ft.is_dir() {
+        std::fs::remove_dir_all(path)
+            .with_context(|| format!("removing {}", path.display()))?;
+        return Ok(());
+    }
     bail!(
-        "refusing to delete non-file {} (was foreign or modified)",
+        "refusing to delete {} (was foreign or modified)",
         path.display()
     );
+}
+
+/// Outcome of trying to install a directory copy.
+#[derive(Debug)]
+pub enum CopyDirOutcome {
+    Created,
+    Replaced,
+    AlreadyCorrect,
+    MovedAside { backup: PathBuf },
+    Refused,
+}
+
+/// Recursively copy `src` into `dst`. Used for `--copy` mode where filesystems
+/// can't reliably handle symlinks. If `was_managed`, an existing dst was put
+/// there by ateam's previous apply and may be replaced freely; otherwise a
+/// pre-existing dst is moved aside (with `force`) or refused.
+pub fn install_copy_dir(
+    dst: &Path,
+    src: &Path,
+    was_managed: bool,
+    force: bool,
+) -> Result<CopyDirOutcome> {
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+
+    let meta = std::fs::symlink_metadata(dst).ok();
+    let Some(meta) = meta else {
+        copy_dir_recursive(src, dst)?;
+        return Ok(CopyDirOutcome::Created);
+    };
+
+    if meta.file_type().is_symlink() {
+        // Prior apply ran in symlink mode; swap in a copy.
+        std::fs::remove_file(dst)
+            .with_context(|| format!("removing existing symlink {}", dst.display()))?;
+        copy_dir_recursive(src, dst)?;
+        return Ok(CopyDirOutcome::Replaced);
+    }
+
+    if was_managed {
+        if meta.is_dir() {
+            std::fs::remove_dir_all(dst)
+                .with_context(|| format!("removing managed copy at {}", dst.display()))?;
+        } else {
+            std::fs::remove_file(dst)
+                .with_context(|| format!("removing managed copy at {}", dst.display()))?;
+        }
+        copy_dir_recursive(src, dst)?;
+        return Ok(CopyDirOutcome::Replaced);
+    }
+
+    if meta.is_dir() && content_matches_dir(dst, src).unwrap_or(false) {
+        return Ok(CopyDirOutcome::AlreadyCorrect);
+    }
+
+    if !force {
+        return Ok(CopyDirOutcome::Refused);
+    }
+    let backup = backup_path(dst);
+    std::fs::rename(dst, &backup)
+        .with_context(|| format!("moving aside {} → {}", dst.display(), backup.display()))?;
+    copy_dir_recursive(src, dst)?;
+    Ok(CopyDirOutcome::MovedAside { backup })
+}
+
+fn content_matches_dir(a: &Path, b: &Path) -> Result<bool> {
+    let ha = crate::source::local::content_hash(a)?;
+    let hb = crate::source::local::content_hash(b)?;
+    Ok(ha == hb)
 }
 
 fn backup_path(p: &Path) -> PathBuf {
@@ -352,6 +430,75 @@ mod tests {
         let final_path = slot.commit().unwrap();
         assert!(final_path.exists());
         assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v1");
+    }
+
+    #[test]
+    fn install_copy_dir_creates_when_absent() {
+        let tmp = TempDir::new().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        write_marker(&src, "v1");
+        let dst = tmp.path().join("agents/skill");
+
+        let outcome = install_copy_dir(&dst, &src, false, false).unwrap();
+        assert!(matches!(outcome, CopyDirOutcome::Created));
+        assert_eq!(std::fs::read_to_string(dst.join("marker")).unwrap(), "v1");
+    }
+
+    #[test]
+    fn install_copy_dir_replaces_existing_symlink() {
+        let tmp = TempDir::new().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        write_marker(&src, "v1");
+        let dst = tmp.path().join("dst");
+        std::os::unix::fs::symlink(&src, &dst).unwrap();
+
+        let outcome = install_copy_dir(&dst, &src, false, false).unwrap();
+        assert!(matches!(outcome, CopyDirOutcome::Replaced));
+        assert!(!std::fs::symlink_metadata(&dst).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read_to_string(dst.join("marker")).unwrap(), "v1");
+    }
+
+    #[test]
+    fn install_copy_dir_refuses_foreign_dir_without_force() {
+        let tmp = TempDir::new().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        write_marker(&src, "v2");
+        let dst = tmp.path().join("dst");
+        std::fs::create_dir_all(&dst).unwrap();
+        std::fs::write(dst.join("user-file"), "untouched").unwrap();
+
+        let outcome = install_copy_dir(&dst, &src, false, false).unwrap();
+        assert!(matches!(outcome, CopyDirOutcome::Refused));
+        assert_eq!(std::fs::read_to_string(dst.join("user-file")).unwrap(), "untouched");
+    }
+
+    #[test]
+    fn install_copy_dir_replaces_managed_dir_freely() {
+        let tmp = TempDir::new().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        write_marker(&src, "v2");
+        let dst = tmp.path().join("dst");
+        std::fs::create_dir_all(&dst).unwrap();
+        write_marker(&dst, "v1-stale");
+
+        let outcome = install_copy_dir(&dst, &src, true, false).unwrap();
+        assert!(matches!(outcome, CopyDirOutcome::Replaced));
+        assert_eq!(std::fs::read_to_string(dst.join("marker")).unwrap(), "v2");
+    }
+
+    #[test]
+    fn uninstall_copy_removes_directory() {
+        let tmp = TempDir::new().unwrap();
+        let dst = tmp.path().join("dst");
+        std::fs::create_dir_all(&dst).unwrap();
+        write_marker(&dst, "v1");
+
+        uninstall_copy(&dst).unwrap();
+        assert!(!dst.exists());
     }
 
     #[test]

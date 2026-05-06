@@ -31,6 +31,7 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
             agents: Vec::new(),
             project: None,
             force: false,
+            copy: false,
         },
         true,
     )?;

@@ -211,6 +211,15 @@ pub struct AddArgs {
     /// Pin to a specific git ref/tag/commit.
     #[arg(long)]
     pub r#ref: Option<String>,
+
+    /// Install via recursive copy instead of symlink. For filesystems that
+    /// don't handle symlinks reliably (network mounts, some Docker volumes).
+    #[arg(long)]
+    pub copy: bool,
+
+    /// Permit `openclaw/*` sources, which can shell out at runtime.
+    #[arg(long = "dangerously-accept-openclaw-risks")]
+    pub dangerously_accept_openclaw_risks: bool,
 }
 
 #[derive(Parser)]
@@ -230,6 +239,11 @@ pub struct ApplyArgs {
     /// Move existing real dirs aside instead of refusing.
     #[arg(long)]
     pub force: bool,
+
+    /// Install via recursive copy instead of symlink. For filesystems that
+    /// don't handle symlinks reliably (network mounts, some Docker volumes).
+    #[arg(long)]
+    pub copy: bool,
 }
 
 #[derive(Parser)]
