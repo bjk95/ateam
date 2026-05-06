@@ -82,6 +82,23 @@ ateam import <name> --upstream github:foo/bar  # track upstream instead
 ateam import <name> --project canva            # tag with project alias
 ```
 
+## `ateam upgrade`
+
+Self-update: download the latest `ateam` release and replace this binary.
+Bypasses the 24h TTL check that runs implicitly before every other command.
+
+```bash
+ateam upgrade
+```
+
+Prints `ateam: updated X → Y` on success or `ateam: already at latest (X)`
+when no upgrade was needed. Exits non-zero on failure.
+
+The implicit check runs at most once every 24 hours, soft-fails on any
+network/filesystem error, and never blocks the command you actually ran.
+There is no env-var opt-out; if you don't want updates, ignore the
+occasional `ateam: updated …` line — the cache is at `~/.cache/ateam/`.
+
 ## `ateam project`
 
 Manage this machine's alias→path map.

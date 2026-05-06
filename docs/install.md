@@ -35,6 +35,21 @@ cp target/release/ateam /usr/local/bin/
 `cargo build --release` requires Rust 1.90 or newer. If `cargo` is missing,
 install it via [rustup](https://rustup.rs).
 
+## Updating
+
+`ateam` checks for new releases at most once every 24 hours and installs
+them in place when found. The check is silent on success, soft-fails on any
+network or filesystem error, and never blocks your command. To trigger an
+update explicitly:
+
+```bash
+ateam upgrade
+```
+
+The update path uses the same installer asset as the initial install, so
+the binary at `~/.local/bin/ateam` (or `$ATEAM_INSTALL_DIR`) is replaced
+atomically.
+
 ## Verify
 
 ```bash

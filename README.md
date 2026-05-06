@@ -26,6 +26,10 @@ Drops a single static binary at `~/.local/bin/ateam` on macOS (Apple Silicon
 or Intel) and Linux (x86_64 or aarch64, musl-static — works on glibc and musl
 distros alike). To build from source instead, see [docs/install.md](./docs/install.md).
 
+After install, `ateam` keeps itself up to date: every command checks GitHub
+Releases at most once every 24 hours and replaces the binary in place when a
+newer version is found. To trigger explicitly, run `ateam upgrade`.
+
 ## Quickstart
 
 ```bash

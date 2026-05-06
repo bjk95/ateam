@@ -42,6 +42,9 @@ pub enum Command {
     /// Manage per-machine project alias map.
     #[command(subcommand)]
     Project(ProjectCommand),
+
+    /// Self-update: download the latest ateam release and replace this binary.
+    Upgrade,
 }
 
 #[derive(Parser)]
@@ -178,5 +181,6 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Status => crate::commands::status::run(),
         Command::Import(args) => crate::commands::import::run(args, no_sync),
         Command::Project(cmd) => crate::commands::project::run(cmd),
+        Command::Upgrade => crate::self_update::force_upgrade(),
     }
 }
