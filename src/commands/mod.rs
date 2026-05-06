@@ -3,6 +3,7 @@ pub mod add;
 pub mod apply;
 pub mod apply_instructions;
 pub mod deactivate;
+pub mod find;
 pub mod import;
 pub mod init;
 pub mod list;

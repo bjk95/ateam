@@ -129,6 +129,9 @@ pub enum SkillsCommand {
 
     /// Print a skill's SKILL.md contents to stdout.
     Show(ShowArgs),
+
+    /// Search the skills.sh registry.
+    Find(FindArgs),
 }
 
 #[derive(Parser)]
@@ -237,6 +240,12 @@ pub struct ShowArgs {
 }
 
 #[derive(Parser)]
+pub struct FindArgs {
+    /// Search query terms.
+    pub query: Vec<String>,
+}
+
+#[derive(Parser)]
 pub struct ListArgs {
     /// Show only entries scoped to this project alias.
     #[arg(long, value_name = "ALIAS")]
@@ -297,6 +306,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             SkillsCommand::Deactivate(args) => crate::commands::deactivate::run(args, no_sync),
             SkillsCommand::Activate(args) => crate::commands::activate::run(args, no_sync),
             SkillsCommand::Show(args) => crate::commands::show::run(args),
+            SkillsCommand::Find(args) => crate::commands::find::run(args, no_sync),
         },
         Command::Project(cmd) => crate::commands::project::run(cmd),
         Command::Upgrade => crate::self_update::force_upgrade(),
