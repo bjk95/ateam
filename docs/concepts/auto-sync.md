@@ -18,8 +18,10 @@ You never invoke `git` directly. The lockfile is always in sync with the remote
 
 ## Read-only commands stay local
 
-`skills list`, `status`, and `project list` never touch the network. To check
-for remote drift, just run `ateam apply` — that triggers the pre-pull.
+`skills list`, `skills show`, `status`, `project list`, and `remote list` never
+touch the network or git. `skills find` queries the skills.sh registry but
+never writes to git. To check for remote drift, run `ateam apply` — that
+triggers the pre-pull.
 
 ## Soft-fail on every git stage
 

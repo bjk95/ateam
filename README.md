@@ -16,8 +16,9 @@ backed by a single git repo at `~/.config/ateam/`, with `git pull` / `commit` /
   result, and pushes. Soft-fails offline, never blocks your local change.
 
 > **Status:** v1, macOS + Linux. Tested end-to-end against the live
-> [skills.sh](https://skills.sh) registry. See [WISHLIST.md](./WISHLIST.md) for
-> what's coming next (CLAUDE.md/AGENTS.md sync, subagents, settings, hooks).
+> [skills.sh](https://skills.sh) registry. CLAUDE.md / AGENTS.md sync from a single
+> Handlebars template ships in v0.2. See [WISHLIST.md](./WISHLIST.md) for what's
+> coming next (subagents, settings, hooks, MCP server config).
 
 ## Install
 
@@ -50,8 +51,7 @@ To sync to a second machine, point ateam at a git remote first:
 
 ```bash
 # On machine A
-git -C ~/.config/ateam remote add origin git@github.com:you/ateam-config.git
-git -C ~/.config/ateam push -u origin main
+ateam remote add git@github.com:you/ateam-config.git
 ateam skills add vercel-labs/agent-skills --skill web-design-guidelines -y
 # auto-pushes the lockfile change
 
