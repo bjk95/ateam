@@ -17,7 +17,11 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
 
     let mut lock = Lockfile::load(&repo)?;
     let names: Vec<String> = if args.names.is_empty() {
-        lock.skills.iter().map(|s| s.name.clone()).collect()
+        lock.skills
+            .iter()
+            .filter(|s| s.active)
+            .map(|s| s.name.clone())
+            .collect()
     } else {
         args.names.clone()
     };
@@ -39,6 +43,11 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
                     continue;
                 }
             };
+
+            if !lock.skills[entry_idx].active {
+                ui::warn(format!("skipping `{}` (deactivated)", name));
+                continue;
+            }
 
             let entry = lock.skills[entry_idx].clone();
             let source = match Source::from_lockfile_string(&entry.source) {

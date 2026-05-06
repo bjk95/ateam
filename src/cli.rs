@@ -91,28 +91,15 @@ pub enum Command {
     /// Bootstrap: scaffold a fresh ateam-config repo or clone an existing one.
     Init(InitArgs),
 
-    /// Install a skill package (Vercel-compatible flag surface).
-    Add(AddArgs),
-
-    /// Materialize the lockfile: install all locked skills.
+    /// Materialize the lockfile: install all active locked skills.
     Apply(ApplyArgs),
-
-    /// Refresh tree SHAs from upstream and refetch any drifted skills.
-    Update(UpdateArgs),
-
-    /// Remove a skill from the lockfile and uninstall it.
-    Remove(RemoveArgs),
-
-    /// List locked skills with their sources.
-    List(ListArgs),
 
     /// Show what's locked vs installed vs drifted.
     Status,
 
-    /// Adopt locally-installed skills (and global instructions) into the lockfile.
-    /// With no arguments: bulk-import every skill in ~/.claude/skills,
-    /// ~/.codex/skills, ~/.agents/skills plus the global CLAUDE.md / AGENTS.md.
-    Import(ImportArgs),
+    /// Manage skills.
+    #[command(subcommand)]
+    Skills(SkillsCommand),
 
     /// Manage per-machine project alias map.
     #[command(subcommand)]
@@ -127,6 +114,32 @@ pub enum Command {
 
     /// Validate the instructions template against declared profiles.
     Validate,
+}
+
+#[derive(Subcommand)]
+pub enum SkillsCommand {
+    /// Install a skill package (Vercel-compatible flag surface).
+    Add(AddArgs),
+
+    /// Refresh tree SHAs from upstream and refetch any drifted skills.
+    Update(UpdateArgs),
+
+    /// Remove a skill from the lockfile and uninstall it.
+    Remove(RemoveArgs),
+
+    /// List locked skills with their sources.
+    List(ListArgs),
+
+    /// Adopt locally-installed skills (and global instructions) into the lockfile.
+    /// With no arguments: bulk-import every skill in ~/.claude/skills,
+    /// ~/.codex/skills, ~/.agents/skills plus the global CLAUDE.md / AGENTS.md.
+    Import(ImportArgs),
+
+    /// Deactivate a skill: keep its lockfile entry but unlink it from agents.
+    Deactivate(DeactivateArgs),
+
+    /// Reactivate a previously-deactivated skill.
+    Activate(ActivateArgs),
 }
 
 #[derive(Parser)]
@@ -220,6 +233,16 @@ pub struct RemoveArgs {
 }
 
 #[derive(Parser)]
+pub struct DeactivateArgs {
+    pub name: String,
+}
+
+#[derive(Parser)]
+pub struct ActivateArgs {
+    pub name: String,
+}
+
+#[derive(Parser)]
 pub struct ListArgs {
     /// Show only entries scoped to this project alias.
     #[arg(long, value_name = "ALIAS")]
@@ -269,13 +292,17 @@ pub fn dispatch(cli: Cli) -> Result<()> {
     let no_sync = cli.no_sync;
     match cli.command {
         Command::Init(args) => crate::commands::init::run(args),
-        Command::Add(args) => crate::commands::add::run(args, no_sync),
         Command::Apply(args) => crate::commands::apply::run(args, no_sync),
-        Command::Update(args) => crate::commands::update::run(args, no_sync),
-        Command::Remove(args) => crate::commands::remove::run(args, no_sync),
-        Command::List(args) => crate::commands::list::run(args),
         Command::Status => crate::commands::status::run(),
-        Command::Import(args) => crate::commands::import::run(args, no_sync),
+        Command::Skills(cmd) => match cmd {
+            SkillsCommand::Add(args) => crate::commands::add::run(args, no_sync),
+            SkillsCommand::Update(args) => crate::commands::update::run(args, no_sync),
+            SkillsCommand::Remove(args) => crate::commands::remove::run(args, no_sync),
+            SkillsCommand::List(args) => crate::commands::list::run(args),
+            SkillsCommand::Import(args) => crate::commands::import::run(args, no_sync),
+            SkillsCommand::Deactivate(args) => crate::commands::deactivate::run(args, no_sync),
+            SkillsCommand::Activate(args) => crate::commands::activate::run(args, no_sync),
+        },
         Command::Project(cmd) => crate::commands::project::run(cmd),
         Command::Upgrade => crate::self_update::force_upgrade(),
         Command::Remote(cmd) => crate::commands::remote::run(cmd),

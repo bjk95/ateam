@@ -18,8 +18,8 @@ You never invoke `git` directly. The lockfile is always in sync with the remote
 
 ## Read-only commands stay local
 
-`list`, `status`, and `project list` never touch the network. To check for
-remote drift, just run `ateam apply` — that triggers the pre-pull.
+`skills list`, `status`, and `project list` never touch the network. To check
+for remote drift, just run `ateam apply` — that triggers the pre-pull.
 
 ## Soft-fail on every git stage
 
@@ -39,8 +39,8 @@ successful operation will sync it up.
 Either flag works:
 
 ```bash
-ateam --no-sync add foo/bar --skill xyz -y
-ATEAM_NO_SYNC=1 ateam add foo/bar --skill xyz -y
+ateam --no-sync skills add foo/bar --skill xyz -y
+ATEAM_NO_SYNC=1 ateam skills add foo/bar --skill xyz -y
 ```
 
 Use this when you want to batch several edits and commit yourself, or on a
@@ -52,9 +52,11 @@ Deterministic, one commit per command:
 
 | Command | Message |
 |---|---|
-| `add foo/bar --skill A --skill B` | `add github:foo/bar :: A, B` |
-| `update` | `update :: 3 entries refreshed` |
-| `update foo` | `update :: foo (sha abc → def)` |
-| `remove foo` | `remove :: foo` |
-| `import foo` | `import :: foo (github:owner/repo)` |
+| `skills add foo/bar --skill A --skill B` | `add github:foo/bar :: A, B` |
+| `skills update` | `update :: 3 entries refreshed` |
+| `skills update foo` | `update :: foo (sha abc → def)` |
+| `skills remove foo` | `remove :: foo` |
+| `skills deactivate foo` | `deactivate :: foo` |
+| `skills activate foo` | `activate :: foo` |
+| `skills import foo` | `import :: foo (github:owner/repo)` |
 | `apply` (only when tree_sha drift detected) | `apply :: 5 entries materialized` |

@@ -18,7 +18,7 @@ initial git commit. No remote yet — that's optional.
 ## 2. Install a skill from skills.sh
 
 ```bash
-ateam add vercel-labs/agent-skills --skill deploy-to-vercel -y
+ateam skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
 ```
 
 Behind the scenes ateam:
@@ -36,8 +36,8 @@ git -C ~/.config/ateam remote add origin git@github.com:you/ateam-config.git
 git -C ~/.config/ateam push -u origin main
 ```
 
-From now on every `ateam add` / `update` / `remove` pulls, commits, and pushes
-without you ever typing `git`.
+From now on every `ateam skills add` / `update` / `remove` pulls, commits, and
+pushes without you ever typing `git`.
 
 ## 4. On a second machine
 

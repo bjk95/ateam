@@ -24,14 +24,14 @@ maintains its own alias→path map, so the synced lockfile stays portable.
 ## Install a skill scoped to a project
 
 ```bash
-ateam add canva/agent-skills --skill style-guide --project canva -y
+ateam skills add canva/agent-skills --skill style-guide --project canva -y
 ```
 
 Or auto-detect from cwd:
 
 ```bash
 cd ~/work/canva
-ateam add canva/agent-skills --skill style-guide -y
+ateam skills add canva/agent-skills --skill style-guide -y
 ```
 
 ateam walks up from the current directory; if a parent matches a registered

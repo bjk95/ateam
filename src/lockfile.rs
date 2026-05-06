@@ -53,6 +53,9 @@ pub struct SkillEntry {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+
+    #[serde(default = "default_active", skip_serializing_if = "is_active")]
+    pub active: bool,
 }
 
 fn default_agents() -> Vec<String> {
@@ -61,6 +64,14 @@ fn default_agents() -> Vec<String> {
 
 fn is_default_agents(v: &[String]) -> bool {
     v.len() == 1 && v[0] == "*"
+}
+
+fn default_active() -> bool {
+    true
+}
+
+fn is_active(b: &bool) -> bool {
+    *b
 }
 
 impl Lockfile {
@@ -186,6 +197,7 @@ mod tests {
                     agents: vec!["*".into()],
                     profiles: vec![],
                     project: None,
+                    active: true,
                 },
                 SkillEntry {
                     name: "a".into(),
@@ -196,6 +208,7 @@ mod tests {
                     agents: vec!["*".into()],
                     profiles: vec![],
                     project: None,
+                    active: true,
                 },
             ],
             instructions: None,
@@ -213,5 +226,59 @@ mod tests {
         assert!(s.contains("[instructions]"));
         let parsed: Lockfile = toml::from_str(&s).unwrap();
         assert!(parsed.instructions.is_some());
+    }
+
+    #[test]
+    fn active_default_round_trip_omits_field() {
+        let lock = Lockfile {
+            skills: vec![SkillEntry {
+                name: "a".into(),
+                source: "local:skills/a".into(),
+                path: None,
+                git_ref: None,
+                tree_sha: None,
+                agents: vec!["*".into()],
+                profiles: vec![],
+                project: None,
+                active: true,
+            }],
+            instructions: None,
+        };
+        let serialized = toml::to_string(&lock).unwrap();
+        assert!(!serialized.contains("active"), "active field leaked: {}", serialized);
+        let parsed: Lockfile = toml::from_str(&serialized).unwrap();
+        assert!(parsed.skills[0].active, "active should default to true on load");
+    }
+
+    #[test]
+    fn inactive_round_trips_explicitly() {
+        let lock = Lockfile {
+            skills: vec![SkillEntry {
+                name: "a".into(),
+                source: "local:skills/a".into(),
+                path: None,
+                git_ref: None,
+                tree_sha: None,
+                agents: vec!["*".into()],
+                profiles: vec![],
+                project: None,
+                active: false,
+            }],
+            instructions: None,
+        };
+        let serialized = toml::to_string(&lock).unwrap();
+        assert!(serialized.contains("active = false"), "missing active=false: {}", serialized);
+        let parsed: Lockfile = toml::from_str(&serialized).unwrap();
+        assert!(!parsed.skills[0].active);
+    }
+
+    #[test]
+    fn legacy_lockfile_loads_as_active() {
+        let legacy = r#"[[skill]]
+name = "a"
+source = "local:skills/a"
+"#;
+        let parsed: Lockfile = toml::from_str(legacy).unwrap();
+        assert!(parsed.skills[0].active, "missing field should default to active=true");
     }
 }

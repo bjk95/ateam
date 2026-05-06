@@ -226,6 +226,7 @@ pub(crate) fn bulk_import_skills(
                 agents: vec!["*".into()],
                 profiles: vec![],
                 project: None,
+                active: true,
             });
             outcome.imported += 1;
             if already_snapshotted {
@@ -402,6 +403,7 @@ fn build_entry(
             agents: vec!["*".into()],
             profiles: vec![],
             project: args.project.clone(),
+            active: true,
         });
     }
 
@@ -423,6 +425,7 @@ fn build_entry(
         agents: vec!["*".into()],
         profiles: vec![],
         project: args.project.clone(),
+        active: true,
     })
 }
 
@@ -563,6 +566,7 @@ mod tests {
             agents: vec!["*".into()],
             profiles: vec![],
             project: None,
+            active: true,
         });
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
         assert_eq!(outcome.imported, 0);

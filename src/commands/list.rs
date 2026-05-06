@@ -30,7 +30,13 @@ pub fn run(args: ListArgs) -> Result<()> {
     let width = entries.iter().map(|s| s.name.len()).max().unwrap_or(0);
     for s in &entries {
         let padded_name = format!("{:<width$}", s.name, width = width);
-        ui::plain(format!("{}  {}", style(padded_name).bold(), render_source(s)));
+        let head = format!("{}  {}", style(padded_name).bold(), render_source(s));
+        let line = if s.active {
+            head
+        } else {
+            format!("{}  {}", head, style("[off]").dim())
+        };
+        ui::plain(line);
 
         // Verbose: append a dim qualifier line if scope or profiles is non-default.
         let scope_part = s.project.as_ref().map(|p| format!("scope: project={}", p));

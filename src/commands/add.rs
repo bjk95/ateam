@@ -333,6 +333,7 @@ fn install_one(
             agents: agent_list,
             profiles: args.profile.clone(),
             project,
+            active: true,
         },
         linked,
     ))

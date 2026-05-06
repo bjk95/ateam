@@ -40,6 +40,9 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     let mut updated_lock = lock.clone();
 
     for entry in &lock.skills {
+        if !entry.active {
+            continue;
+        }
         if !profile_match(&machine, &entry.profiles) {
             continue;
         }

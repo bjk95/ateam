@@ -19,7 +19,7 @@ its own.
 ## Tagging a skill with profile gates
 
 ```bash
-ateam add canva/agent-skills --skill internal --profile work -y
+ateam skills add canva/agent-skills --skill internal --profile work -y
 ```
 
 The lockfile entry gets `profiles = ["work"]`. `ateam apply` only installs the

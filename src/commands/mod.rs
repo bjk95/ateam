@@ -1,6 +1,8 @@
+pub mod activate;
 pub mod add;
 pub mod apply;
 pub mod apply_instructions;
+pub mod deactivate;
 pub mod import;
 pub mod init;
 pub mod list;
