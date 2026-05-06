@@ -6,7 +6,7 @@ This file captures what comes next, what's parked, and what's explicitly out.
 
 ## Asset coverage (the next big chunk)
 
-- **Instructions file sync** — `CLAUDE.md` / `AGENTS.md` from a single canonical source with profile-gated fragments and Handlebars templating. Replaces today's hand-mirroring.
+- ~~**Instructions file sync**~~ — shipped in v0.2: `CLAUDE.md` / `AGENTS.md` render from a single Handlebars template at `<repo>/instructions/instructions.md.hbs` with profile-gated fragments. Use `ateam skills import --instructions` to adopt your existing globals into the template.
 - **Subagents** — Claude `~/.claude/agents/*.md` ↔ Codex `~/.codex/agents/*.toml` with format translation.
 - **Claude plugin marketplace** as a source type — `ateam skills add marketplace:<url>` so marketplace-installed skills can be tracked in the lockfile.
 - **`settings.json` sync** — profile-gated. Work and personal need different settings; this collapses two hand-edited files into one source.

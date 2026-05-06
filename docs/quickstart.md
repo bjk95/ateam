@@ -32,10 +32,10 @@ Behind the scenes ateam:
 ## 3. Wire a remote — auto-sync activates
 
 ```bash
-git -C ~/.config/ateam remote add origin git@github.com:you/ateam-config.git
-git -C ~/.config/ateam push -u origin main
+ateam remote add git@github.com:you/ateam-config.git
 ```
 
+`remote add` sets `origin` and pushes the current branch upstream in one step.
 From now on every `ateam skills add` / `update` / `remove` pulls, commits, and
 pushes without you ever typing `git`.
 

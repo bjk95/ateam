@@ -37,13 +37,17 @@ ateam project add canva ~/work/canva
 ateam apply
 ```
 
-## Symlink at target points elsewhere
+## Real directory at a target install path
 
-ateam refuses to overwrite a real directory at a target install path. Two ways
-to recover:
+`ateam apply` first checks whether the existing directory matches the snapshot
+at `<repo>/skills/<name>/` byte-for-byte. If it does, ateam auto-heals: removes
+the dir and replaces it with a symlink. No flag needed — the data is already
+in the snapshot, so nothing is lost.
+
+If the contents differ, apply refuses. Two ways to recover:
 
 1. Delete or move the existing directory yourself and re-run `ateam apply`.
-2. Run `ateam apply --force` — ateam will move the conflicting directory aside
+2. Run `ateam apply --force` — ateam moves the conflicting directory aside
    to `<name>.bak.<unix-ts>` rather than deleting it.
 
 ## `Author identity unknown` during `ateam init` or auto-sync
