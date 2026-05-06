@@ -12,7 +12,8 @@ use console::style;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
+pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
+    normalize_all_flag(&mut args);
     let repo = paths::resolve_repo()?;
     let repo_cfg = RepoConfig::load(&repo)?;
     let mut machine_cfg = MachineConfig::load(&repo)?;
@@ -137,6 +138,19 @@ fn fetch_package(source: &Source, git_ref: Option<&str>, dest: &Path) -> Result<
             Ok(abs)
         }
     }
+}
+
+// Vercel parity: --all is a triple-flag override (skill='*', agent='*', -y).
+// Without this, drop-in scripts that pass only `--all` would still hit the
+// per-agent prompt and the non-TTY confirmation guard.
+fn normalize_all_flag(args: &mut AddArgs) {
+    if !args.all {
+        return;
+    }
+    if args.agents.is_empty() {
+        args.agents = vec!["*".into()];
+    }
+    args.yes = true;
 }
 
 fn print_listing(skills: &[DiscoveredSkill]) {
@@ -659,5 +673,48 @@ mod tests {
         let out = pick_skills(&discovered, &args).expect("partial match should succeed");
         let names: Vec<&str> = out.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["foo"]);
+    }
+
+    fn empty_args() -> AddArgs {
+        AddArgs {
+            source: "test".into(),
+            list: false,
+            skill: vec![],
+            all: false,
+            agents: vec![],
+            yes: false,
+            global: false,
+            profile: vec![],
+            project: None,
+            r#ref: None,
+        }
+    }
+
+    #[test]
+    fn normalize_all_flag_implies_agent_star_and_yes() {
+        let mut args = empty_args();
+        args.all = true;
+        normalize_all_flag(&mut args);
+        assert_eq!(args.agents, vec!["*".to_string()]);
+        assert!(args.yes);
+    }
+
+    #[test]
+    fn normalize_all_flag_preserves_explicit_agents() {
+        let mut args = empty_args();
+        args.all = true;
+        args.agents = vec!["claude".into()];
+        normalize_all_flag(&mut args);
+        assert_eq!(args.agents, vec!["claude".to_string()]);
+        assert!(args.yes);
+    }
+
+    #[test]
+    fn normalize_all_flag_no_op_without_all() {
+        let mut args = empty_args();
+        args.skill = vec!["foo".into()];
+        normalize_all_flag(&mut args);
+        assert!(args.agents.is_empty());
+        assert!(!args.yes);
     }
 }
