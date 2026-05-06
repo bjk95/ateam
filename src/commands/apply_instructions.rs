@@ -145,7 +145,7 @@ pub fn apply(
     Ok(outcome)
 }
 
-fn resolve_tools(repo_cfg: &RepoConfig, entry: &InstructionsEntry) -> Vec<Tool> {
+pub fn resolve_tools(repo_cfg: &RepoConfig, entry: &InstructionsEntry) -> Vec<Tool> {
     let agents: Vec<&String> = if entry.agents.iter().any(|a| a == "*") {
         repo_cfg.enabled_agents.iter().collect()
     } else {

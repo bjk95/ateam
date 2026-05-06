@@ -100,6 +100,12 @@ pub enum Command {
 
     /// Validate the instructions template against declared profiles.
     Validate,
+
+    /// Open `$EDITOR` on the ateam state dir, or on the instructions template.
+    Edit(EditArgs),
+
+    /// Show a git-style unified diff of what `apply` would change.
+    Diff,
 }
 
 #[derive(Subcommand)]
@@ -279,6 +285,18 @@ pub enum RemoteCommand {
     List,
 }
 
+#[derive(Parser)]
+pub struct EditArgs {
+    #[command(subcommand)]
+    pub target: Option<EditTarget>,
+}
+
+#[derive(Subcommand)]
+pub enum EditTarget {
+    /// Open the instructions template (`instructions/instructions.md.hbs`).
+    Instructions,
+}
+
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Add or update an alias→path mapping for this machine.
@@ -312,5 +330,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Upgrade => crate::self_update::force_upgrade(),
         Command::Remote(cmd) => crate::commands::remote::run(cmd),
         Command::Validate => crate::commands::validate::run(),
+        Command::Edit(args) => crate::commands::edit::run(args, no_sync),
+        Command::Diff => crate::commands::diff::run(),
     }
 }

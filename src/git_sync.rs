@@ -186,6 +186,10 @@ pub fn msg_apply(materialized: usize) -> String {
     format!("apply :: {} entries materialized", materialized)
 }
 
+pub fn msg_edit(target: &str) -> String {
+    format!("edit :: {}", target)
+}
+
 fn short(sha: &str) -> String {
     sha.chars().take(7).collect()
 }

@@ -263,14 +263,14 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     Ok(())
 }
 
-fn profile_match(machine: &MachineConfig, gates: &[String]) -> bool {
+pub fn profile_match(machine: &MachineConfig, gates: &[String]) -> bool {
     if gates.is_empty() {
         return true;
     }
     gates.iter().any(|g| machine.profiles.iter().any(|p| p == g))
 }
 
-fn resolve_agents(entry: &SkillEntry, repo_cfg: &RepoConfig) -> Vec<String> {
+pub fn resolve_agents(entry: &SkillEntry, repo_cfg: &RepoConfig) -> Vec<String> {
     if entry.agents.iter().any(|a| a == "*") {
         repo_cfg.enabled_agents.clone()
     } else {
