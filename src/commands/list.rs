@@ -5,6 +5,7 @@ use crate::ui;
 use anyhow::Result;
 use console::style;
 use serde::Serialize;
+use std::io::IsTerminal;
 
 pub fn run(args: ListArgs) -> Result<()> {
     let repo = paths::resolve_repo()?;
@@ -25,7 +26,7 @@ pub fn run(args: ListArgs) -> Result<()> {
         return print_json(&entries);
     }
 
-    if args.names {
+    if args.names || !std::io::stdout().is_terminal() {
         for s in &entries {
             println!("{}", s.name);
         }
