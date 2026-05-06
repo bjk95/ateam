@@ -53,7 +53,10 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     if !is_git_repo(repo) {
         return Ok(false);
     }
-    let _ = run(repo, &["add", "ateam.toml", "ateam.lock.toml", "skills"])?;
+    let _ = run(
+        repo,
+        &["add", "ateam.toml", "ateam.lock.toml", "skills", "instructions"],
+    )?;
 
     let diff = run(repo, &["diff", "--cached", "--quiet"])?;
     if diff.status.success() {

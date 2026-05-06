@@ -118,6 +118,13 @@ pub enum Command {
 
     /// Self-update: download the latest ateam release and replace this binary.
     Upgrade,
+
+    /// Manage the ateam-config repo's git remote.
+    #[command(subcommand)]
+    Remote(RemoteCommand),
+
+    /// Validate the instructions template against declared profiles.
+    Validate,
 }
 
 #[derive(Parser)]
@@ -219,7 +226,13 @@ pub struct ListArgs {
 
 #[derive(Parser)]
 pub struct ImportArgs {
-    pub name: String,
+    /// Skill name to adopt. Required unless --instructions is passed.
+    pub name: Option<String>,
+
+    /// Import the global ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md as the
+    /// instructions template (and start syncing them).
+    #[arg(long, conflicts_with_all = ["upstream", "project"])]
+    pub instructions: bool,
 
     /// Override detected upstream source.
     #[arg(long, value_name = "SOURCE")]
@@ -228,6 +241,14 @@ pub struct ImportArgs {
     /// Tag the imported entry with a project alias.
     #[arg(long, value_name = "ALIAS")]
     pub project: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum RemoteCommand {
+    /// Set `origin` to the given git URL and push the current branch upstream.
+    Add { url: String },
+    /// Print the current remote(s).
+    List,
 }
 
 #[derive(Subcommand)]
@@ -255,5 +276,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Import(args) => crate::commands::import::run(args, no_sync),
         Command::Project(cmd) => crate::commands::project::run(cmd),
         Command::Upgrade => crate::self_update::force_upgrade(),
+        Command::Remote(cmd) => crate::commands::remote::run(cmd),
+        Command::Validate => crate::commands::validate::run(),
     }
 }
