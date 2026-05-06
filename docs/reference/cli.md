@@ -139,6 +139,15 @@ ateam skills remove foo bar -y                 # skip the confirmation prompt
 A confirmation prompt lists the skills about to be removed and defaults to "no".
 Pass `-y` (or pipe stdin) to skip it.
 
+When no positional names are given, `--all` isn't set, and stdin is a pipe,
+names are read from stdin (whitespace-separated). This pairs with
+`ateam skills list --names`:
+
+```bash
+ateam skills list --names | ateam skills remove
+ateam skills list --project canva --names | ateam skills remove
+```
+
 Local-source directories under `<repo>/skills/` are never deleted by ateam — you
 remove them yourself if you want them gone.
 
@@ -163,6 +172,16 @@ deactivated entries with `[off]`.
 ateam skills list                  # all locked skills (active + [off])
 ateam skills list --project canva  # only entries scoped to one project
 ateam skills list --json           # versioned JSON for editor integrations
+ateam skills list --names          # one name per line, no styling (pipe-friendly)
+```
+
+`--names` and `--json` are mutually exclusive. `--names` prints nothing when
+the lockfile is empty (instead of `(no skills locked)`), so it composes cleanly
+with `xargs` and `ateam skills remove`:
+
+```bash
+ateam skills list --names | ateam skills remove           # remove all (with prompt)
+ateam skills list --project canva --names | xargs ateam skills remove -y
 ```
 
 ### `--json` schema

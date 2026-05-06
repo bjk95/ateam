@@ -26,15 +26,16 @@ fn main() {
 
     let cli = cli::parse();
     ui::set_verbose(cli.verbose);
-    // `--quiet` and `skills list --json` both suppress the banner and any
-    // non-error UI output. JSON consumers (editor extensions) need stdout to
-    // be a clean document; quiet users want a silent run.
-    let json_list = matches!(
+    // `--quiet` and `skills list --json` / `skills list --names` all suppress
+    // the banner and any non-error UI output. JSON consumers (editor
+    // extensions) need stdout to be a clean document; `--names` is a
+    // pipe-friendly mode for shell composition.
+    let scripted_list = matches!(
         &cli.command,
-        cli::Command::Skills(cli::SkillsCommand::List(args)) if args.json
+        cli::Command::Skills(cli::SkillsCommand::List(args)) if args.json || args.names
     );
-    let suppress_banner = cli.quiet || json_list;
-    ui::set_quiet(cli.quiet || json_list);
+    let suppress_banner = cli.quiet || scripted_list;
+    ui::set_quiet(cli.quiet || scripted_list);
 
     if !suppress_banner {
         eprintln!();

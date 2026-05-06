@@ -6,10 +6,16 @@ use crate::manifest::Manifest;
 use crate::paths;
 use crate::ui;
 use anyhow::{bail, Result};
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Read};
 use std::path::Path;
 
-pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
+pub fn run(mut args: RemoveArgs, no_sync: bool) -> Result<()> {
+    if args.names.is_empty() && !args.all && !std::io::stdin().is_terminal() {
+        let mut buf = String::new();
+        std::io::stdin().read_to_string(&mut buf)?;
+        args.names = parse_stdin_names(&buf);
+    }
+
     let repo = paths::resolve_repo()?;
 
     if git_sync::enabled(no_sync) {
@@ -59,6 +65,10 @@ pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn parse_stdin_names(input: &str) -> Vec<String> {
+    input.split_whitespace().map(String::from).collect()
 }
 
 fn resolve_targets(args: &RemoveArgs, skills: &[SkillEntry]) -> Result<Vec<String>> {
@@ -279,5 +289,16 @@ mod tests {
         let err =
             resolve_targets(&args(&["foo"], false, &["claude"], false), &skills).unwrap_err();
         assert!(err.to_string().contains("foo"));
+    }
+
+    #[test]
+    fn parse_stdin_names_splits_on_whitespace() {
+        assert_eq!(
+            parse_stdin_names("foo\nbar\nbaz\n"),
+            vec!["foo", "bar", "baz"]
+        );
+        assert_eq!(parse_stdin_names("  foo bar\tbaz "), vec!["foo", "bar", "baz"]);
+        assert_eq!(parse_stdin_names(""), Vec::<String>::new());
+        assert_eq!(parse_stdin_names("\n\n"), Vec::<String>::new());
     }
 }
