@@ -96,4 +96,14 @@ mod tests {
     fn default_agents_count_matches_registry() {
         assert_eq!(default_agents().len(), crate::agents::REGISTRY.len());
     }
+
+    #[test]
+    fn default_agents_includes_all_four() {
+        let defaults = default_agents();
+        assert_eq!(defaults.len(), 4);
+        assert!(defaults.contains(&"claude-code".to_string()));
+        assert!(defaults.contains(&"codex".to_string()));
+        assert!(defaults.contains(&"opencode".to_string()));
+        assert!(defaults.contains(&"gemini".to_string()));
+    }
 }

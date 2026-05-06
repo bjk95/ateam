@@ -121,7 +121,7 @@ fn show() -> Result<()> {
         let rendered = instructions::render(&template_src, &ctx)?;
         println!(
             "{}",
-            style(format!("# {} ({})", tool.output_subpath(), tool.agent())).bold()
+            style(format!("# {} ({})", tool.output_subpath(), tool.display())).bold()
         );
         print!("{}", rendered);
     }

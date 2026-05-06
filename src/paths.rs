@@ -181,6 +181,14 @@ mod tests {
             agent_skill_path(&root, "codex", "foo").unwrap(),
             PathBuf::from("/tmp/install-root/.codex/skills/foo"),
         );
+        assert_eq!(
+            agent_skill_path(&root, "opencode", "foo").unwrap(),
+            PathBuf::from("/tmp/install-root/.config/opencode/skills/foo"),
+        );
+        assert_eq!(
+            agent_skill_path(&root, "gemini", "foo").unwrap(),
+            PathBuf::from("/tmp/install-root/.gemini/skills/foo"),
+        );
     }
 
     #[test]

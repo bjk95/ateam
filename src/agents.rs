@@ -60,7 +60,25 @@ pub const CODEX: AgentDef = AgentDef {
     upstream_indexer: None,
 };
 
-pub const REGISTRY: &[&AgentDef] = &[&CLAUDE_CODE, &CODEX];
+pub const OPENCODE: AgentDef = AgentDef {
+    id: "opencode",
+    display: "OpenCode",
+    skills_subdir: Some(".config/opencode/skills"),
+    instructions_file: Some(".config/opencode/AGENTS.md"),
+    ctx_flag: "opencode",
+    upstream_indexer: None,
+};
+
+pub const GEMINI: AgentDef = AgentDef {
+    id: "gemini",
+    display: "Gemini CLI",
+    skills_subdir: Some(".gemini/skills"),
+    instructions_file: Some(".gemini/GEMINI.md"),
+    ctx_flag: "gemini",
+    upstream_indexer: None,
+};
+
+pub const REGISTRY: &[&AgentDef] = &[&CLAUDE_CODE, &CODEX, &OPENCODE, &GEMINI];
 
 impl PartialEq for AgentDef {
     fn eq(&self, other: &Self) -> bool {
@@ -118,5 +136,30 @@ mod tests {
     fn codex_def_has_no_marketplace_indexer() {
         let def = lookup("codex").unwrap();
         assert!(def.upstream_indexer.is_none());
+    }
+
+    #[test]
+    fn opencode_lookup() {
+        let def = lookup("opencode").expect("opencode in registry");
+        assert_eq!(def.id, "opencode");
+        assert_eq!(def.skills_subdir, Some(".config/opencode/skills"));
+        assert_eq!(def.instructions_file, Some(".config/opencode/AGENTS.md"));
+        assert_eq!(def.ctx_flag, "opencode");
+        assert!(def.upstream_indexer.is_none());
+    }
+
+    #[test]
+    fn gemini_lookup() {
+        let def = lookup("gemini").expect("gemini in registry");
+        assert_eq!(def.id, "gemini");
+        assert_eq!(def.skills_subdir, Some(".gemini/skills"));
+        assert_eq!(def.instructions_file, Some(".gemini/GEMINI.md"));
+        assert_eq!(def.ctx_flag, "gemini");
+        assert!(def.upstream_indexer.is_none());
+    }
+
+    #[test]
+    fn registry_has_four_agents() {
+        assert_eq!(REGISTRY.len(), 4);
     }
 }

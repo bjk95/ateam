@@ -20,6 +20,10 @@ impl Tool {
         self.0.id
     }
 
+    pub fn display(&self) -> &'static str {
+        self.0.display
+    }
+
     pub fn key(&self) -> &'static str {
         self.0.ctx_flag
     }
@@ -280,7 +284,12 @@ mod tests {
     fn build_context_sets_profile_booleans() {
         let repo_cfg = RepoConfig {
             declared_profiles: vec!["work".into(), "personal".into(), "devbox".into()],
-            enabled_agents: vec!["claude-code".into(), "codex".into()],
+            enabled_agents: vec![
+                "claude-code".into(),
+                "codex".into(),
+                "opencode".into(),
+                "gemini".into(),
+            ],
         };
         let mut machine = MachineConfig::default();
         machine.profiles = vec!["work".into()];
@@ -290,6 +299,25 @@ mod tests {
         assert_eq!(ctx["devbox"], Value::Bool(false));
         assert_eq!(ctx["claude"], Value::Bool(true));
         assert_eq!(ctx["codex"], Value::Bool(false));
+        assert_eq!(ctx["opencode"], Value::Bool(false));
+        assert_eq!(ctx["gemini"], Value::Bool(false));
         assert_eq!(ctx["hostname"], Value::String("host-x".into()));
+    }
+
+    #[test]
+    fn build_context_sets_opencode_and_gemini_flags() {
+        let repo_cfg = RepoConfig::default();
+        let machine = MachineConfig::default();
+        let opencode_tool = Tool::from_agent("opencode").expect("opencode tool");
+        let ctx = build_context(&repo_cfg, &machine, "h", opencode_tool);
+        assert_eq!(ctx["opencode"], Value::Bool(true));
+        assert_eq!(ctx["gemini"], Value::Bool(false));
+        assert_eq!(ctx["claude"], Value::Bool(false));
+        assert_eq!(ctx["codex"], Value::Bool(false));
+
+        let gemini_tool = Tool::from_agent("gemini").expect("gemini tool");
+        let ctx = build_context(&repo_cfg, &machine, "h", gemini_tool);
+        assert_eq!(ctx["gemini"], Value::Bool(true));
+        assert_eq!(ctx["opencode"], Value::Bool(false));
     }
 }
