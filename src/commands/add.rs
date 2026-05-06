@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
     let repo = paths::resolve_repo()?;
     let repo_cfg = RepoConfig::load(&repo)?;
-    let machine_cfg = MachineConfig::load(&repo)?;
+    let mut machine_cfg = MachineConfig::load(&repo)?;
 
     if git_sync::enabled(no_sync) {
         git_sync::pre_pull(&repo)?;
@@ -55,7 +55,7 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
         return Ok(());
     }
 
-    let install_root = resolve_install_root(&args, &machine_cfg)?;
+    let install_root = resolve_install_root(&args, &mut machine_cfg, &repo)?;
     let agents = resolve_agents(&args, &repo_cfg);
 
     let mut lock = Lockfile::load(&repo)?;
@@ -328,7 +328,11 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[m]
 }
 
-fn resolve_install_root(args: &AddArgs, machine: &MachineConfig) -> Result<InstallRoot> {
+fn resolve_install_root(
+    args: &AddArgs,
+    machine: &mut MachineConfig,
+    repo: &Path,
+) -> Result<InstallRoot> {
     if let Some(alias) = &args.project {
         let path = machine
             .projects
@@ -347,7 +351,66 @@ fn resolve_install_root(args: &AddArgs, machine: &MachineConfig) -> Result<Insta
     if let Some((alias, path)) = match_project_for_path(&cwd, machine) {
         return Ok(InstallRoot::Project { alias, path });
     }
+    // Unregistered git repo: offer to auto-register the repo dir as a project
+    // so users get project-scoped installs without a separate `project add` step.
+    if let Some(git_root) = git_toplevel(&cwd) {
+        let alias = git_root
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "project".to_string());
+        if let Some(true) = prompt_install_scope(&alias, &git_root, args.yes)? {
+            machine.projects.insert(alias.clone(), git_root.clone());
+            machine.write(repo)?;
+            ui::ok(format!(
+                "registered project {} → {}",
+                alias,
+                paths::display_path(&git_root)
+            ));
+            return Ok(InstallRoot::Project {
+                alias,
+                path: git_root,
+            });
+        }
+    }
     Ok(InstallRoot::Global)
+}
+
+fn git_toplevel(cwd: &Path) -> Option<PathBuf> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(cwd)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let trimmed = String::from_utf8(out.stdout).ok()?.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    }
+}
+
+/// Some(true) = project, Some(false) = global, None = treat as global (non-TTY without -y).
+fn prompt_install_scope(alias: &str, git_root: &Path, assume_yes: bool) -> Result<Option<bool>> {
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        return Ok(if assume_yes { Some(true) } else { None });
+    }
+    use dialoguer::{theme::ColorfulTheme, Select};
+    let project_label = format!(
+        "Project (auto-register {} → {})",
+        alias,
+        paths::display_path(git_root)
+    );
+    let choice = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Install scope")
+        .items(&[&project_label, "Global (~)"])
+        .default(0)
+        .interact()?;
+    Ok(Some(choice == 0))
 }
 
 fn match_project_for_path(start: &Path, machine: &MachineConfig) -> Option<(String, PathBuf)> {
