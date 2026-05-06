@@ -1,7 +1,7 @@
 # Surface unmanaged skills in `ateam status`
 
 **Date:** 2026-05-06
-**Status:** Awaiting user approval
+**Status:** Implemented (beads-qmt)
 
 ## Goal
 
@@ -83,10 +83,7 @@ pub fn discover_unmanaged(
 
 ### 2. `src/commands/status.rs` — render the new line
 
-`status::run` currently takes no arguments. Two changes:
-
-1. Add a `verbose: bool` parameter, plumbed from the global `Cli::verbose` in `cli.rs::dispatch`.
-2. After the existing unpushed-commits block, append:
+`status::run` keeps its no-argument signature. The verbose flag is read from the existing process-wide `ui::is_verbose()` (set in `main.rs` from `cli.verbose`), so no plumbing is needed. After the existing unpushed-commits block, append:
 
 ```rust
 let unmanaged = discover::discover_unmanaged(&repo, &home, &lock);
@@ -112,20 +109,15 @@ if !unmanaged.is_empty() {
 
 `summarize_dirs` is a small private helper that takes the union of dirs across all unmanaged skills, shortens each via `paths::display_path` (existing `~`-collapsing helper used elsewhere in status), and joins them. If three dirs all appear, the line says "in ~/.claude, ~/.codex, ~/.agents."
 
-### 3. `src/commands/import.rs` — refactor only
+### 3. `src/commands/import.rs` — minimal refactor
 
-Replace the inline directory walk in `bulk_import_skills` with a call into `discover::discover_unmanaged`, then for each result run the existing snapshot + upsert + error-collection flow. Keeps a single source of truth for what "unmanaged" means.
+Move `agent_skill_dirs` from a private fn in `import.rs` into `discover.rs` as `pub fn agent_skill_dirs`. Both `import.rs` (its `bulk_import_skills` and `find_installed`) and `discover_unmanaged` now call the same helper. No change to import behavior.
 
-This is the main risk area. `bulk_import_skills` does several things during iteration: canonicalize symlinks before snapshotting, per-skill `Result` capture into `outcome.errors`, the "already snapshotted" branch when the dest dir exists. The refactor must preserve all of them. Plan:
+The deeper refactor — having `bulk_import_skills` itself call `discover_unmanaged` — was deferred. `bulk_import_skills` has subtle behavior around per-skill error collection, symlink canonicalization, and the "already snapshotted" branch that didn't map cleanly to `discover_unmanaged`'s read-only return shape. The duplication is small (one short loop body) and worth less than the risk of regressing the import path. File a follow-up bead if the duplication grows.
 
-- `discover_unmanaged` returns *what* needs adopting.
-- The per-skill snapshot/upsert work stays in `bulk_import_skills`, now driven by the returned list.
+### 4. `src/cli.rs` — no change
 
-If preserving the error semantics turns out to add awkwardness, fall back to leaving `bulk_import_skills` untouched and having `discover_unmanaged` duplicate the iteration. File a follow-up bead for the cleanup. The status feature itself does not depend on the refactor.
-
-### 4. `src/cli.rs` — one dispatch change
-
-The `Skills` arm already plumbs `no_sync`. The `Status` arm currently calls `crate::commands::status::run()`. Change to `crate::commands::status::run(cli.verbose)`. No new flag, no help-surface change.
+`status::run` keeps its zero-argument signature, so no dispatch change is needed.
 
 ## Edge cases
 

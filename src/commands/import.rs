@@ -125,7 +125,11 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
         println!(
             "  + discovered upstream for {} existing entr{}",
             outcome.discovered_upstream,
-            if outcome.discovered_upstream == 1 { "y" } else { "ies" }
+            if outcome.discovered_upstream == 1 {
+                "y"
+            } else {
+                "ies"
+            }
         );
     }
     if !outcome.errors.is_empty() {
@@ -175,7 +179,7 @@ pub(crate) fn bulk_import_skills(
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let upstream_index = crate::upstream::build_index(home);
 
-    for dir in agent_skill_dirs(home) {
+    for dir in crate::discover::agent_skill_dirs(home) {
         let entries = match std::fs::read_dir(&dir) {
             Ok(e) => e,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -215,9 +219,10 @@ pub(crate) fn bulk_import_skills(
                 // Resolve symlinks before snapshotting so we copy real content.
                 let src = std::fs::canonicalize(&installed).unwrap_or_else(|_| installed.clone());
                 if !src.is_dir() {
-                    outcome
-                        .errors
-                        .push((name.clone(), format!("{} is not a directory", src.display())));
+                    outcome.errors.push((
+                        name.clone(),
+                        format!("{} is not a directory", src.display()),
+                    ));
                     continue;
                 }
                 if let Err(e) = crate::install::copy_dir_recursive(&src, &dest) {
@@ -262,16 +267,8 @@ pub(crate) fn bulk_import_skills(
     Ok(outcome)
 }
 
-fn agent_skill_dirs(home: &Path) -> Vec<PathBuf> {
-    vec![
-        home.join(".claude").join("skills"),
-        home.join(".codex").join("skills"),
-        home.join(".agents").join("skills"),
-    ]
-}
-
 fn find_installed(home: &Path, normalized: &str) -> Option<PathBuf> {
-    for dir in agent_skill_dirs(home) {
+    for dir in crate::discover::agent_skill_dirs(home) {
         let candidate = dir.join(normalized);
         if candidate.exists() {
             return Some(candidate);
@@ -314,7 +311,12 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
     let claude = read_optional(&claude_path)?;
     let codex = read_optional(&codex_path)?;
 
-    let canonical = pick_canonical(&claude_path, claude.as_deref(), &codex_path, codex.as_deref())?;
+    let canonical = pick_canonical(
+        &claude_path,
+        claude.as_deref(),
+        &codex_path,
+        codex.as_deref(),
+    )?;
 
     if let Some(parent) = template.parent() {
         std::fs::create_dir_all(parent)
@@ -370,12 +372,7 @@ fn pick_canonical(
     }
 }
 
-fn prompt_pick(
-    claude_path: &Path,
-    claude: &str,
-    codex_path: &Path,
-    codex: &str,
-) -> Result<String> {
+fn prompt_pick(claude_path: &Path, claude: &str, codex_path: &Path, codex: &str) -> Result<String> {
     use dialoguer::{theme::ColorfulTheme, Select};
     use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() {
@@ -386,7 +383,11 @@ fn prompt_pick(
         );
     }
     let items = [
-        format!("Claude  — {} ({} bytes)", claude_path.display(), claude.len()),
+        format!(
+            "Claude  — {} ({} bytes)",
+            claude_path.display(),
+            claude.len()
+        ),
         format!("Codex   — {} ({} bytes)", codex_path.display(), codex.len()),
     ];
     let choice = Select::with_theme(&ColorfulTheme::default())
@@ -409,12 +410,7 @@ fn read_optional(p: &Path) -> Result<Option<String>> {
     }
 }
 
-fn build_entry(
-    repo: &Path,
-    name: &str,
-    installed: &Path,
-    args: &ImportArgs,
-) -> Result<SkillEntry> {
+fn build_entry(repo: &Path, name: &str, installed: &Path, args: &ImportArgs) -> Result<SkillEntry> {
     if let Some(upstream) = &args.upstream {
         let source = Source::parse(upstream)?;
         return Ok(SkillEntry {
@@ -570,10 +566,8 @@ mod tests {
         assert!(names.contains(&"shared".to_string()));
 
         // Snapshot of `shared` is the claude version (first seen).
-        let shared_body = std::fs::read_to_string(
-            fx.repo.path().join("skills/shared/SKILL.md"),
-        )
-        .unwrap();
+        let shared_body =
+            std::fs::read_to_string(fx.repo.path().join("skills/shared/SKILL.md")).unwrap();
         assert_eq!(shared_body, "claude version");
     }
 
