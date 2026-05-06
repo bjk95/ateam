@@ -7,6 +7,7 @@ mod install;
 mod lockfile;
 mod manifest;
 mod paths;
+mod self_update;
 mod source;
 
 use anyhow::Result;
@@ -23,5 +24,8 @@ fn main() -> Result<()> {
         .init();
 
     let cli = cli::Cli::parse();
+    if !matches!(cli.command, cli::Command::Upgrade) {
+        self_update::maybe_check();
+    }
     cli::dispatch(cli)
 }
