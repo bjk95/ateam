@@ -8,6 +8,7 @@ mod instructions;
 mod lockfile;
 mod manifest;
 mod paths;
+mod repo_lock;
 mod self_update;
 mod source;
 mod ui;

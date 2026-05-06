@@ -67,6 +67,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_sync: bool,
 
+    /// Fail fast if another `ateam` process holds the repo lock instead of waiting.
+    #[arg(long, global = true)]
+    pub no_wait: bool,
+
     /// Show extra detail (paths, SHAs, per-agent links).
     #[arg(short = 'v', long, global = true)]
     pub verbose: bool,
@@ -348,6 +352,19 @@ pub enum ProjectCommand {
 
 pub fn dispatch(cli: Cli) -> Result<()> {
     let no_sync = cli.no_sync;
+    let no_wait = cli.no_wait;
+
+    // Mutating commands take an exclusive flock on `<repo>/.ateam/lock` to
+    // serialize concurrent read-modify-write of the lockfile and manifest.
+    // `init` bootstraps the repo so it has no repo to lock against; read-only
+    // commands don't mutate state.
+    let _lock = if is_mutating(&cli.command) {
+        let repo = crate::paths::resolve_repo()?;
+        Some(crate::repo_lock::RepoLock::acquire(&repo, no_wait)?)
+    } else {
+        None
+    };
+
     match cli.command {
         Command::Init(args) => crate::commands::init::run(args),
         Command::Apply(args) => crate::commands::apply::run(args, no_sync),
@@ -369,5 +386,33 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Validate => crate::commands::validate::run(),
         Command::Edit => crate::commands::edit::run(no_sync),
         Command::Instructions(cmd) => crate::commands::instructions::run(cmd, no_sync),
+    }
+}
+
+fn is_mutating(cmd: &Command) -> bool {
+    match cmd {
+        Command::Init(_) | Command::Status | Command::Upgrade | Command::Validate => false,
+        Command::Apply(_) | Command::Edit => true,
+        Command::Skills(s) => match s {
+            SkillsCommand::Add(_)
+            | SkillsCommand::Update(_)
+            | SkillsCommand::Remove(_)
+            | SkillsCommand::Import(_)
+            | SkillsCommand::Deactivate(_)
+            | SkillsCommand::Activate(_) => true,
+            SkillsCommand::List(_) | SkillsCommand::Show(_) | SkillsCommand::Find(_) => false,
+        },
+        Command::Project(p) => match p {
+            ProjectCommand::Add { .. } | ProjectCommand::Remove { .. } => true,
+            ProjectCommand::List => false,
+        },
+        Command::Remote(r) => match r {
+            RemoteCommand::Add { .. } => true,
+            RemoteCommand::List => false,
+        },
+        Command::Instructions(i) => match i {
+            InstructionsCommand::Edit => true,
+            InstructionsCommand::Diff | InstructionsCommand::Show => false,
+        },
     }
 }
