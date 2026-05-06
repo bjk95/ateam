@@ -28,7 +28,7 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
     crate::commands::apply::run(
         ApplyArgs {
             dry_run: false,
-            agents: Vec::new(),
+            harnesses: Vec::new(),
             project: None,
             force: false,
             copy: false,

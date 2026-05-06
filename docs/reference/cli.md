@@ -11,7 +11,7 @@ These work on every subcommand.
 |---|---|
 | `--no-sync` | Skip auto pull/commit/push for this invocation. Equivalent: `ATEAM_NO_SYNC=1`. |
 | `--no-wait` | Fail fast if another `ateam` process holds the repo lock instead of waiting. |
-| `-v` / `--verbose` | Show extra detail (paths, SHAs, per-agent links). |
+| `-v` / `--verbose` | Show extra detail (paths, SHAs, per-harness links). |
 | `-q` / `--quiet` | Suppress non-error output: banner, success lines, progress spinners, plain text. Errors and warnings still print to stderr. |
 
 ### Concurrent invocations
@@ -43,7 +43,7 @@ ateam init ... --profiles a,b      # set this machine's profile list
 Materialize the lockfile (active entries only).
 
 ```bash
-ateam apply [--dry-run] [-a <agent>...] [--project <alias>] [--force] [--copy]
+ateam apply [--dry-run] [-a <harness>...] [--project <alias>] [--force] [--copy]
 ```
 
 If a real directory already sits at a target path (e.g. a skill installed by
@@ -74,8 +74,8 @@ Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 | `<repo>` (positional) | `owner/repo` shorthand, full git URL, or local path |
 | `--list` | Print discovered skills, don't install |
 | `--skill <name>` | Specific skill names, repeatable; `*` = all |
-| `--all` | Implies `--skill '*'`, `--agent '*'`, and `-y` (Vercel-compat triple-flag override) |
-| `-a` / `--agent <name>` | Target agents, repeatable; `*` = all enabled |
+| `--all` | Implies `--skill '*'`, `--harness "*"`, and `-y` (Vercel-compat triple-flag override) |
+| `-a` / `--harness <name>` | Target harnesses, repeatable; `*` = all enabled |
 | `-y` / `--yes` | Non-interactive; in an unregistered git repo, auto-registers + project-scopes |
 | `-g` / `--global` | Force global scope (overrides cwd auto-detect and the auto-register prompt) |
 | `--profile <name>` | Tag entry with profile gates (repeatable) |
@@ -131,9 +131,9 @@ ateam skills remove foo bar -y                 # skip the confirmation prompt
 | Flag | Behavior |
 |---|---|
 | `<name>...` (positional) | Skill names to remove. Repeatable. |
-| `--all` | Remove every locked skill (within `--agent` / `--global` scope). |
+| `--all` | Remove every locked skill (within `--harness` / `--global` scope). |
 | `-y` / `--yes` | Skip the confirmation prompt (also skipped when stdin is not a TTY). |
-| `-a` / `--agent <name>` | Only target entries whose agents list matches. Repeatable. |
+| `-a` / `--harness <name>` | Only target entries whose harnesses list matches. Repeatable. |
 | `-g` / `--global` | Only target entries with no project alias. |
 
 A confirmation prompt lists the skills about to be removed and defaults to "no".
@@ -202,7 +202,7 @@ suppressed automatically so the document is the only thing on stdout.
       "ref": null,
       "tree_sha": null,
       "path": null,
-      "agents": ["*"],
+      "harnesses": ["*"],
       "profiles": [],
       "project": null,
       "active": true,
@@ -221,7 +221,7 @@ suppressed automatically so the document is the only thing on stdout.
 | `skills[].ref` | string \| null | Git ref/tag/commit pin. |
 | `skills[].tree_sha` | string \| null | Last fetched tree SHA (for drift detection). |
 | `skills[].path` | string \| null | Subpath inside the source repo, when applicable. |
-| `skills[].agents` | string[] | Targeted agents. `["*"]` = all enabled. |
+| `skills[].harnesses` | string[] | Targeted harnesses. `["*"]` = all enabled. |
 | `skills[].profiles` | string[] | Profile gates. Empty = always active. |
 | `skills[].project` | string \| null | Project alias scope. |
 | `skills[].active` | bool | False when the skill is deactivated (`[off]`). |
@@ -235,7 +235,7 @@ version; renames or semantic changes will bump it.
 
 Print the `SKILL.md` for a locked skill to stdout. Reads the snapshot at
 `<repo>/skills/<name>/SKILL.md` (or the `local:` path for user-authored skills).
-Useful for piping into `less`, `grep`, or another agent.
+Useful for piping into `less`, `grep`, or another harness.
 
 ```bash
 ateam skills show deploy-to-vercel

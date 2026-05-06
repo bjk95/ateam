@@ -18,9 +18,17 @@ use std::path::{Path, PathBuf};
 /// One pass over the user's home directory; returns a map of skill-name →
 /// source string (e.g., `github:owner/repo`). Cheap to call per import,
 /// expensive to call per skill — call once, look up many.
+///
+/// Iterates the agent registry and invokes each agent's `upstream_indexer`
+/// if it has one. Today only `claude-code` populates this — the loop has
+/// one productive iteration and the rest no-op.
 pub fn build_index(home: &Path) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    index_claude_marketplaces(&mut map, home);
+    for def in crate::harness::all() {
+        if let Some(indexer) = def.upstream_indexer {
+            indexer(home, &mut map);
+        }
+    }
     map
 }
 
@@ -50,7 +58,7 @@ struct MarketplaceSource {
     url: String,
 }
 
-fn index_claude_marketplaces(map: &mut HashMap<String, String>, home: &Path) {
+pub fn index_claude_marketplaces(home: &Path, map: &mut HashMap<String, String>) {
     let plugins_dir = home.join(".claude/plugins");
     let installed = match std::fs::read_to_string(plugins_dir.join("installed_plugins.json")) {
         Ok(s) => match serde_json::from_str::<InstalledPlugins>(&s) {

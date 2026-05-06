@@ -1,10 +1,10 @@
 ---
 title: Project scope
-description: Install a skill into a specific project's native agent dirs, by alias.
+description: Install a skill into a specific project's native harness dirs, by alias.
 ---
 
 A skill can be tagged with a `project` alias in the lockfile. When `ateam apply`
-encounters a project-tagged entry, it installs into that project's native agent
+encounters a project-tagged entry, it installs into that project's native harness
 discovery paths (`<project>/.claude/skills/<name>` and
 `<project>/.codex/skills/<name>`) instead of `~/.claude/skills/<name>`.
 

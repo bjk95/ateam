@@ -16,7 +16,9 @@ source = "github:vercel-labs/agent-skills"
 path = "skills/deploy-to-vercel"      # subpath within the source repo
 ref = "main"                          # optional pin; default = repo default
 tree_sha = "1378aa50…"                # GitHub tree SHA at install time
-agents = ["*"]                        # which agents to install for; "*" = all
+harnesses = ["*"]                     # which harnesses to install for; "*" = all
+                                      # Valid ids: "claude-code", "codex",
+                                      # "opencode", "gemini". See concepts/harness.md.
 profiles = ["work"]                   # optional; absent = all machines
 project = "canva"                     # optional; absent = global scope
 active = false                        # optional; absent or true = install; false = soft-disabled
@@ -26,7 +28,9 @@ active = false                        # optional; absent or true = install; fals
 
 Every entry has an implicit `active = true`. `ateam skills deactivate <name>`
 sets it to `false`, which causes `apply` and `update` to skip that entry and
-unlinks it from `~/.claude/skills/` and `~/.codex/skills/`. The lockfile entry
+unlinks it from every enabled harness's skills directory (e.g.,
+`~/.claude/skills/`, `~/.codex/skills/`, `~/.config/opencode/skills/`,
+`~/.gemini/skills/`). The lockfile entry
 (and the cached source content) stays put so `ateam skills activate <name>`
 re-materializes it without refetching. The flag rides with the skill across
 the team — deactivating in one machine syncs everywhere.

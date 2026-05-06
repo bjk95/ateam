@@ -249,7 +249,7 @@ mod tests {
             path: None,
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: project.map(str::to_string),
             active: true,

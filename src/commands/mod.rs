@@ -5,6 +5,7 @@ pub mod apply_instructions;
 pub mod deactivate;
 pub mod edit;
 pub mod find;
+pub mod harness;
 pub mod import;
 pub mod init;
 pub mod instructions;

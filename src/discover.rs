@@ -105,17 +105,19 @@ fn parse_skill_md(root: &Path, file: &Path) -> Result<Option<DiscoveredSkill>> {
 pub struct UnmanagedSkill {
     pub name: String,
     /// Each agent skills dir the skill was found in, in canonical
-    /// `agent_skill_dirs` order.
+    /// `harness_skill_dirs` order.
     pub dirs: Vec<PathBuf>,
 }
 
 /// Conventional agent-skills directories ateam scans, in canonical order.
-pub fn agent_skill_dirs(home: &Path) -> Vec<PathBuf> {
-    vec![
-        home.join(".claude").join("skills"),
-        home.join(".codex").join("skills"),
-        home.join(".agents").join("skills"),
-    ]
+/// Derived from the agent registry plus the cross-tool `.agents/skills/`
+/// alias (honored by Gemini and OpenCode but not bound to any single agent).
+pub fn harness_skill_dirs(home: &Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = crate::harness::all()
+        .filter_map(|a| a.skills_subdir.map(|s| home.join(s)))
+        .collect();
+    dirs.push(home.join(".agents").join("skills"));
+    dirs
 }
 
 /// Scan the agent skills dirs for skills not yet adopted by ateam.
@@ -136,7 +138,7 @@ pub fn discover_unmanaged(
 
     let mut acc: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
 
-    for dir in agent_skill_dirs(home) {
+    for dir in harness_skill_dirs(home) {
         let entries = match std::fs::read_dir(&dir) {
             Ok(e) => e,
             Err(_) => continue,
@@ -237,7 +239,7 @@ mod tests {
             path: Some("skills/foo".into()),
             git_ref: None,
             tree_sha: None,
-            agents: vec!["*".into()],
+            harnesses: vec!["*".into()],
             profiles: vec![],
             project: None,
             active: true,

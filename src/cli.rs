@@ -71,7 +71,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_wait: bool,
 
-    /// Show extra detail (paths, SHAs, per-agent links).
+    /// Show extra detail (paths, SHAs, per-harness links).
     #[arg(short = 'v', long, global = true)]
     pub verbose: bool,
 
@@ -115,6 +115,30 @@ pub enum Command {
     /// Manage the instructions template (CLAUDE.md / AGENTS.md source).
     #[command(subcommand)]
     Instructions(InstructionsCommand),
+
+    /// Manage which AI harnesses ateam syncs to (claude-code, codex, opencode, gemini).
+    #[command(subcommand)]
+    Harness(HarnessCommand),
+}
+
+#[derive(Subcommand)]
+pub enum HarnessCommand {
+    /// List every registered harness and whether it's enabled on this repo.
+    List,
+
+    /// Enable one or more harnesses (writes to ateam.toml and re-applies).
+    Add {
+        /// Harness ids to enable. See `ateam harness list` for valid ids.
+        #[arg(required = true)]
+        ids: Vec<String>,
+    },
+
+    /// Disable one or more harnesses (writes to ateam.toml and re-applies).
+    Remove {
+        /// Harness ids to disable. See `ateam harness list` for valid ids.
+        #[arg(required = true)]
+        ids: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -148,7 +172,7 @@ pub enum SkillsCommand {
     /// ~/.codex/skills, ~/.agents/skills plus the global CLAUDE.md / AGENTS.md.
     Import(ImportArgs),
 
-    /// Deactivate a skill: keep its lockfile entry but unlink it from agents.
+    /// Deactivate a skill: keep its lockfile entry but unlink it from harnesses.
     Deactivate(DeactivateArgs),
 
     /// Reactivate a previously-deactivated skill.
@@ -192,13 +216,13 @@ pub struct AddArgs {
     #[arg(long, value_name = "NAME")]
     pub skill: Vec<String>,
 
-    /// Vercel-compat: implies --skill '*', --agent '*', and -y.
+    /// Vercel-compat: implies --skill "*", --harness "*", and -y.
     #[arg(long)]
     pub all: bool,
 
-    /// Target agents. Repeatable. `*` = all enabled.
-    #[arg(short = 'a', long = "agent", value_name = "NAME")]
-    pub agents: Vec<String>,
+    /// Target harnesses. Repeatable. `*` = all enabled.
+    #[arg(short = 'a', long = "harness", value_name = "NAME")]
+    pub harnesses: Vec<String>,
 
     /// Skip confirmation prompts (non-interactive).
     #[arg(short = 'y', long)]
@@ -212,7 +236,7 @@ pub struct AddArgs {
     #[arg(long, value_name = "NAME")]
     pub profile: Vec<String>,
 
-    /// Install into a registered project's native agent dirs.
+    /// Install into a registered project's native harness dirs.
     #[arg(long, value_name = "ALIAS")]
     pub project: Option<String>,
 
@@ -236,9 +260,9 @@ pub struct ApplyArgs {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Restrict to specific agents.
-    #[arg(short = 'a', long = "agent", value_name = "NAME")]
-    pub agents: Vec<String>,
+    /// Restrict to specific harnesses.
+    #[arg(short = 'a', long = "harness", value_name = "NAME")]
+    pub harnesses: Vec<String>,
 
     /// Restrict to one project's entries.
     #[arg(long, value_name = "ALIAS")]
@@ -278,7 +302,7 @@ pub struct RemoveArgs {
     #[arg(value_name = "NAME", conflicts_with = "all")]
     pub names: Vec<String>,
 
-    /// Remove every locked skill (within --agent / --global scope if provided).
+    /// Remove every locked skill (within --harness / --global scope if provided).
     #[arg(long)]
     pub all: bool,
 
@@ -286,9 +310,9 @@ pub struct RemoveArgs {
     #[arg(short = 'y', long)]
     pub yes: bool,
 
-    /// Restrict to entries targeting these agents. Repeatable. `*` = all enabled.
-    #[arg(short = 'a', long = "agent", value_name = "NAME")]
-    pub agents: Vec<String>,
+    /// Restrict to entries targeting these harnesses. Repeatable. `*` = all enabled.
+    #[arg(short = 'a', long = "harness", value_name = "NAME")]
+    pub harnesses: Vec<String>,
 
     /// Force global scope (Vercel-compat). Restrict to entries with no project alias.
     #[arg(short = 'g', long)]
@@ -407,6 +431,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Validate => crate::commands::validate::run(),
         Command::Edit => crate::commands::edit::run(no_sync),
         Command::Instructions(cmd) => crate::commands::instructions::run(cmd, no_sync),
+        Command::Harness(cmd) => crate::commands::harness::run(cmd, no_sync),
     }
 }
 
@@ -434,6 +459,10 @@ fn is_mutating(cmd: &Command) -> bool {
         Command::Instructions(i) => match i {
             InstructionsCommand::Edit => true,
             InstructionsCommand::Diff | InstructionsCommand::Show => false,
+        },
+        Command::Harness(a) => match a {
+            HarnessCommand::Add { .. } | HarnessCommand::Remove { .. } => true,
+            HarnessCommand::List => false,
         },
     }
 }
