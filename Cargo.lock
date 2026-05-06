@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "ateam"
-version = "0.2.20"
+version = "0.2.21"
 dependencies = [
  "anyhow",
  "axoupdater",
