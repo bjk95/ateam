@@ -1,5 +1,8 @@
 # Project Instructions for AI Agents
 
+
+When getting ready for PR make sure to update the docs under docs/
+
 This file provides instructions and context for AI coding agents working on this project.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
