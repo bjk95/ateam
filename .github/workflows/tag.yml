@@ -11,23 +11,55 @@ jobs:
   tag:
     runs-on: ubuntu-latest
     steps:
+      # `token: RELEASE_TAG_PAT` makes the PAT the credential for git
+      # operations on this checkout, so the bump commit and tag push below
+      # are authored by the PAT (not GITHUB_TOKEN). Tags pushed via the
+      # default GITHUB_TOKEN do not fire downstream `on: push: tags`
+      # workflows (GitHub's anti-loop safeguard), so release.yml would
+      # silently never run. The PAT must be a fine-grained PAT with
+      # `contents: write` on this repo, stored as `RELEASE_TAG_PAT`.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_TAG_PAT }}
 
-      # Bumps the patch/minor/major version from conventional-commit prefixes
-      # (feat:, fix:, BREAKING CHANGE:) since the last tag, then pushes a
-      # signed `vX.Y.Z` tag. With `default_bump: false`, plain commits do
-      # nothing — only conventional commits cut a release.
-      #
-      # The token MUST be a PAT, not GITHUB_TOKEN. Tags pushed via the
-      # default GITHUB_TOKEN do not fire downstream `on: push: tags`
-      # workflows (GitHub's anti-loop safeguard), so release.yml would
-      # silently never run. Create a fine-grained PAT with `contents: write`
-      # on this repo and store it as the secret `RELEASE_TAG_PAT`.
-      - name: Bump version and tag
+      # Compute the next semver from conventional-commit prefixes
+      # (feat:, fix:, BREAKING CHANGE:) since the last tag *without*
+      # creating the tag. We need to bump Cargo.toml and Cargo.lock first
+      # so the eventual tag points at a commit where the package version
+      # matches the tag — cargo-dist refuses to release otherwise.
+      # `default_bump: false` means non-conventional commits produce empty
+      # outputs, which we treat as "skip release".
+      - name: Compute next version
+        id: version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.RELEASE_TAG_PAT }}
           release_branches: main
           default_bump: false
+          dry_run: true
+
+      - name: Install cargo-edit
+        if: steps.version.outputs.new_version != ''
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit
+
+      # `cargo set-version` updates both Cargo.toml and Cargo.lock in lockstep.
+      - name: Bump package version
+        if: steps.version.outputs.new_version != ''
+        run: cargo set-version ${{ steps.version.outputs.new_version }}
+
+      # Commit message uses a non-conventional prefix so this push does not
+      # re-trigger another bump in the next workflow run.
+      - name: Commit, tag, and push
+        if: steps.version.outputs.new_version != ''
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "release: $NEW_TAG"
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+          git push origin HEAD:main "$NEW_TAG"
