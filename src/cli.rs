@@ -119,6 +119,10 @@ pub enum Command {
     /// Manage which AI harnesses ateam syncs to (claude-code, codex, opencode, gemini).
     #[command(subcommand)]
     Harness(HarnessCommand),
+
+    /// Manage subagents (single-file `.md` agents installed under `.claude/agents/` and `.codex/agents/`).
+    #[command(subcommand)]
+    Subagents(SubagentsCommand),
 }
 
 #[derive(Subcommand)]
@@ -151,6 +155,65 @@ pub enum InstructionsCommand {
 
     /// Print the rendered instructions for each enabled tool to stdout.
     Show,
+}
+
+#[derive(Subcommand)]
+pub enum SubagentsCommand {
+    /// Install a subagent (single .md file) from a source repo or local path.
+    Add(SubagentAddArgs),
+
+    /// Remove a subagent from the lockfile and uninstall its symlinks.
+    Remove(SubagentRemoveArgs),
+
+    /// List locked subagents with their sources.
+    List,
+}
+
+#[derive(Parser)]
+pub struct SubagentAddArgs {
+    /// owner/repo shorthand, full git URL, or local path (file or repo dir).
+    pub source: String,
+
+    /// Subagent name(s) to install. Looks for `agents/<name>.md` in the source
+    /// by default; override with --path. Repeatable.
+    #[arg(long, value_name = "NAME")]
+    pub subagent: Vec<String>,
+
+    /// Explicit path within the source repo. Implies a single subagent;
+    /// the name is derived from the file stem unless --subagent is also given.
+    #[arg(long, value_name = "PATH")]
+    pub path: Option<String>,
+
+    /// Target harnesses. Repeatable. `*` = all enabled with subagent support.
+    #[arg(short = 'a', long = "harness", value_name = "NAME")]
+    pub harnesses: Vec<String>,
+
+    /// Skip confirmation prompts (non-interactive).
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+
+    /// Annotate lockfile entry with profile gates.
+    #[arg(long, value_name = "NAME")]
+    pub profile: Vec<String>,
+
+    /// Pin to a specific git ref/tag/commit.
+    #[arg(long)]
+    pub r#ref: Option<String>,
+
+    /// Permit `openclaw/*` sources.
+    #[arg(long = "dangerously-accept-openclaw-risks")]
+    pub dangerously_accept_openclaw_risks: bool,
+}
+
+#[derive(Parser)]
+pub struct SubagentRemoveArgs {
+    /// Subagent names to remove. Repeatable.
+    #[arg(value_name = "NAME", required = true)]
+    pub names: Vec<String>,
+
+    /// Skip confirmation prompts.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }
 
 #[derive(Subcommand)]
@@ -432,6 +495,11 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Edit => crate::commands::edit::run(no_sync),
         Command::Instructions(cmd) => crate::commands::instructions::run(cmd, no_sync),
         Command::Harness(cmd) => crate::commands::harness::run(cmd, no_sync),
+        Command::Subagents(cmd) => match cmd {
+            SubagentsCommand::Add(args) => crate::commands::subagents::add(args, no_sync),
+            SubagentsCommand::Remove(args) => crate::commands::subagents::remove(args, no_sync),
+            SubagentsCommand::List => crate::commands::subagents::list(),
+        },
     }
 }
 
@@ -463,6 +531,10 @@ fn is_mutating(cmd: &Command) -> bool {
         Command::Harness(a) => match a {
             HarnessCommand::Add { .. } | HarnessCommand::Remove { .. } => true,
             HarnessCommand::List => false,
+        },
+        Command::Subagents(s) => match s {
+            SubagentsCommand::Add(_) | SubagentsCommand::Remove(_) => true,
+            SubagentsCommand::List => false,
         },
     }
 }

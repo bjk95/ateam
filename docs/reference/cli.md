@@ -289,6 +289,48 @@ on-disk skill folder for a `.git/config` or sibling git checkout — so a skill
 imported from a local clone of `github.com/foo/bar` gets a `github:foo/bar`
 source automatically. Pass `--upstream` to override.
 
+## `ateam subagents`
+
+Manage single-file `.md` subagents (e.g. Claude `~/.claude/agents/code-reviewer.md`,
+Codex `~/.codex/agents/code-reviewer.md`). Snapshot lives at
+`<repo>/agents/<name>.md` and is symlinked into each harness with subagent
+support. Today only `claude-code` and `codex` define a subagent install path;
+`opencode` and `gemini` are silently skipped.
+
+```bash
+ateam subagents add <source> [--subagent <name>]... [--path <file>] [-a <harness>]... [--ref <ref>] [--profile <name>]... [-y]
+ateam subagents remove <name>... [-y]
+ateam subagents list
+```
+
+### `subagents add`
+
+`<source>` is the same set of forms as `skills add`: `owner/repo`,
+`https://...`, `git@...`, or a local path (file or directory).
+
+| Flag | Behavior |
+|---|---|
+| `--subagent <name>` | Subagent name (repeatable). By default looks for `agents/<name>.md` in the source. |
+| `--path <file>` | Explicit file path within the source. Implies a single subagent; name comes from the file stem unless `--subagent` is also given. |
+| `-a` / `--harness <name>` | Target harnesses; `*` = all enabled with subagent support. |
+| `--ref <ref>` | Pin to a specific git ref/tag/commit. |
+| `--profile <name>` | Annotate lockfile entry with profile gates. |
+| `-y` / `--yes` | Skip confirmation prompts (non-interactive). |
+
+Local file shortcut: `ateam subagents add ./agents/foo.md` snapshots the file
+verbatim and derives the name from its stem. Useful for adopting a
+hand-authored subagent into the lockfile in one step.
+
+### `subagents remove`
+
+Removes the lockfile entry, deletes the snapshot at `<repo>/agents/<name>.md`,
+and unlinks the symlinks under each harness's agents dir.
+
+### `subagents list`
+
+Prints every locked subagent with its source. `●` marks active entries,
+`○` marks deactivated.
+
 ## `ateam upgrade`
 
 Self-update: download the latest `ateam` release and replace this binary.

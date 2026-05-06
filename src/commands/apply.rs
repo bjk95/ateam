@@ -3,7 +3,7 @@ use crate::commands::apply_instructions;
 use crate::config::{MachineConfig, RepoConfig};
 use crate::git_sync;
 use crate::install;
-use crate::lockfile::{Lockfile, SkillEntry};
+use crate::lockfile::{Lockfile, SkillEntry, SubagentEntry};
 use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
 use crate::paths;
 use crate::source::{github, Source};
@@ -98,9 +98,10 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         };
 
         // Detect tree_sha drift for github sources during apply.
-        if let (Ok(Source::Github { owner, repo: r }), Some(_)) =
-            (Source::from_lockfile_string(&entry.source), entry.tree_sha.as_ref())
-        {
+        if let (Ok(Source::Github { owner, repo: r }), Some(_)) = (
+            Source::from_lockfile_string(&entry.source),
+            entry.tree_sha.as_ref(),
+        ) {
             if let Some(path) = &entry.path {
                 let r_ref = entry
                     .git_ref
@@ -110,7 +111,9 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                     if let Ok(Some(latest)) = github::subtree_sha(&owner, &r, &commit_sha, path) {
                         if Some(&latest) != entry.tree_sha.as_ref() {
                             tracing::info!("drift detected for {} (refetching)", entry.name);
-                            if let Err(e) = refetch_github(&repo, &owner, &r, &commit_sha, path, &entry.name) {
+                            if let Err(e) =
+                                refetch_github(&repo, &owner, &r, &commit_sha, path, &entry.name)
+                            {
                                 ui::fail(format!("refetch {} — {:#}", entry.name, e));
                             } else {
                                 if let Some(pos) = updated_lock
@@ -216,6 +219,93 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         s.finish();
     }
 
+    // Subagent symlink pass — single-file `.md` snapshots in `<repo>/agents/`
+    // get linked into each harness's agents dir.
+    let subagent_step = (!args.dry_run).then(|| ui::step("checking subagents"));
+    for entry in &lock.subagents {
+        if !entry.active {
+            continue;
+        }
+        if !profile_match(&machine, &entry.profiles) {
+            continue;
+        }
+        if let Some(s) = &subagent_step {
+            s.set_msg(format!("checking {}", entry.name));
+        }
+
+        let install_root = match resolve_subagent_install_root(
+            entry,
+            &args,
+            &mut machine,
+            &mut unregistered_aliases,
+        ) {
+            Some(root) => root,
+            None => continue,
+        };
+
+        let snapshot = paths::local_subagent_path(&repo, &entry.name);
+        if !snapshot.exists() {
+            ui::warn(format!(
+                "subagent `{}` snapshot missing at {}",
+                entry.name,
+                paths::display_path(&snapshot)
+            ));
+            continue;
+        }
+
+        let harnesses = resolve_subagent_harnesses(entry, &repo_cfg);
+        for harness in &harnesses {
+            if let Some(filter) = &target_harnesses {
+                if !filter.contains(harness) {
+                    continue;
+                }
+            }
+            let Some(link) = paths::harness_subagent_path(&install_root, harness, &entry.name)?
+            else {
+                continue;
+            };
+
+            if args.dry_run {
+                ui::detail(format!(
+                    "{} → {}",
+                    paths::display_path(&link),
+                    paths::display_path(&snapshot)
+                ));
+                materialized += 1;
+                continue;
+            }
+
+            match install::install_symlink(&link, &snapshot, args.force)? {
+                install::LinkOutcome::Created
+                | install::LinkOutcome::Replaced
+                | install::LinkOutcome::AlreadyCorrect
+                | install::LinkOutcome::MovedAside { .. }
+                | install::LinkOutcome::AutoHealed => {
+                    new_manifest.entries.push(ManifestEntry {
+                        path: link.clone(),
+                        kind: EntryKind::Symlink,
+                        skill: entry.name.clone(),
+                        harness: harness.clone(),
+                        target: snapshot.clone(),
+                        applied_at: manifest::now_unix(),
+                    });
+                    materialized += 1;
+                }
+                install::LinkOutcome::Refused => {
+                    ui::warn(format!(
+                        "refused to install subagent {} for {}: real file at {} (rerun with --force)",
+                        entry.name,
+                        harness,
+                        paths::display_path(&link)
+                    ));
+                }
+            }
+        }
+    }
+    if let Some(s) = subagent_step {
+        s.finish();
+    }
+
     // Instructions render-and-write pass.
     let home = paths::home_dir()?;
     let instructions_outcome = apply_instructions::apply(
@@ -239,8 +329,11 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
 
     // Removal: paths in old manifest not in new plan get unlinked.
     if !args.dry_run {
-        let new_paths: HashSet<&Path> =
-            new_manifest.entries.iter().map(|e| e.path.as_path()).collect();
+        let new_paths: HashSet<&Path> = new_manifest
+            .entries
+            .iter()
+            .map(|e| e.path.as_path())
+            .collect();
         for prev in &prev_manifest.entries {
             if !new_paths.contains(prev.path.as_path()) {
                 let result = match prev.kind {
@@ -307,7 +400,9 @@ fn profile_match(machine: &MachineConfig, gates: &[String]) -> bool {
     if gates.is_empty() {
         return true;
     }
-    gates.iter().any(|g| machine.profiles.iter().any(|p| p == g))
+    gates
+        .iter()
+        .any(|g| machine.profiles.iter().any(|p| p == g))
 }
 
 fn resolve_harnesses(entry: &SkillEntry, repo_cfg: &RepoConfig) -> Vec<String> {
@@ -315,6 +410,65 @@ fn resolve_harnesses(entry: &SkillEntry, repo_cfg: &RepoConfig) -> Vec<String> {
         repo_cfg.enabled_harnesses.clone()
     } else {
         entry.harnesses.clone()
+    }
+}
+
+fn resolve_subagent_harnesses(entry: &SubagentEntry, repo_cfg: &RepoConfig) -> Vec<String> {
+    let candidates: Vec<String> = if entry.harnesses.iter().any(|a| a == "*") {
+        repo_cfg.enabled_harnesses.clone()
+    } else {
+        entry.harnesses.clone()
+    };
+    // Filter to harnesses that actually support subagents (claude-code, codex
+    // today). Skipped harnesses are silently no-op'd rather than warned about.
+    candidates
+        .into_iter()
+        .filter(|id| {
+            crate::harness::lookup(id)
+                .and_then(|d| d.subagents_subdir)
+                .is_some()
+        })
+        .collect()
+}
+
+fn resolve_subagent_install_root(
+    entry: &SubagentEntry,
+    args: &ApplyArgs,
+    machine: &mut MachineConfig,
+    unregistered: &mut BTreeMap<String, Vec<String>>,
+) -> Option<PathBuf> {
+    match &entry.project {
+        Some(alias) => {
+            if let Some(filter) = &args.project {
+                if filter != alias {
+                    return None;
+                }
+            }
+            match machine.projects.get(alias) {
+                Some(path) if path.exists() => Some(path.clone()),
+                Some(path) => {
+                    ui::warn(format!(
+                        "project `{}` path does not exist: {}",
+                        alias,
+                        paths::display_path(path)
+                    ));
+                    None
+                }
+                None => {
+                    unregistered
+                        .entry(alias.clone())
+                        .or_default()
+                        .push(entry.name.clone());
+                    None
+                }
+            }
+        }
+        None => {
+            if args.project.is_some() {
+                return None;
+            }
+            paths::home_dir().ok()
+        }
     }
 }
 
@@ -385,8 +539,14 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
 
 fn refetch_via_registry(repo: &Path, owner: &str, repo_name: &str, skill_name: &str) -> Result<()> {
     let slug = crate::source::skills_sh::to_slug(skill_name);
-    let download = crate::source::skills_sh::fetch(owner, repo_name, &slug)?
-        .ok_or_else(|| anyhow!("skills.sh has no entry for {}/{}/{}", owner, repo_name, slug))?;
+    let download = crate::source::skills_sh::fetch(owner, repo_name, &slug)?.ok_or_else(|| {
+        anyhow!(
+            "skills.sh has no entry for {}/{}/{}",
+            owner,
+            repo_name,
+            slug
+        )
+    })?;
     let slot = install::prepare_cache_slot(repo, skill_name)?;
     for file in &download.files {
         let dest = slot.tmp.join(&file.path);
@@ -415,7 +575,13 @@ fn refetch_github(
     let pkg_root = github::fetch_tarball(owner, repo_name, commit_sha, &work)?;
     let src_dir = pkg_root.join(sub_path);
     if !src_dir.exists() {
-        bail!("path `{}` not found in {}/{}@{}", sub_path, owner, repo_name, commit_sha);
+        bail!(
+            "path `{}` not found in {}/{}@{}",
+            sub_path,
+            owner,
+            repo_name,
+            commit_sha
+        );
     }
     let slot = install::prepare_cache_slot(repo, skill_name)?;
     install::copy_dir_recursive(&src_dir, &slot.tmp)?;

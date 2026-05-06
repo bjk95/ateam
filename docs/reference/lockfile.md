@@ -35,6 +35,28 @@ unlinks it from every enabled harness's skills directory (e.g.,
 re-materializes it without refetching. The flag rides with the skill across
 the team — deactivating in one machine syncs everywhere.
 
+## Subagents
+
+Single-file `.md` agents that drop into `~/.claude/agents/` and
+`~/.codex/agents/`. Snapshot lives at `<repo>/agents/<name>.md`.
+
+```toml
+[[subagent]]
+name = "code-reviewer"
+source = "github:vercel-labs/agent-skills"
+path = "agents/code-reviewer.md"      # path within the source repo
+ref = "main"                          # optional pin
+file_sha = "ba7816bf…"                # sha256 of the file at install time
+harnesses = ["*"]                     # claude-code, codex (others ignored)
+profiles = ["work"]                   # optional
+active = true                         # absent or true = install
+```
+
+Same `active`, profile, and project semantics as `[[skill]]`. Harnesses without
+a subagent concept (`opencode`, `gemini` today) are silently skipped — pass
+`harnesses = ["*"]` and only the harnesses that support subagents will receive
+the symlink.
+
 ## Source types
 
 | Prefix | Use |
@@ -42,6 +64,7 @@ the team — deactivating in one machine syncs everywhere.
 | `github:owner/repo` | A GitHub repo (default for `owner/repo` shorthand) |
 | `git:<url>` | Any other git URL |
 | `local:skills/<name>` | A user-authored skill kept in `<repo>/skills/` |
+| `local:agents/<name>.md` | A user-authored subagent kept in `<repo>/agents/` |
 
 ## Update detection
 

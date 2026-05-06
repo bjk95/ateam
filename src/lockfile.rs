@@ -8,13 +8,19 @@ pub struct Lockfile {
     #[serde(default, rename = "skill")]
     pub skills: Vec<SkillEntry>,
 
+    #[serde(default, rename = "subagent", skip_serializing_if = "Vec::is_empty")]
+    pub subagents: Vec<SubagentEntry>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<InstructionsEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstructionsEntry {
-    #[serde(default = "default_instructions_harnesses", skip_serializing_if = "is_default_harnesses")]
+    #[serde(
+        default = "default_instructions_harnesses",
+        skip_serializing_if = "is_default_harnesses"
+    )]
     pub harnesses: Vec<String>,
 }
 
@@ -45,7 +51,10 @@ pub struct SkillEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tree_sha: Option<String>,
 
-    #[serde(default = "default_harnesses", skip_serializing_if = "is_default_harnesses")]
+    #[serde(
+        default = "default_harnesses",
+        skip_serializing_if = "is_default_harnesses"
+    )]
     pub harnesses: Vec<String>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -60,6 +69,43 @@ pub struct SkillEntry {
     /// Origin repo for snapshotted (`local:`) entries — populated automatically
     /// by `ateam skills import` when discoverable. None for non-local sources
     /// (where `source` already encodes the upstream) or when discovery failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream: Option<String>,
+}
+
+/// Single-file lockfile entry for a Claude/Codex subagent. Mirrors `SkillEntry`
+/// but the snapshot is one `.md` file (`<repo>/agents/<name>.md`) rather than a
+/// directory tree, so `tree_sha` is replaced by `file_sha` (sha256 of the file).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubagentEntry {
+    pub name: String,
+    pub source: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "ref")]
+    pub git_ref: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_sha: Option<String>,
+
+    #[serde(
+        default = "default_harnesses",
+        skip_serializing_if = "is_default_harnesses"
+    )]
+    pub harnesses: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profiles: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+
+    #[serde(default = "default_active", skip_serializing_if = "is_active")]
+    pub active: bool,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream: Option<String>,
 }
@@ -86,16 +132,20 @@ impl Lockfile {
         if !path.exists() {
             return Ok(Self {
                 skills: Vec::new(),
+                subagents: Vec::new(),
                 instructions: None,
             });
         }
         let raw = std::fs::read_to_string(&path)
             .with_context(|| format!("reading {}", path.display()))?;
-        let lock: Lockfile = toml::from_str(&raw)
-            .with_context(|| format!("parsing {}", path.display()))?;
+        let lock: Lockfile =
+            toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
         validate_no_duplicate_names(&lock.skills)
             .with_context(|| format!("in {}", path.display()))?;
-        validate_subpaths(&lock.skills)
+        validate_subpaths(&lock.skills).with_context(|| format!("in {}", path.display()))?;
+        validate_no_duplicate_subagents(&lock.subagents)
+            .with_context(|| format!("in {}", path.display()))?;
+        validate_subagent_subpaths(&lock.subagents)
             .with_context(|| format!("in {}", path.display()))?;
         Ok(lock)
     }
@@ -103,12 +153,15 @@ impl Lockfile {
     pub fn write(&self, repo: &Path) -> Result<()> {
         validate_no_duplicate_names(&self.skills)
             .context("refusing to write lockfile with duplicate skill names")?;
+        validate_no_duplicate_subagents(&self.subagents)
+            .context("refusing to write lockfile with duplicate subagent names")?;
         let path = crate::paths::lockfile(repo);
-        let body = if self.skills.is_empty() && self.instructions.is_none() {
-            "# ateam lockfile — managed by `ateam`\n".to_string()
-        } else {
-            toml::to_string_pretty(self).context("serializing lockfile")?
-        };
+        let body =
+            if self.skills.is_empty() && self.subagents.is_empty() && self.instructions.is_none() {
+                "# ateam lockfile — managed by `ateam`\n".to_string()
+            } else {
+                toml::to_string_pretty(self).context("serializing lockfile")?
+            };
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
@@ -135,6 +188,27 @@ impl Lockfile {
     pub fn find(&self, name: &str) -> Option<&SkillEntry> {
         self.skills.iter().find(|s| s.name == name)
     }
+
+    pub fn upsert_subagent(&mut self, entry: SubagentEntry) -> bool {
+        if let Some(pos) = self.subagents.iter().position(|s| s.name == entry.name) {
+            self.subagents[pos] = entry;
+            true
+        } else {
+            self.subagents.push(entry);
+            false
+        }
+    }
+
+    pub fn remove_subagent(&mut self, name: &str) -> Option<SubagentEntry> {
+        self.subagents
+            .iter()
+            .position(|s| s.name == name)
+            .map(|pos| self.subagents.remove(pos))
+    }
+
+    pub fn find_subagent(&self, name: &str) -> Option<&SubagentEntry> {
+        self.subagents.iter().find(|s| s.name == name)
+    }
 }
 
 fn validate_no_duplicate_names(skills: &[SkillEntry]) -> Result<()> {
@@ -159,6 +233,28 @@ fn validate_subpaths(skills: &[SkillEntry]) -> Result<()> {
         }
         crate::source::sanitize_subpath(p)
             .with_context(|| format!("invalid `path` for skill `{}`", s.name))?;
+    }
+    Ok(())
+}
+
+fn validate_no_duplicate_subagents(subagents: &[SubagentEntry]) -> Result<()> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for s in subagents {
+        if !seen.insert(s.name.as_str()) {
+            bail!("duplicate subagent name `{}` in lockfile", s.name);
+        }
+    }
+    Ok(())
+}
+
+fn validate_subagent_subpaths(subagents: &[SubagentEntry]) -> Result<()> {
+    for s in subagents {
+        let Some(p) = s.path.as_deref() else { continue };
+        if s.source.starts_with("local:") {
+            continue;
+        }
+        crate::source::sanitize_subpath(p)
+            .with_context(|| format!("invalid `path` for subagent `{}`", s.name))?;
     }
     Ok(())
 }
@@ -203,8 +299,14 @@ mod tests {
 
     #[test]
     fn normalize_basic() {
-        assert_eq!(normalize_skill_name("Convex Best Practices").unwrap(), "convex-best-practices");
-        assert_eq!(normalize_skill_name("frontend-design").unwrap(), "frontend-design");
+        assert_eq!(
+            normalize_skill_name("Convex Best Practices").unwrap(),
+            "convex-best-practices"
+        );
+        assert_eq!(
+            normalize_skill_name("frontend-design").unwrap(),
+            "frontend-design"
+        );
         assert_eq!(normalize_skill_name("My_Skill").unwrap(), "my-skill");
     }
 
@@ -237,6 +339,7 @@ mod tests {
                     upstream: None,
                 },
             ],
+            subagents: Vec::new(),
             instructions: None,
         };
         assert!(validate_no_duplicate_names(&lock.skills).is_err());
@@ -246,6 +349,7 @@ mod tests {
     fn instructions_table_round_trips() {
         let lock = Lockfile {
             skills: Vec::new(),
+            subagents: Vec::new(),
             instructions: Some(InstructionsEntry::default()),
         };
         let s = toml::to_string_pretty(&lock).unwrap();
@@ -269,12 +373,20 @@ mod tests {
                 active: true,
                 upstream: None,
             }],
+            subagents: Vec::new(),
             instructions: None,
         };
         let serialized = toml::to_string(&lock).unwrap();
-        assert!(!serialized.contains("active"), "active field leaked: {}", serialized);
+        assert!(
+            !serialized.contains("active"),
+            "active field leaked: {}",
+            serialized
+        );
         let parsed: Lockfile = toml::from_str(&serialized).unwrap();
-        assert!(parsed.skills[0].active, "active should default to true on load");
+        assert!(
+            parsed.skills[0].active,
+            "active should default to true on load"
+        );
     }
 
     #[test]
@@ -292,10 +404,15 @@ mod tests {
                 active: false,
                 upstream: None,
             }],
+            subagents: Vec::new(),
             instructions: None,
         };
         let serialized = toml::to_string(&lock).unwrap();
-        assert!(serialized.contains("active = false"), "missing active=false: {}", serialized);
+        assert!(
+            serialized.contains("active = false"),
+            "missing active=false: {}",
+            serialized
+        );
         let parsed: Lockfile = toml::from_str(&serialized).unwrap();
         assert!(!parsed.skills[0].active);
     }
@@ -307,7 +424,10 @@ name = "a"
 source = "local:skills/a"
 "#;
         let parsed: Lockfile = toml::from_str(legacy).unwrap();
-        assert!(parsed.skills[0].active, "missing field should default to active=true");
+        assert!(
+            parsed.skills[0].active,
+            "missing field should default to active=true"
+        );
     }
 
     #[test]
@@ -328,6 +448,102 @@ source = "local:skills/a"
         let msg = format!("{:#}", err);
         assert!(msg.contains(".."), "error should mention `..`: {}", msg);
         assert!(msg.contains('a'), "error should name the skill: {}", msg);
+    }
+
+    #[test]
+    fn subagent_round_trips_minimal() {
+        let lock = Lockfile {
+            skills: Vec::new(),
+            subagents: vec![SubagentEntry {
+                name: "code-reviewer".into(),
+                source: "github:foo/bar".into(),
+                path: Some("agents/code-reviewer.md".into()),
+                git_ref: None,
+                file_sha: None,
+                harnesses: vec!["*".into()],
+                profiles: vec![],
+                project: None,
+                active: true,
+                upstream: None,
+            }],
+            instructions: None,
+        };
+        let serialized = toml::to_string_pretty(&lock).unwrap();
+        assert!(
+            serialized.contains("[[subagent]]"),
+            "missing table header: {}",
+            serialized
+        );
+        let parsed: Lockfile = toml::from_str(&serialized).unwrap();
+        assert_eq!(parsed.subagents.len(), 1);
+        assert_eq!(parsed.subagents[0].name, "code-reviewer");
+        assert!(parsed.subagents[0].active);
+    }
+
+    #[test]
+    fn duplicate_subagent_names_rejected() {
+        let entries = vec![
+            SubagentEntry {
+                name: "a".into(),
+                source: "local:agents/a.md".into(),
+                path: None,
+                git_ref: None,
+                file_sha: None,
+                harnesses: vec!["*".into()],
+                profiles: vec![],
+                project: None,
+                active: true,
+                upstream: None,
+            },
+            SubagentEntry {
+                name: "a".into(),
+                source: "local:agents/a.md".into(),
+                path: None,
+                git_ref: None,
+                file_sha: None,
+                harnesses: vec!["*".into()],
+                profiles: vec![],
+                project: None,
+                active: true,
+                upstream: None,
+            },
+        ];
+        assert!(validate_no_duplicate_subagents(&entries).is_err());
+    }
+
+    #[test]
+    fn empty_subagents_field_omitted_in_toml() {
+        let lock = Lockfile {
+            skills: Vec::new(),
+            subagents: Vec::new(),
+            instructions: None,
+        };
+        let serialized = toml::to_string(&lock).unwrap();
+        assert!(
+            !serialized.contains("subagent"),
+            "empty subagents leaked into output: {}",
+            serialized
+        );
+    }
+
+    #[test]
+    fn rejects_parent_dir_subpath_for_subagent_remote_source() {
+        let entries = vec![SubagentEntry {
+            name: "a".into(),
+            source: "github:foo/bar".into(),
+            path: Some("../../etc/passwd".into()),
+            git_ref: None,
+            file_sha: None,
+            harnesses: vec!["*".into()],
+            profiles: vec![],
+            project: None,
+            active: true,
+            upstream: None,
+        }];
+        let err = validate_subagent_subpaths(&entries).unwrap_err();
+        let msg = format!("{:#}", err);
+        assert!(msg.contains(".."));
+        assert!(msg.contains('a'));
     }
 
     #[test]

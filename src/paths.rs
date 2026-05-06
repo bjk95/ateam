@@ -59,8 +59,7 @@ pub fn write_pointer(repo: &Path) -> Result<()> {
 pub fn remove_pointer() -> Result<()> {
     let path = pointer_file()?;
     if path.exists() {
-        std::fs::remove_file(&path)
-            .with_context(|| format!("removing {}", path.display()))?;
+        std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
     }
     Ok(())
 }
@@ -89,7 +88,10 @@ fn expand_tilde(p: &Path) -> PathBuf {
 }
 
 fn toml_string(p: &Path) -> String {
-    let s = p.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+    let s = p
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
     format!("\"{}\"", s)
 }
 
@@ -120,6 +122,14 @@ pub fn local_skills_dir(repo: &Path) -> PathBuf {
     repo.join("skills")
 }
 
+pub fn local_subagents_dir(repo: &Path) -> PathBuf {
+    repo.join("agents")
+}
+
+pub fn local_subagent_path(repo: &Path, name: &str) -> PathBuf {
+    local_subagents_dir(repo).join(format!("{}.md", name))
+}
+
 pub fn instructions_dir(repo: &Path) -> PathBuf {
     repo.join("instructions")
 }
@@ -133,17 +143,30 @@ pub fn instructions_template(repo: &Path) -> PathBuf {
 
 /// Per-agent skill install path under a given install root (`~` or a project root).
 pub fn harness_skill_path(install_root: &Path, agent: &str, skill_name: &str) -> Result<PathBuf> {
-    let def = crate::harness::lookup(agent)
-        .ok_or_else(|| anyhow!("unknown agent `{}`", agent))?;
+    let def = crate::harness::lookup(agent).ok_or_else(|| anyhow!("unknown agent `{}`", agent))?;
     let subdir = def
         .skills_subdir
         .ok_or_else(|| anyhow!("agent `{}` has no skills directory", agent))?;
     Ok(install_root.join(subdir).join(skill_name))
 }
 
+/// Per-agent subagent install path under a given install root.
+/// Returns `Ok(None)` when the harness has no subagents concept (e.g. opencode,
+/// gemini today), so callers can skip it without treating it as an error.
+pub fn harness_subagent_path(
+    install_root: &Path,
+    agent: &str,
+    name: &str,
+) -> Result<Option<PathBuf>> {
+    let def = crate::harness::lookup(agent).ok_or_else(|| anyhow!("unknown agent `{}`", agent))?;
+    Ok(def
+        .subagents_subdir
+        .map(|sub| install_root.join(sub).join(format!("{}.md", name))))
+}
+
 pub fn home_dir() -> Result<PathBuf> {
-    let dirs = directories::BaseDirs::new()
-        .ok_or_else(|| anyhow!("could not determine home dir"))?;
+    let dirs =
+        directories::BaseDirs::new().ok_or_else(|| anyhow!("could not determine home dir"))?;
     Ok(dirs.home_dir().to_path_buf())
 }
 
@@ -192,5 +215,49 @@ mod tests {
         let root = PathBuf::from("/tmp/install-root");
         let err = harness_skill_path(&root, "no-such-agent", "foo").unwrap_err();
         assert!(format!("{err}").contains("unknown agent"));
+    }
+
+    #[test]
+    fn harness_subagent_path_matches_known_layout() {
+        let root = PathBuf::from("/tmp/install-root");
+        assert_eq!(
+            harness_subagent_path(&root, "claude-code", "code-reviewer").unwrap(),
+            Some(PathBuf::from(
+                "/tmp/install-root/.claude/agents/code-reviewer.md"
+            )),
+        );
+        assert_eq!(
+            harness_subagent_path(&root, "codex", "code-reviewer").unwrap(),
+            Some(PathBuf::from(
+                "/tmp/install-root/.codex/agents/code-reviewer.md"
+            )),
+        );
+    }
+
+    #[test]
+    fn harness_subagent_path_returns_none_for_unsupported_harness() {
+        let root = PathBuf::from("/tmp/install-root");
+        assert!(harness_subagent_path(&root, "opencode", "foo")
+            .unwrap()
+            .is_none());
+        assert!(harness_subagent_path(&root, "gemini", "foo")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn harness_subagent_path_rejects_unknown_agent() {
+        let root = PathBuf::from("/tmp/install-root");
+        let err = harness_subagent_path(&root, "no-such-agent", "foo").unwrap_err();
+        assert!(format!("{err}").contains("unknown agent"));
+    }
+
+    #[test]
+    fn local_subagent_path_appends_md_extension() {
+        let repo = PathBuf::from("/tmp/repo");
+        assert_eq!(
+            local_subagent_path(&repo, "code-reviewer"),
+            PathBuf::from("/tmp/repo/agents/code-reviewer.md"),
+        );
     }
 }
