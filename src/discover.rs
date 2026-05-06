@@ -110,12 +110,14 @@ pub struct UnmanagedSkill {
 }
 
 /// Conventional agent-skills directories ateam scans, in canonical order.
+/// Derived from the agent registry plus the cross-tool `.agents/skills/`
+/// alias (honored by Gemini and OpenCode but not bound to any single agent).
 pub fn agent_skill_dirs(home: &Path) -> Vec<PathBuf> {
-    vec![
-        home.join(".claude").join("skills"),
-        home.join(".codex").join("skills"),
-        home.join(".agents").join("skills"),
-    ]
+    let mut dirs: Vec<PathBuf> = crate::agents::all()
+        .filter_map(|a| a.skills_subdir.map(|s| home.join(s)))
+        .collect();
+    dirs.push(home.join(".agents").join("skills"));
+    dirs
 }
 
 /// Scan the agent skills dirs for skills not yet adopted by ateam.

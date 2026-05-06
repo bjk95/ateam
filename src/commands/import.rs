@@ -58,8 +58,13 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
 
     let installed = find_installed(home, &normalized).ok_or_else(|| {
         anyhow!(
-            "no installed skill found named `{}` in ~/.claude/skills/, ~/.codex/skills/, or ~/.agents/skills/",
-            normalized
+            "no installed skill found named `{}` in {}",
+            normalized,
+            crate::discover::agent_skill_dirs(home)
+                .iter()
+                .map(|p| crate::paths::display_path(p))
+                .collect::<Vec<_>>()
+                .join(", "),
         )
     })?;
 
@@ -99,7 +104,14 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
 // plus the global instructions, into the lockfile.
 
 fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
-    println!("ateam: scanning ~/.claude/skills, ~/.codex/skills, ~/.agents/skills...");
+    println!(
+        "ateam: scanning {}...",
+        crate::discover::agent_skill_dirs(home)
+            .iter()
+            .map(|p| crate::paths::display_path(p))
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
 
     let mut lock = Lockfile::load(repo)?;
     let outcome = bulk_import_skills(repo, home, &mut lock)?;
