@@ -55,7 +55,7 @@ Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 | `<repo>` (positional) | `owner/repo` shorthand, full git URL, or local path |
 | `--list` | Print discovered skills, don't install |
 | `--skill <name>` | Specific skill names, repeatable; `*` = all |
-| `--all` | Equivalent to `--skill '*'` |
+| `--all` | Implies `--skill '*'`, `--agent '*'`, and `-y` (Vercel-compat triple-flag override) |
 | `-a` / `--agent <name>` | Target agents, repeatable; `*` = all enabled |
 | `-y` / `--yes` | Non-interactive; in an unregistered git repo, auto-registers + project-scopes |
 | `-g` / `--global` | Force global scope (overrides cwd auto-detect and the auto-register prompt) |

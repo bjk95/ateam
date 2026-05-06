@@ -184,7 +184,7 @@ pub struct AddArgs {
     #[arg(long, value_name = "NAME")]
     pub skill: Vec<String>,
 
-    /// Equivalent to --skill '*'.
+    /// Vercel-compat: implies --skill '*', --agent '*', and -y.
     #[arg(long)]
     pub all: bool,
 
