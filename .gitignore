@@ -1,5 +1,7 @@
 /target
 
+.claude/
+
 # Astro / Starlight site
 site/node_modules
 site/dist
