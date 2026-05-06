@@ -1,6 +1,6 @@
 [package]
 name = "ateam"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Multi-machine AI skills sync via a single git repo."
 repository = "https://github.com/bjk95/ateam"
