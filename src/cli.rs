@@ -1,9 +1,78 @@
 use anyhow::Result;
+use clap::builder::styling::{AnsiColor, Styles};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+const BANNER_LINES: &[&str] = &[
+    " █████╗ ████████╗███████╗ █████╗ ███╗   ███╗",
+    "██╔══██╗╚══██╔══╝██╔════╝██╔══██╗████╗ ████║",
+    "███████║   ██║   █████╗  ███████║██╔████╔██║",
+    "██╔══██║   ██║   ██╔══╝  ██╔══██║██║╚██╔╝██║",
+    "██║  ██║   ██║   ███████╗██║  ██║██║ ╚═╝ ██║",
+    "╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝",
+];
+
+// Subtle truecolor gradient from darker teal-cyan (top) to lighter cyan (bottom).
+// Six rows, one RGB tuple each. Modern terminals (iTerm2, Ghostty, Warp, VS Code,
+// Terminal.app) all render 24-bit color; older ones may render the nearest 256-color
+// approximation, which still preserves the shading direction.
+const BANNER_GRADIENT: &[(u8, u8, u8)] = &[
+    (0, 156, 178),
+    (0, 178, 198),
+    (0, 198, 215),
+    (28, 215, 230),
+    (60, 230, 240),
+    (95, 245, 250),
+];
+
+pub fn banner() -> String {
+    let use_color = console::colors_enabled();
+    BANNER_LINES
+        .iter()
+        .zip(BANNER_GRADIENT.iter())
+        .map(|(line, (r, g, b))| {
+            if use_color {
+                // Truecolor + bold: ESC[1;38;2;R;G;Bm  …  ESC[0m
+                format!("\x1b[1;38;2;{};{};{}m{}\x1b[0m", r, g, b, line)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// True when the invocation will land in clap's help/error renderer
+/// (bare `ateam`, `--help`, `-h`). Banner is printed before clap takes
+/// over so its rendering doesn't touch cursor state in a way that
+/// overwrites lines above (some terminals + clap's error path
+/// interact badly with `before_help`).
+pub fn shows_help() -> bool {
+    let mut args = std::env::args().skip(1);
+    let first = match args.next() {
+        Some(a) => a,
+        None => return true, // bare invocation
+    };
+    matches!(first.as_str(), "--help" | "-h" | "help")
+}
+
+pub fn parse() -> Cli {
+    Cli::parse()
+}
+
+const HELP_STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Cyan.on_default().bold())
+    .usage(AnsiColor::Cyan.on_default().bold())
+    .literal(AnsiColor::White.on_default().bold())
+    .placeholder(AnsiColor::Cyan.on_default());
+
 #[derive(Parser)]
-#[command(name = "ateam", version, about = "Multi-machine AI skills sync")]
+#[command(
+    name = "ateam",
+    version,
+    about = "Multi-machine AI skills sync",
+    styles = HELP_STYLES,
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -11,6 +80,10 @@ pub struct Cli {
     /// Skip auto pull/commit/push for this invocation.
     #[arg(long, global = true)]
     pub no_sync: bool,
+
+    /// Show extra detail (paths, SHAs, per-agent links).
+    #[arg(short = 'v', long, global = true)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand)]

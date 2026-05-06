@@ -2,7 +2,9 @@ use crate::config::MachineConfig;
 use crate::lockfile::Lockfile;
 use crate::manifest::Manifest;
 use crate::paths;
+use crate::ui;
 use anyhow::Result;
+use console::style;
 
 pub fn run() -> Result<()> {
     let repo = paths::resolve_repo()?;
@@ -10,39 +12,67 @@ pub fn run() -> Result<()> {
     let manifest = Manifest::load(&repo)?;
     let machine = MachineConfig::load(&repo)?;
 
-    println!("repo: {}", repo.display());
-    println!("profiles: [{}]", machine.profiles.join(", "));
-    if !machine.projects.is_empty() {
-        println!("projects:");
-        for (alias, path) in &machine.projects {
-            println!("  - {} → {}", alias, path.display());
-        }
+    let dangling = count_dangling(&manifest);
+
+    // Headline: ✓ when healthy, ⚠ when dangling links exist.
+    let suffix = if machine.profiles.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", machine.profiles.join(", "))
+    };
+    let headline = format!("ateam{}", suffix);
+    if dangling == 0 {
+        ui::ok(&headline);
+    } else {
+        ui::warn(&headline);
     }
-    println!();
 
-    println!("locked skills: {}", lock.skills.len());
-    println!("manifest entries: {}", manifest.entries.len());
+    // Body lines indented two spaces under the headline.
+    let n = lock.skills.len();
+    ui::plain(format!(
+        "  {} {} installed",
+        n,
+        if n == 1 { "skill" } else { "skills" }
+    ));
+    if !machine.projects.is_empty() {
+        let aliases: Vec<&str> = machine.projects.keys().map(|s| s.as_str()).collect();
+        let pn = aliases.len();
+        ui::plain(format!(
+            "  {} {}: {}",
+            pn,
+            if pn == 1 { "project" } else { "projects" },
+            aliases.join(", ")
+        ));
+    }
+    if dangling > 0 {
+        ui::plain(format!(
+            "  {}  {} broken links — run: ateam apply",
+            style("✗").red(),
+            dangling
+        ));
+    }
 
-    let mut dangling = 0usize;
+    ui::detail(format!("repo: {}", paths::display_path(&repo)));
+    ui::detail(format!("manifest: {} entries", manifest.entries.len()));
+
+    Ok(())
+}
+
+fn count_dangling(manifest: &Manifest) -> usize {
+    let mut n = 0;
     for entry in &manifest.entries {
         match std::fs::symlink_metadata(&entry.path) {
             Ok(meta) => {
                 if meta.file_type().is_symlink() {
                     if let Ok(target) = std::fs::read_link(&entry.path) {
                         if !target.exists() {
-                            dangling += 1;
+                            n += 1;
                         }
                     }
                 }
             }
-            Err(_) => dangling += 1,
+            Err(_) => n += 1,
         }
     }
-    if dangling > 0 {
-        println!("dangling/missing symlinks: {} (run `ateam apply` to repair)", dangling);
-    } else {
-        println!("symlinks: clean");
-    }
-
-    Ok(())
+    n
 }

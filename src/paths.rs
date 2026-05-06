@@ -142,3 +142,18 @@ pub fn home_dir() -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("could not determine home dir"))?;
     Ok(dirs.home_dir().to_path_buf())
 }
+
+/// Render a path with `$HOME` collapsed to `~`. Falls back to the absolute
+/// display when the path isn't under home or when home is unresolvable.
+pub fn display_path(p: &Path) -> String {
+    if let Some(dirs) = directories::BaseDirs::new() {
+        let home = dirs.home_dir();
+        if let Ok(rest) = p.strip_prefix(home) {
+            if rest.as_os_str().is_empty() {
+                return "~".to_string();
+            }
+            return format!("~/{}", rest.display());
+        }
+    }
+    p.display().to_string()
+}

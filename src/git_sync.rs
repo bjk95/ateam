@@ -1,3 +1,4 @@
+use crate::ui;
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::{Command, Output};
@@ -28,7 +29,7 @@ pub fn pre_pull(repo: &Path) -> Result<()> {
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
     if is_offline(&stderr) {
-        eprintln!("ateam: warning — remote unreachable; using local lockfile state");
+        ui::warn("remote unreachable; using local lockfile state");
         return Ok(());
     }
     if stderr.contains("Not possible to fast-forward") || stderr.contains("diverging branches") {
@@ -41,10 +42,8 @@ pub fn pre_pull(repo: &Path) -> Result<()> {
         // No upstream configured for current branch yet — fine.
         return Ok(());
     }
-    eprintln!(
-        "ateam: warning — `git pull --ff-only` failed:\n{}",
-        stderr.trim()
-    );
+    ui::warn("`git pull --ff-only` failed");
+    ui::detail(stderr.trim().to_string());
     Ok(())
 }
 
@@ -64,10 +63,8 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
 
     let commit = run(repo, &["commit", "-m", message])?;
     if !commit.status.success() {
-        eprintln!(
-            "ateam: warning — git commit failed:\n{}",
-            String::from_utf8_lossy(&commit.stderr).trim()
-        );
+        ui::warn("git commit failed");
+        ui::detail(String::from_utf8_lossy(&commit.stderr).trim().to_string());
         return Ok(false);
     }
 
@@ -77,7 +74,7 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
 
 fn push_with_retry(repo: &Path) -> Result<()> {
     if !has_remote(repo)? {
-        eprintln!("ateam: note — no git remote configured; skipping push");
+        ui::detail("no git remote configured; skipping push");
         return Ok(());
     }
     let attempt = run(repo, &["push"])?;
@@ -86,37 +83,32 @@ fn push_with_retry(repo: &Path) -> Result<()> {
     }
     let stderr = String::from_utf8_lossy(&attempt.stderr);
     if is_offline(&stderr) {
-        eprintln!("ateam: warning — remote unreachable, commit retained locally");
+        ui::warn("remote unreachable, commit retained locally");
         return Ok(());
     }
     if stderr.contains("rejected") && (stderr.contains("non-fast-forward") || stderr.contains("fetch first")) {
-        eprintln!("ateam: remote moved during op, rebasing and retrying push…");
+        let step = ui::step("remote moved, rebasing and retrying push");
         let rebase = run(repo, &["pull", "--rebase"])?;
         if !rebase.status.success() {
-            eprintln!(
-                "ateam: warning — pull --rebase failed; commit retained locally:\n{}",
-                String::from_utf8_lossy(&rebase.stderr).trim()
-            );
+            step.fail("rebase failed; commit retained locally");
+            ui::detail(String::from_utf8_lossy(&rebase.stderr).trim().to_string());
             return Ok(());
         }
         let retry = run(repo, &["push"])?;
         if retry.status.success() {
+            step.ok("rebased and pushed");
             return Ok(());
         }
-        eprintln!(
-            "ateam: warning — push still failed after rebase, commit retained locally:\n{}",
-            String::from_utf8_lossy(&retry.stderr).trim()
-        );
+        step.fail("push still failed after rebase; commit retained locally");
+        ui::detail(String::from_utf8_lossy(&retry.stderr).trim().to_string());
         return Ok(());
     }
     if stderr.contains("does not appear to be a git repository") {
-        eprintln!("ateam: note — git remote not reachable; skipping push");
+        ui::detail("git remote not reachable; skipping push");
         return Ok(());
     }
-    eprintln!(
-        "ateam: warning — git push failed:\n{}",
-        stderr.trim()
-    );
+    ui::warn("git push failed");
+    ui::detail(stderr.trim().to_string());
     Ok(())
 }
 
