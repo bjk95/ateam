@@ -11,8 +11,6 @@ mod self_update;
 mod source;
 mod ui;
 
-use clap::Parser;
-
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -23,7 +21,7 @@ fn main() {
         .without_time()
         .init();
 
-    let cli = cli::Cli::parse();
+    let cli = cli::parse();
     ui::set_verbose(cli.verbose);
 
     if !matches!(cli.command, cli::Command::Upgrade) {

@@ -1,9 +1,48 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::builder::styling::{AnsiColor, Styles};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use console::style;
 use std::path::PathBuf;
 
+const BANNER_LINES: &[&str] = &[
+    " █████╗ ████████╗███████╗ █████╗ ███╗   ███╗",
+    "██╔══██╗╚══██╔══╝██╔════╝██╔══██╗████╗ ████║",
+    "███████║   ██║   █████╗  ███████║██╔████╔██║",
+    "██╔══██║   ██║   ██╔══╝  ██╔══██║██║╚██╔╝██║",
+    "██║  ██║   ██║   ███████╗██║  ██║██║ ╚═╝ ██║",
+    "╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝",
+];
+
+fn banner() -> String {
+    BANNER_LINES
+        .iter()
+        .map(|l| format!("{}", style(l).cyan().bold()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Parse argv, injecting the colored banner as `before_help`.
+/// `before_help` only shows on `--help` / `-h`, never on a successful subcommand
+/// invocation, so the banner doesn't add startup noise.
+pub fn parse() -> Cli {
+    let cmd = Cli::command().before_help(banner());
+    let matches = cmd.get_matches();
+    Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit())
+}
+
+const HELP_STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Cyan.on_default().bold())
+    .usage(AnsiColor::Cyan.on_default().bold())
+    .literal(AnsiColor::White.on_default().bold())
+    .placeholder(AnsiColor::Cyan.on_default());
+
 #[derive(Parser)]
-#[command(name = "ateam", version, about = "Multi-machine AI skills sync")]
+#[command(
+    name = "ateam",
+    version,
+    about = "Multi-machine AI skills sync",
+    styles = HELP_STYLES,
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
