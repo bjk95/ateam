@@ -3,6 +3,15 @@ title: CLI
 description: Every ateam command and flag.
 ---
 
+## Global flags
+
+These work on every subcommand.
+
+| Flag | Behavior |
+|---|---|
+| `--no-sync` | Skip auto pull/commit/push for this invocation. Equivalent: `ATEAM_NO_SYNC=1`. |
+| `-v` / `--verbose` | Show extra detail (paths, SHAs, per-agent links). |
+
 ## `ateam init`
 
 Bootstrap a fresh ateam-config repo or clone an existing one.
@@ -23,8 +32,13 @@ Materialize the lockfile (active entries only).
 ateam apply [--dry-run] [-a <agent>...] [--project <alias>] [--force]
 ```
 
-`--force` moves any existing real directory at a target path aside to
-`<name>.bak.<unix-ts>` instead of refusing.
+If a real directory already sits at a target path (e.g. a skill installed by
+hand or by `npx skills`), apply auto-heals it: if its contents match the
+snapshot at `<repo>/skills/<name>/` byte-for-byte, ateam removes the dir and
+replaces it with a symlink. No `--force` needed and no data loss is possible
+because the snapshot already has the same bytes. If the contents don't match,
+apply refuses — `--force` is the escape hatch and moves the conflicting
+directory aside to `<name>.bak.<unix-ts>` rather than deleting it.
 
 ## `ateam status`
 
@@ -49,6 +63,15 @@ Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 | `--project <alias>` | Install into a registered project |
 | `--ref <ref>` | Pin to a specific git ref/tag/commit |
 | `--no-sync` | Skip auto pull/commit/push for this run |
+
+### skills.sh registry fallback
+
+When `--skill <name>` doesn't match anything in the cloned GitHub repo's tree,
+ateam falls back to the [skills.sh](https://skills.sh) blob endpoint and
+installs from the registry's snapshot. Mirrors `npx skills add` — covers
+skills that have been renamed, moved, or removed upstream but are still
+served from the registry's cache. Only fires for github sources with an
+explicit `--skill <name>` (not `--all` / `*`).
 
 ## `ateam skills update`
 
@@ -92,15 +115,55 @@ ateam skills list                  # all locked skills (active + [off])
 ateam skills list --project canva  # only entries scoped to one project
 ```
 
-## `ateam skills import`
+## `ateam skills show`
 
-Adopt an installed-locally skill into the synced lockfile.
+Print the `SKILL.md` for a locked skill to stdout. Reads the snapshot at
+`<repo>/skills/<name>/SKILL.md` (or the `local:` path for user-authored skills).
+Useful for piping into `less`, `grep`, or another agent.
 
 ```bash
-ateam skills import <name>                            # snapshot into <repo>/skills/
-ateam skills import <name> --upstream github:foo/bar  # track upstream instead
-ateam skills import <name> --project canva            # tag with project alias
+ateam skills show deploy-to-vercel
+ateam skills show deploy-to-vercel | less
 ```
+
+If the snapshot is missing, ateam tells you to run `ateam apply` first.
+
+## `ateam skills find`
+
+Search the [skills.sh](https://skills.sh) registry. Two modes:
+
+```bash
+ateam skills find deploy vercel     # non-interactive: print matches and exit
+ateam skills find                   # interactive picker (TTY only)
+```
+
+Pipe-friendly. The non-interactive form prints `owner/repo --skill <name>` lines
+you can feed straight into `ateam skills add`. Run from a non-TTY shell with no
+query and ateam prints a two-step hint instead of opening a picker.
+
+## `ateam skills import`
+
+Adopt an installed-locally skill (or your global `CLAUDE.md` / `AGENTS.md`) into
+the synced lockfile.
+
+```bash
+ateam skills import                                   # bulk: every skill on disk + instructions
+ateam skills import <name>                            # snapshot a single skill into <repo>/skills/
+ateam skills import <name> --upstream github:foo/bar  # track upstream instead of snapshotting
+ateam skills import <name> --project canva            # tag with project alias
+ateam skills import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
+```
+
+Bulk mode (no name) walks `~/.claude/skills`, `~/.codex/skills`, and
+`~/.agents/skills`, plus the global `CLAUDE.md` / `AGENTS.md`. When the two
+instruction files differ, ateam shows an interactive picker so you choose which
+becomes the canonical template. Orphan snapshot directories (already in
+`<repo>/skills/` but missing from the lockfile) are adopted instead of erroring.
+
+For each adopted skill, ateam also auto-discovers upstream by inspecting the
+on-disk skill folder for a `.git/config` or sibling git checkout — so a skill
+imported from a local clone of `github.com/foo/bar` gets a `github:foo/bar`
+source automatically. Pass `--upstream` to override.
 
 ## `ateam upgrade`
 
@@ -130,3 +193,29 @@ ateam project remove <alias>         # forget
 ```
 
 `add` accepts `register` as a hidden alias for muscle memory.
+
+## `ateam remote`
+
+Manage the ateam-config repo's git remote without dropping into `git -C`.
+
+```bash
+ateam remote add <git-url>           # set origin and push current branch upstream
+ateam remote list                    # print configured remotes (`git remote -v`)
+```
+
+`remote add` refuses to clobber an existing `origin` and rolls itself back if
+the initial push fails (so you don't end up half-configured).
+
+## `ateam validate`
+
+Lint the instructions template at `<repo>/instructions/instructions.md.hbs`.
+Checks that every Handlebars identifier referenced in the template is either a
+declared profile or one of the reserved identifiers (`claude`, `codex`,
+`hostname`).
+
+```bash
+ateam validate
+```
+
+Exits zero if the template is missing (nothing to validate) or all identifiers
+are declared. Exits non-zero with a list of undeclared identifiers otherwise.
