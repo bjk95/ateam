@@ -56,16 +56,18 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
     Ok(LinkOutcome::Created)
 }
 
-/// Atomically materialize a fetched skill into the cache.
+/// Atomically materialize a fetched skill into `<repo>/skills/<name>/`.
 ///
 /// `prepare()` returns a unique tmp dir to write into. `commit()` renames it
-/// into the final cache slot. Failure between the two leaves the tmp untouched
-/// (caller can call `sweep_tmp` on next apply to clean up).
+/// into the final snapshot slot. Failure between the two leaves the tmp
+/// untouched (caller can call `sweep_tmp` on next apply to clean up). The
+/// snapshot lives under `skills/` so it's tracked by git and travels to other
+/// machines as part of the ateam-config repo — no per-machine refetch needed.
 pub fn prepare_cache_slot(repo: &Path, skill_name: &str) -> Result<CacheSlot> {
-    let cache = crate::paths::cache_dir(repo);
+    let dest_root = crate::paths::local_skills_dir(repo);
     let tmp_root = crate::paths::cache_tmp_dir(repo);
-    std::fs::create_dir_all(&cache)
-        .with_context(|| format!("creating {}", cache.display()))?;
+    std::fs::create_dir_all(&dest_root)
+        .with_context(|| format!("creating {}", dest_root.display()))?;
     std::fs::create_dir_all(&tmp_root)
         .with_context(|| format!("creating {}", tmp_root.display()))?;
     let suffix: u64 = rand::random();
@@ -76,7 +78,7 @@ pub fn prepare_cache_slot(repo: &Path, skill_name: &str) -> Result<CacheSlot> {
     std::fs::create_dir_all(&tmp).with_context(|| format!("creating {}", tmp.display()))?;
     Ok(CacheSlot {
         tmp,
-        final_path: cache.join(skill_name),
+        final_path: dest_root.join(skill_name),
     })
 }
 

@@ -102,6 +102,36 @@ fn check_and_refetch(
     source: &Source,
     entry: &crate::lockfile::SkillEntry,
 ) -> Result<Option<String>> {
+    // Registry-resolved entries (path is None, source is github): refresh by
+    // re-hitting skills.sh's blob endpoint and comparing hashes.
+    if entry.path.is_none() {
+        if let Source::Github { owner, repo: r } = source {
+            let slug = crate::source::skills_sh::to_slug(&entry.name);
+            let download = match crate::source::skills_sh::fetch(owner, r, &slug)? {
+                Some(d) => d,
+                None => return Ok(None),
+            };
+            let latest = match download.hash.clone() {
+                Some(h) => h,
+                None => return Ok(None),
+            };
+            if Some(&latest) == entry.tree_sha.as_ref() {
+                return Ok(None);
+            }
+            let slot = install::prepare_cache_slot(repo, &entry.name)?;
+            for file in &download.files {
+                let dest = slot.tmp.join(&file.path);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&dest, &file.contents)?;
+            }
+            slot.commit()?;
+            return Ok(Some(latest));
+        }
+        return Ok(None);
+    }
+
     let path = match &entry.path {
         Some(p) => p.clone(),
         None => return Ok(None),

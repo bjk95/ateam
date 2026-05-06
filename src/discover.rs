@@ -12,6 +12,11 @@ pub struct DiscoveredSkill {
     pub dir: PathBuf,
     /// Path of SKILL.md relative to the package root (e.g. `skills/foo/SKILL.md`).
     pub rel_skill_md: PathBuf,
+    /// Authoritative version hash carried by the source (e.g., the
+    /// `skillsComputedHash` returned by skills.sh's blob endpoint). When set,
+    /// `install_one` uses this verbatim as the lockfile's `tree_sha` instead
+    /// of computing one from the GitHub tree or from local content.
+    pub source_hash: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,5 +89,6 @@ fn parse_skill_md(root: &Path, file: &Path) -> Result<Option<DiscoveredSkill>> {
         description: frontmatter.description,
         dir,
         rel_skill_md,
+        source_hash: None,
     }))
 }

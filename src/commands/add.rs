@@ -272,7 +272,8 @@ fn resolve_via_registry(
         match crate::discover::walk_package(&skill_dir) {
             Ok(mut new_skills) if !new_skills.is_empty() => {
                 ui::diamond(format!("Resolved `{}` via skills.sh", normalized));
-                let added = new_skills.remove(0);
+                let mut added = new_skills.remove(0);
+                added.source_hash = download.hash.clone();
                 found_names.insert(added.name.clone());
                 discovered.push(added);
             }
@@ -393,17 +394,22 @@ fn install_one(
 
     let canonical = match source {
         Source::Local { .. } => {
-            // For local sources, point straight at the on-disk source dir.
-            // Don't copy into the cache — symlinks resolve to the live source.
+            // For local sources whose path doesn't already point under
+            // skills/<name>/, leave the symlink target at the live source dir.
+            // For local:skills/<name>/ (the canonical author-in-repo case),
+            // skill.dir already IS skills/<name>/.
             skill.dir.clone()
         }
         Source::Github { .. } | Source::Git { .. } => {
+            // Snapshot into <repo>/skills/<name>/ so the content travels with
+            // the ateam-config repo via git instead of being refetched on
+            // every machine.
             let slot = install::prepare_cache_slot(repo, &skill.name)?;
             install::copy_dir_recursive(&skill.dir, &slot.tmp)?;
             slot.commit()?
         }
     };
-    ui::detail(format!("cached at {}", paths::display_path(&canonical)));
+    ui::detail(format!("snapshotted to {}", paths::display_path(&canonical)));
 
     let agent_list: Vec<String> = if args.agents.is_empty() || args.agents.iter().any(|a| a == "*") {
         vec!["*".into()]
@@ -437,32 +443,48 @@ fn install_one(
         }
     }
 
-    let tree_sha = match source {
-        Source::Github { owner, repo: r } => {
-            let git_ref = args
-                .r#ref
-                .clone()
-                .unwrap_or_else(|| github::default_branch_fallback().to_string());
-            let commit_sha = github::resolve_ref(owner, r, &git_ref).unwrap_or_else(|e| {
-                tracing::warn!("could not resolve ref for {}/{}@{}: {}", owner, r, git_ref, e);
-                String::new()
-            });
-            if commit_sha.is_empty() {
-                None
-            } else {
-                let path_str = rel_skill_dir.to_string_lossy().into_owned();
-                github::subtree_sha(owner, r, &commit_sha, &path_str).ok().flatten()
+    // Always pin a version. Order: registry-provided hash (skills.sh blob),
+    // upstream-provided sha (github tree / git ls-remote), content hash of the
+    // local snapshot. Falling all the way back to content_hash guarantees every
+    // entry has a `tree_sha` field, so consumers can compare without nullchecks.
+    let tree_sha = skill
+        .source_hash
+        .clone()
+        .or_else(|| match source {
+            Source::Github { owner, repo: r } => {
+                let git_ref = args
+                    .r#ref
+                    .clone()
+                    .unwrap_or_else(|| github::default_branch_fallback().to_string());
+                let commit_sha = github::resolve_ref(owner, r, &git_ref).unwrap_or_else(|e| {
+                    tracing::warn!("could not resolve ref for {}/{}@{}: {}", owner, r, git_ref, e);
+                    String::new()
+                });
+                if commit_sha.is_empty() {
+                    None
+                } else {
+                    let path_str = rel_skill_dir.to_string_lossy().into_owned();
+                    github::subtree_sha(owner, r, &commit_sha, &path_str)
+                        .ok()
+                        .flatten()
+                }
             }
-        }
-        Source::Git { url } => {
-            let git_ref = args.r#ref.clone().unwrap_or_else(|| "HEAD".into());
-            crate::source::git::ls_remote_sha(url, &git_ref).ok().flatten()
-        }
-        Source::Local { .. } => crate::source::local::content_hash(&canonical).ok(),
-    };
+            Source::Git { url } => {
+                let git_ref = args.r#ref.clone().unwrap_or_else(|| "HEAD".into());
+                crate::source::git::ls_remote_sha(url, &git_ref).ok().flatten()
+            }
+            Source::Local { .. } => None,
+        })
+        .or_else(|| crate::source::local::content_hash(&canonical).ok());
 
     let entry_path = match source {
         Source::Local { path } => Some(path.to_string_lossy().into_owned()),
+        _ if skill.source_hash.is_some() => {
+            // Registry-resolved skills (skills.sh blob): no upstream subpath.
+            // The snapshot is canonical; we don't pretend to know where in the
+            // upstream tree it lives.
+            None
+        }
         _ => Some(rel_skill_dir.to_string_lossy().into_owned()),
     };
 
