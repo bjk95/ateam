@@ -124,6 +124,14 @@ pub fn local_skills_dir(repo: &Path) -> PathBuf {
     repo.join("skills")
 }
 
+pub fn instructions_dir(repo: &Path) -> PathBuf {
+    repo.join("instructions")
+}
+
+pub fn instructions_template(repo: &Path) -> PathBuf {
+    crate::instructions::template_path(repo)
+}
+
 // ---------------------------------------------------------------------------
 // Per-agent install targets
 

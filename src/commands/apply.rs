@@ -1,4 +1,5 @@
 use crate::cli::ApplyArgs;
+use crate::commands::apply_instructions;
 use crate::config::{MachineConfig, RepoConfig};
 use crate::git_sync;
 use crate::install;
@@ -14,7 +15,7 @@ use std::path::{Path, PathBuf};
 pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     let repo = paths::resolve_repo()?;
     let repo_cfg = RepoConfig::load(&repo)?;
-    let machine = MachineConfig::load(&repo)?;
+    let mut machine = MachineConfig::load(&repo)?;
 
     if git_sync::enabled(no_sync) {
         git_sync::pre_pull(&repo)?;
@@ -171,13 +172,38 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         }
     }
 
+    // Instructions render-and-write pass.
+    let home = paths::home_dir()?;
+    let instructions_outcome = apply_instructions::apply(
+        &repo,
+        &home,
+        &repo_cfg,
+        &mut updated_lock,
+        &mut machine,
+        &prev_manifest,
+        &mut new_manifest,
+        args.dry_run,
+        args.force,
+    )?;
+    let instructions_written = instructions_outcome.written;
+    if instructions_outcome.lockfile_dirty {
+        lockfile_dirty = true;
+    }
+    if instructions_outcome.instructions_skip_set && !args.dry_run {
+        machine.write(&repo)?;
+    }
+
     // Removal: paths in old manifest not in new plan get unlinked.
     if !args.dry_run {
         let new_paths: HashSet<&Path> =
             new_manifest.entries.iter().map(|e| e.path.as_path()).collect();
         for prev in &prev_manifest.entries {
             if !new_paths.contains(prev.path.as_path()) {
-                if let Err(e) = install::uninstall_path(&prev.path) {
+                let result = match prev.kind {
+                    EntryKind::Symlink => install::uninstall_path(&prev.path),
+                    EntryKind::Copy => install::uninstall_copy(&prev.path),
+                };
+                if let Err(e) = result {
                     ui::warn(format!(
                         "couldn't remove {}: {:#}",
                         paths::display_path(&prev.path),
@@ -217,7 +243,17 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             skill_word(materialized)
         ));
     } else {
-        ui::ok(format!("applied {} {}", materialized, skill_word(materialized)));
+        let suffix = if instructions_written > 0 {
+            format!(" + {} instruction file(s)", instructions_written)
+        } else {
+            String::new()
+        };
+        ui::ok(format!(
+            "applied {} {}{}",
+            materialized,
+            skill_word(materialized),
+            suffix
+        ));
     }
 
     Ok(())

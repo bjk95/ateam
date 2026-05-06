@@ -7,6 +7,27 @@ use std::path::Path;
 pub struct Lockfile {
     #[serde(default, rename = "skill")]
     pub skills: Vec<SkillEntry>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<InstructionsEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstructionsEntry {
+    #[serde(default = "default_instructions_agents", skip_serializing_if = "is_default_agents")]
+    pub agents: Vec<String>,
+}
+
+fn default_instructions_agents() -> Vec<String> {
+    vec!["*".into()]
+}
+
+impl Default for InstructionsEntry {
+    fn default() -> Self {
+        Self {
+            agents: default_instructions_agents(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +67,10 @@ impl Lockfile {
     pub fn load(repo: &Path) -> Result<Self> {
         let path = crate::paths::lockfile(repo);
         if !path.exists() {
-            return Ok(Self { skills: Vec::new() });
+            return Ok(Self {
+                skills: Vec::new(),
+                instructions: None,
+            });
         }
         let raw = std::fs::read_to_string(&path)
             .with_context(|| format!("reading {}", path.display()))?;
@@ -61,7 +85,7 @@ impl Lockfile {
         validate_no_duplicate_names(&self.skills)
             .context("refusing to write lockfile with duplicate skill names")?;
         let path = crate::paths::lockfile(repo);
-        let body = if self.skills.is_empty() {
+        let body = if self.skills.is_empty() && self.instructions.is_none() {
             "# ateam lockfile — managed by `ateam`\n".to_string()
         } else {
             toml::to_string_pretty(self).context("serializing lockfile")?
@@ -174,7 +198,20 @@ mod tests {
                     project: None,
                 },
             ],
+            instructions: None,
         };
         assert!(validate_no_duplicate_names(&lock.skills).is_err());
+    }
+
+    #[test]
+    fn instructions_table_round_trips() {
+        let lock = Lockfile {
+            skills: Vec::new(),
+            instructions: Some(InstructionsEntry::default()),
+        };
+        let s = toml::to_string_pretty(&lock).unwrap();
+        assert!(s.contains("[instructions]"));
+        let parsed: Lockfile = toml::from_str(&s).unwrap();
+        assert!(parsed.instructions.is_some());
     }
 }
