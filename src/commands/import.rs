@@ -4,6 +4,7 @@ use crate::git_sync;
 use crate::lockfile::{Lockfile, SkillEntry};
 use crate::paths;
 use crate::source::Source;
+use crate::ui;
 use anyhow::{anyhow, bail, Context, Result};
 use std::path::{Path, PathBuf};
 
@@ -43,7 +44,7 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
         if meta.file_type().is_symlink() {
             let target = std::fs::read_link(&installed)?;
             if target.starts_with(paths::cache_dir(&repo)) || target.starts_with(paths::local_skills_dir(&repo)) {
-                println!("`{}` already managed by ateam", normalized);
+                ui::ok(format!("{} already managed by ateam", normalized));
                 return Ok(());
             }
         }
@@ -63,11 +64,15 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
-    println!(
-        "ateam: {} `{}` (re-run `ateam apply` to materialize symlinks)",
+    ui::ok(format!(
+        "{} {}",
         if replaced { "updated" } else { "imported" },
         normalized
-    );
+    ));
+    ui::plain("  run: ateam apply to materialize");
+    if let Some(entry) = lock.find(&normalized) {
+        ui::detail(format!("source: {}", entry.source));
+    }
     Ok(())
 }
 

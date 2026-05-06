@@ -1,6 +1,7 @@
 use crate::cli::InitArgs;
 use crate::config::{MachineConfig, RepoConfig};
 use crate::paths;
+use crate::ui;
 use anyhow::{anyhow, bail, Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,9 +10,17 @@ pub fn run(args: InitArgs) -> Result<()> {
     let target = resolve_target(&args)?;
     let mode = resolve_mode(&args)?;
 
-    match mode {
-        Mode::Scaffold => scaffold(&target)?,
-        Mode::Clone(url) => clone(&url, &target)?,
+    let spinner_msg = match &mode {
+        Mode::Scaffold => "scaffolding repo".to_string(),
+        Mode::Clone(url) => format!("cloning {}", url),
+    };
+
+    {
+        let _step = ui::step(spinner_msg);
+        match mode {
+            Mode::Scaffold => scaffold(&target)?,
+            Mode::Clone(url) => clone(&url, &target)?,
+        }
     }
 
     if !args.profiles.is_empty() {
@@ -23,7 +32,11 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     write_or_clear_pointer(&target)?;
 
-    println!("ateam initialized at {}", target.display());
+    ui::ok("initialized ateam");
+    ui::detail(format!("repo: {}", paths::display_path(&target)));
+    if !args.profiles.is_empty() {
+        ui::detail(format!("profiles: {}", args.profiles.join(", ")));
+    }
     Ok(())
 }
 
@@ -110,6 +123,7 @@ fn clone(url: &str, target: &Path) -> Result<()> {
 
     let status = Command::new("git")
         .arg("clone")
+        .arg("--quiet")
         .arg(url)
         .arg(target)
         .status()
@@ -159,6 +173,7 @@ fn git_init_if_needed(target: &Path) -> Result<()> {
     }
     let status = Command::new("git")
         .arg("init")
+        .arg("--quiet")
         .arg("--initial-branch=main")
         .arg(target)
         .status()
@@ -194,12 +209,12 @@ fn initial_commit_if_clean(target: &Path) -> Result<()> {
     let commit = Command::new("git")
         .arg("-C")
         .arg(target)
-        .args(["commit", "-m", "init :: ateam scaffold"])
+        .args(["commit", "--quiet", "-m", "init :: ateam scaffold"])
         .status()
         .context("git commit during init")?;
     if !commit.success() {
         // Could fail if user.email is unset etc. Don't hard-fail init.
-        eprintln!("warning: initial commit failed (set up `git config` and commit manually if desired)");
+        ui::warn("initial commit failed (set up `git config` and commit manually if desired)");
     }
     Ok(())
 }

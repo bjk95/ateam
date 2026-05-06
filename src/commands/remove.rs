@@ -4,6 +4,7 @@ use crate::install;
 use crate::lockfile::Lockfile;
 use crate::manifest::Manifest;
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Result};
 
 pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
@@ -30,7 +31,11 @@ pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
         .collect();
     for path in &to_remove {
         if let Err(e) = install::uninstall_path(path) {
-            eprintln!("ateam: warning — couldn't remove {}: {:#}", path.display(), e);
+            ui::warn(format!(
+                "couldn't remove {}: {:#}",
+                paths::display_path(path),
+                e
+            ));
         }
     }
     manifest.entries.retain(|m| m.skill != args.name);
@@ -49,6 +54,6 @@ pub fn run(args: RemoveArgs, no_sync: bool) -> Result<()> {
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
-    println!("ateam: removed `{}`", args.name);
+    ui::ok(format!("removed {}", args.name));
     Ok(())
 }

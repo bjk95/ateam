@@ -1,7 +1,9 @@
 use crate::cli::ProjectCommand;
 use crate::config::MachineConfig;
 use crate::paths;
+use crate::ui;
 use anyhow::Result;
+use console::style;
 use std::path::PathBuf;
 
 pub fn run(cmd: ProjectCommand) -> Result<()> {
@@ -12,25 +14,35 @@ pub fn run(cmd: ProjectCommand) -> Result<()> {
             let abs = expand(&path);
             machine.projects.insert(alias.clone(), abs.clone());
             machine.write(&repo)?;
-            println!("added project `{}` → {}", alias, abs.display());
+            ui::ok(format!(
+                "registered project {} → {}",
+                alias,
+                paths::display_path(&abs)
+            ));
         }
         ProjectCommand::List => {
             let machine = MachineConfig::load(&repo)?;
             if machine.projects.is_empty() {
-                println!("(no projects registered)");
+                ui::plain("(no projects registered)");
                 return Ok(());
             }
+            let width = machine.projects.keys().map(|s| s.len()).max().unwrap_or(0);
             for (alias, path) in &machine.projects {
-                println!("{:20}  {}", alias, path.display());
+                ui::plain(format!(
+                    "{:<width$}  {}",
+                    alias,
+                    style(paths::display_path(path)).dim(),
+                    width = width
+                ));
             }
         }
         ProjectCommand::Remove { alias } => {
             let mut machine = MachineConfig::load(&repo)?;
             if machine.projects.remove(&alias).is_some() {
                 machine.write(&repo)?;
-                println!("removed project alias `{}`", alias);
+                ui::ok(format!("removed project {}", alias));
             } else {
-                println!("no project alias `{}` registered", alias);
+                ui::warn(format!("no project {} registered", alias));
             }
         }
     }

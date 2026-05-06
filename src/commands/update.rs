@@ -4,6 +4,7 @@ use crate::install;
 use crate::lockfile::Lockfile;
 use crate::paths;
 use crate::source::{github, Source};
+use crate::ui;
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -23,47 +24,56 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
 
     let mut changed: Vec<(String, String, String)> = Vec::new(); // (name, old, new)
 
-    for name in &names {
-        let entry_idx = match lock.skills.iter().position(|s| &s.name == name) {
-            Some(i) => i,
-            None => {
-                eprintln!("ateam: warning — `{}` not in lockfile", name);
-                continue;
-            }
-        };
+    let n = names.len();
+    {
+        let _step = ui::step(format!(
+            "checking {} {}",
+            n,
+            if n == 1 { "skill" } else { "skills" }
+        ));
+        for name in &names {
+            let entry_idx = match lock.skills.iter().position(|s| &s.name == name) {
+                Some(i) => i,
+                None => {
+                    ui::warn(format!("`{}` not in lockfile", name));
+                    continue;
+                }
+            };
 
-        let entry = lock.skills[entry_idx].clone();
-        let source = match Source::from_lockfile_string(&entry.source) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("ateam: warning — bad source for `{}`: {:#}", name, e);
-                continue;
-            }
-        };
+            let entry = lock.skills[entry_idx].clone();
+            let source = match Source::from_lockfile_string(&entry.source) {
+                Ok(s) => s,
+                Err(e) => {
+                    ui::warn(format!("bad source for `{}`: {:#}", name, e));
+                    continue;
+                }
+            };
 
-        match check_and_refetch(&repo, &source, &entry) {
-            Ok(Some(new_sha)) => {
-                let old = entry.tree_sha.clone().unwrap_or_default();
-                lock.skills[entry_idx].tree_sha = Some(new_sha.clone());
-                changed.push((name.clone(), old, new_sha));
-            }
-            Ok(None) => {
-                tracing::debug!("{} up to date", name);
-            }
-            Err(e) => {
-                eprintln!("ateam: warning — couldn't check `{}`: {:#}", name, e);
+            match check_and_refetch(&repo, &source, &entry) {
+                Ok(Some(new_sha)) => {
+                    let old = entry.tree_sha.clone().unwrap_or_default();
+                    lock.skills[entry_idx].tree_sha = Some(new_sha.clone());
+                    changed.push((name.clone(), old, new_sha));
+                }
+                Ok(None) => {
+                    tracing::debug!("{} up to date", name);
+                }
+                Err(e) => {
+                    ui::warn(format!("couldn't check `{}`: {:#}", name, e));
+                }
             }
         }
     }
 
     if changed.is_empty() {
-        println!("ateam: all skills up to date");
+        ui::ok("all skills up to date");
         return Ok(());
     }
 
     lock.write(&repo).context("writing updated lockfile")?;
     for (name, old, new) in &changed {
-        println!("updated {} ({} → {})", name, short(old), short(new));
+        ui::ok(format!("updated {}", name));
+        ui::detail(format!("{} → {}", short(old), short(new)));
     }
 
     if git_sync::enabled(no_sync) {

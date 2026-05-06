@@ -11,6 +11,10 @@ pub struct Cli {
     /// Skip auto pull/commit/push for this invocation.
     #[arg(long, global = true)]
     pub no_sync: bool,
+
+    /// Show extra detail (paths, SHAs, per-agent links).
+    #[arg(short = 'v', long, global = true)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand)]

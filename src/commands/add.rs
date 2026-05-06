@@ -6,7 +6,9 @@ use crate::install;
 use crate::lockfile::{Lockfile, SkillEntry};
 use crate::paths;
 use crate::source::{github, Source};
+use crate::ui;
 use anyhow::{anyhow, bail, Context, Result};
+use console::style;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -23,7 +25,11 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
 
     // Fetch the package into a tmp working dir so we can discover its skills.
     let work_dir = tempdir(&repo)?;
-    let package_root = fetch_package(&source, args.r#ref.as_deref(), &work_dir.path)?;
+    let package_root = {
+        let _step = ui::step(format!("fetching {}", args.source));
+        fetch_package(&source, args.r#ref.as_deref(), &work_dir.path)?
+    };
+    ui::ok(format!("fetched {}", args.source));
     let discovered = walk_package(&package_root)
         .with_context(|| format!("scanning package at {}", package_root.display()))?;
 
@@ -32,9 +38,11 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
         return Ok(());
     }
 
+    ui::detail(format!("source: {}", source.lockfile_string()));
+
     let selection = pick_skills(&discovered, &args)?;
     if selection.is_empty() {
-        eprintln!("ateam: no matching skills selected — pass --skill <name> or --all");
+        ui::warn("no matching skills selected — pass --skill <name> or --all");
         return Ok(());
     }
 
@@ -55,15 +63,19 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
             &install_root,
             &agents,
         ) {
-            Ok(entry) => {
+            Ok((entry, linked)) => {
                 lock.upsert(entry);
                 installed.push(skill.name.clone());
                 lock.write(&repo)
                     .context("writing lockfile after upsert")?;
+                ui::ok(format!("installed {}", skill.name));
+                for link in &linked {
+                    ui::detail(format!("linked {}", paths::display_path(link)));
+                }
             }
             Err(e) => {
                 had_error = true;
-                eprintln!("ateam: failed to install {}: {:#}", skill.name, e);
+                ui::fail(format!("install {} — {:#}", skill.name, e));
             }
         }
     }
@@ -79,13 +91,6 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
         let msg = git_sync::msg_add(&source.lockfile_string(), &installed);
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
-
-    println!(
-        "ateam: installed {} skill{} ({})",
-        installed.len(),
-        if installed.len() == 1 { "" } else { "s" },
-        installed.join(", ")
-    );
 
     Ok(())
 }
@@ -117,14 +122,21 @@ fn fetch_package(source: &Source, git_ref: Option<&str>, dest: &Path) -> Result<
 
 fn print_listing(input: &str, skills: &[DiscoveredSkill]) {
     if skills.is_empty() {
-        println!("no skills found in {}", input);
+        ui::plain(format!("(no skills found in {})", input));
         return;
     }
-    println!("skills in {}:", input);
+    ui::plain(format!("skills in {}", input));
+    ui::plain("");
+    let width = skills.iter().map(|s| s.name.len()).max().unwrap_or(0);
     for s in skills {
         match &s.description {
-            Some(desc) => println!("  - {}  -- {}", s.name, desc),
-            None => println!("  - {}", s.name),
+            Some(desc) => ui::plain(format!(
+                "  {:<width$}  {}",
+                s.name,
+                style(desc).dim(),
+                width = width
+            )),
+            None => ui::plain(format!("  {}", s.name)),
         }
     }
 }
@@ -158,10 +170,10 @@ fn pick_skills<'a>(
     let found_names: HashSet<&str> = out.iter().map(|s| s.name.as_str()).collect();
     let missing: Vec<&String> = wanted.iter().filter(|w| !found_names.contains(w.as_str())).collect();
     if !missing.is_empty() {
-        eprintln!(
-            "ateam: warning — skills not found in source: {}",
+        ui::warn(format!(
+            "skills not found in source: {}",
             missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-        );
+        ));
     }
 
     Ok(out)
@@ -222,7 +234,7 @@ fn install_one(
     package_root: &Path,
     install_root: &InstallRoot,
     agents: &[String],
-) -> Result<SkillEntry> {
+) -> Result<(SkillEntry, Vec<PathBuf>)> {
     // Path of the skill's directory relative to the package root, used for
     // both lockfile recording and update-detection later.
     let rel_skill_dir = skill
@@ -243,6 +255,7 @@ fn install_one(
             slot.commit()?
         }
     };
+    ui::detail(format!("cached at {}", paths::display_path(&canonical)));
 
     let agent_list: Vec<String> = if args.agents.is_empty() || args.agents.iter().any(|a| a == "*") {
         vec!["*".into()]
@@ -258,18 +271,21 @@ fn install_one(
         InstallRoot::Project { path, .. } => path.clone(),
     };
 
+    let mut linked: Vec<PathBuf> = Vec::new();
     for agent in agents {
         let link = paths::agent_skill_path(&install_root_path, agent, &skill.name)?;
         match install::install_symlink(&link, &canonical, false)? {
             install::LinkOutcome::Refused => {
-                eprintln!(
-                    "ateam: refused to install {} for agent {} (real dir at {}; rerun with `ateam apply --force` to move aside)",
+                ui::warn(format!(
+                    "refused to install {} for {}: real dir at {} (rerun with `ateam apply --force`)",
                     skill.name,
                     agent,
-                    link.display()
-                );
+                    paths::display_path(&link)
+                ));
             }
-            _ => {}
+            _ => {
+                linked.push(link);
+            }
         }
     }
 
@@ -307,16 +323,19 @@ fn install_one(
         InstallRoot::Global => None,
     };
 
-    Ok(SkillEntry {
-        name: skill.name.clone(),
-        source: source.lockfile_string(),
-        path: entry_path,
-        git_ref: args.r#ref.clone(),
-        tree_sha,
-        agents: agent_list,
-        profiles: args.profile.clone(),
-        project,
-    })
+    Ok((
+        SkillEntry {
+            name: skill.name.clone(),
+            source: source.lockfile_string(),
+            path: entry_path,
+            git_ref: args.r#ref.clone(),
+            tree_sha,
+            agents: agent_list,
+            profiles: args.profile.clone(),
+            project,
+        },
+        linked,
+    ))
 }
 
 // ---------------------------------------------------------------------------

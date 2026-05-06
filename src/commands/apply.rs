@@ -6,6 +6,7 @@ use crate::lockfile::{Lockfile, SkillEntry};
 use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
 use crate::paths;
 use crate::source::{github, Source};
+use crate::ui;
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -52,11 +53,11 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 match machine.projects.get(alias) {
                     Some(path) => {
                         if !path.exists() {
-                            eprintln!(
-                                "ateam: warning — project `{}` path does not exist: {}",
+                            ui::warn(format!(
+                                "project `{}` path does not exist: {}",
                                 alias,
-                                path.display()
-                            );
+                                paths::display_path(path)
+                            ));
                             continue;
                         }
                         path.clone()
@@ -82,7 +83,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         let canonical = match resolve_canonical(&repo, entry) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("ateam: failed to resolve `{}`: {:#}", entry.name, e);
+                ui::fail(format!("resolve {} — {:#}", entry.name, e));
                 continue;
             }
         };
@@ -101,10 +102,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                         if Some(&latest) != entry.tree_sha.as_ref() {
                             tracing::info!("drift detected for {} (refetching)", entry.name);
                             if let Err(e) = refetch_github(&repo, &owner, &r, &commit_sha, path, &entry.name) {
-                                eprintln!(
-                                    "ateam: failed to refetch {}: {:#}",
-                                    entry.name, e
-                                );
+                                ui::fail(format!("refetch {} — {:#}", entry.name, e));
                             } else {
                                 if let Some(pos) = updated_lock
                                     .skills
@@ -129,7 +127,12 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                     }
                 }
                 let link = paths::agent_skill_path(&install_root, agent, &entry.name)?;
-                println!("would link {} → {}", link.display(), canonical.display());
+                ui::detail(format!(
+                    "{} → {}",
+                    paths::display_path(&link),
+                    paths::display_path(&canonical)
+                ));
+                materialized += 1;
             }
             continue;
         }
@@ -157,12 +160,12 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                     materialized += 1;
                 }
                 install::LinkOutcome::Refused => {
-                    eprintln!(
-                        "ateam: refused to install {} for {} (real dir at {}; rerun with --force to move aside)",
+                    ui::warn(format!(
+                        "refused to install {} for {}: real dir at {} (rerun with --force)",
                         entry.name,
                         agent,
-                        link.display()
-                    );
+                        paths::display_path(&link)
+                    ));
                 }
             }
         }
@@ -175,25 +178,24 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         for prev in &prev_manifest.entries {
             if !new_paths.contains(prev.path.as_path()) {
                 if let Err(e) = install::uninstall_path(&prev.path) {
-                    eprintln!("ateam: warning — couldn't remove {}: {:#}", prev.path.display(), e);
+                    ui::warn(format!(
+                        "couldn't remove {}: {:#}",
+                        paths::display_path(&prev.path),
+                        e
+                    ));
                 }
             }
         }
         new_manifest.write(&repo)?;
     }
 
-    if !unregistered_aliases.is_empty() {
-        let total: usize = unregistered_aliases.values().map(|v| v.len()).sum();
-        println!(
-            "note: {} lockfile {} reference unregistered project alias{}:",
-            total,
-            if total == 1 { "entry" } else { "entries" },
-            if unregistered_aliases.len() == 1 { "" } else { "es" }
-        );
-        for (alias, names) in &unregistered_aliases {
-            println!("  - {} ({})", alias, names.join(", "));
-        }
-        println!("register with: ateam project add <alias> <path>");
+    for (alias, names) in &unregistered_aliases {
+        ui::warn(format!(
+            "unregistered project: {} (used by {})",
+            alias,
+            names.join(", ")
+        ));
+        ui::plain(format!("  run: ateam project add {} <path>", alias));
     }
 
     if lockfile_dirty && !args.dry_run {
@@ -207,10 +209,15 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         }
     }
 
+    let skill_word = |n: usize| if n == 1 { "skill" } else { "skills" };
     if args.dry_run {
-        println!("dry run complete (no changes written)");
+        ui::ok(format!(
+            "dry run: would apply {} {}",
+            materialized,
+            skill_word(materialized)
+        ));
     } else {
-        println!("ateam: applied {} symlink(s)", materialized);
+        ui::ok(format!("applied {} {}", materialized, skill_word(materialized)));
     }
 
     Ok(())
