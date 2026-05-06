@@ -10,7 +10,20 @@ These work on every subcommand.
 | Flag | Behavior |
 |---|---|
 | `--no-sync` | Skip auto pull/commit/push for this invocation. Equivalent: `ATEAM_NO_SYNC=1`. |
+| `--no-wait` | Fail fast if another `ateam` process holds the repo lock instead of waiting. |
 | `-v` / `--verbose` | Show extra detail (paths, SHAs, per-agent links). |
+
+### Concurrent invocations
+
+Mutating commands (`apply`, `skills add`/`update`/`remove`/`import`/`activate`/`deactivate`,
+`project add`/`remove`, `remote add`, `edit`, `instructions edit`) take an exclusive
+`flock` on `<repo>/.ateam/lock` for the duration of the command. A second invocation
+waits for the first to finish before reading and writing `ateam.lock.toml` and
+`.ateam/manifest.toml`, so concurrent runs cannot clobber each other's edits.
+
+Pass `--no-wait` to fail fast instead of blocking. Read-only commands (`status`,
+`skills list`/`show`/`find`, `instructions diff`/`show`, `validate`, `project list`,
+`remote list`) take no lock.
 
 ## `ateam init`
 

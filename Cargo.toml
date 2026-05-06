@@ -31,6 +31,7 @@ indicatif = "0.17"
 handlebars = "6"
 gethostname = "0.5"
 similar = "3"
+fs2 = "0.4"
 
 [profile.release]
 lto = true
