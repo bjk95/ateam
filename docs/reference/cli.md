@@ -81,7 +81,18 @@ Check GitHub tree SHAs and refetch any drifted skills. Skips deactivated entries
 ```bash
 ateam skills update                # all active entries
 ateam skills update <name>...      # specific entries
+ateam skills update --global       # only global-scoped entries
+ateam skills update --project foo  # only entries tagged with project alias `foo`
 ```
+
+| Flag | Behavior |
+|---|---|
+| `-y` / `--yes` | Non-interactive (skip confirmation prompts) |
+| `-g` / `--global` | Only update entries without a project scope |
+| `--project <alias>` | Only update entries tagged with this project alias |
+| `--no-sync` | Skip auto pull/commit/push for this run |
+
+`--global` and `--project` are mutually exclusive.
 
 ## `ateam skills remove`
 
