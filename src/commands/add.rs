@@ -705,6 +705,8 @@ mod tests {
             profile: vec![],
             project: None,
             r#ref: None,
+            copy: false,
+            dangerously_accept_openclaw_risks: false,
         }
     }
 
