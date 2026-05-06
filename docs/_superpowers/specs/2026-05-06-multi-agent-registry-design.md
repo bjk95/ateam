@@ -273,6 +273,69 @@ End-to-end (manual): on a fresh `ateam init` with all four agents enabled, `atea
 
 These are deferred from the spec to the implementation plan — they are HOW questions, not WHAT questions:
 
-1. Does today's `ateam.toml` editing flow already support enabling/disabling agents through a CLI command, or do users edit the file by hand? If the former, the CLI surface needs an updated agent list. If the latter, leave it for a future spec.
+1. ~~Does today's `ateam.toml` editing flow already support enabling/disabling agents through a CLI command, or do users edit the file by hand?~~ **Resolved by addendum below — three new commands replace the manual edit.**
 2. Whether to provide a one-shot `ateam config migrate` command that adds OpenCode and Gemini to existing users' explicit `enabled_agents` lists with confirmation. Likely YAGNI for v0.3 — the manual edit is one line — but worth flagging.
 3. Test fixture organization: should tests reference the production `REGISTRY` or use a separate `TEST_REGISTRY`? The latter avoids brittle test changes when we add agent #5.
+
+---
+
+## Addendum: `ateam agents` subcommand
+
+**Date:** 2026-05-06 (same day, follow-on)
+
+The migration story above told users to edit `ateam.toml` by hand to opt in/out of agents. That's friction. This addendum adds three subcommands so the TOML edit becomes the unusual path, not the default.
+
+### Commands
+
+```
+ateam agents list              # show all registry agents with [enabled]/[disabled] status
+ateam agents add <id>...       # enable one or more agents (variadic)
+ateam agents remove <id>...    # disable one or more agents (variadic)
+```
+
+### Behavior (mirrors `skills activate`/`deactivate`)
+
+For `add` and `remove`:
+
+1. `pre_pull` if auto-sync enabled (matches every other mutating command in ateam)
+2. Validate each id against the registry; reject unknown ids with `error: unknown agent 'foo'. valid: claude-code, codex, opencode, gemini`
+3. Load `RepoConfig` (which materializes the four-agent default if `enabled_agents` is absent), mutate the list, write back to `ateam.toml`
+4. Auto-run `apply` so files materialize on `add` / disappear on `remove` — matches the skill activate/deactivate convention; without it `add gemini` is a half-action because the user expects `~/.gemini/GEMINI.md` to appear immediately
+5. `commit_and_push` if auto-sync enabled
+
+For `list`: read-only, prints a table.
+
+### Decisions
+
+- **Idempotent**: `add gemini` when already enabled prints `ateam: gemini already enabled` and exits 0 (not an error). Same for `remove` of a not-enabled agent. Treats user intent as "make it so", not "perform exact diff".
+- **Refuse to remove the last enabled agent**: empty `enabled_agents` would disable ateam itself, almost certainly accidental. Error with hint: `cannot remove last enabled agent (would disable ateam). use 'ateam agents add <id>' first or remove the line manually.`
+- **Variadic positionals**: `ateam agents add gemini opencode` works in one call, matching the `bd close <id>...` pattern.
+- **List output format**: shows ALL registry agents with `[enabled]/[disabled]` markers — more useful than only listing enabled, because it shows users what they could enable.
+
+### `agents list` output
+
+```
+ID            STATUS    SKILLS DIR                       INSTRUCTIONS FILE
+claude-code   enabled   ~/.claude/skills                 ~/.claude/CLAUDE.md
+codex         enabled   ~/.codex/skills                  ~/.codex/AGENTS.md
+opencode      disabled  ~/.config/opencode/skills        ~/.config/opencode/AGENTS.md
+gemini        enabled   ~/.gemini/skills                 ~/.gemini/GEMINI.md
+```
+
+### Files
+
+- New: `src/commands/agents.rs` (~120 lines including tests)
+- Modify: `src/cli.rs` — add `Agents(AgentsCommand)` variant + `AgentsCommand` enum (`List`, `Add { ids: Vec<String> }`, `Remove { ids: Vec<String> }`)
+- Modify: `src/commands/mod.rs` — register module
+- Modify: `src/main.rs` — dispatch arm
+- Modify: `src/git_sync.rs` — `msg_agents_add(&[String])` and `msg_agents_remove(&[String])` helpers matching existing `msg_activate`
+- Modify: `docs/concepts/agents.md` — replace "edit `ateam.toml`" guidance with `ateam agents add/remove`
+
+### Tests
+
+- `agents list` against the production registry returns expected status (when no `ateam.toml`, all four `enabled`; when `enabled_agents = ["claude-code"]` only that one shows enabled)
+- `agents add gemini` to a config with explicit `["claude-code", "codex"]` produces `["claude-code", "codex", "gemini"]`
+- `agents add gemini` to a config that already has gemini reports already-enabled and leaves the file untouched
+- `agents add no-such-agent` fails with the "valid agents" message and writes nothing
+- `agents remove claude-code` from a config with `["claude-code"]` errors with the last-agent hint
+- `agents remove gemini` from a config without an explicit `enabled_agents` line first materializes the four-agent default, then removes gemini, ending at `["claude-code", "codex", "opencode"]`
