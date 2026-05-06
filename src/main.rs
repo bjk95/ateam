@@ -21,6 +21,11 @@ fn main() {
         .without_time()
         .init();
 
+    if cli::shows_help() {
+        eprintln!("{}", cli::banner());
+        eprintln!();
+    }
+
     let cli = cli::parse();
     ui::set_verbose(cli.verbose);
 

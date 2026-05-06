@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::builder::styling::{AnsiColor, Styles};
-use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 const BANNER_LINES: &[&str] = &[
@@ -25,7 +25,7 @@ const BANNER_GRADIENT: &[(u8, u8, u8)] = &[
     (95, 245, 250),
 ];
 
-fn banner() -> String {
+pub fn banner() -> String {
     let use_color = console::colors_enabled();
     BANNER_LINES
         .iter()
@@ -42,13 +42,22 @@ fn banner() -> String {
         .join("\n")
 }
 
-/// Parse argv, injecting the colored banner as `before_help`.
-/// `before_help` only shows on `--help` / `-h`, never on a successful subcommand
-/// invocation, so the banner doesn't add startup noise.
+/// True when the invocation will land in clap's help/error renderer
+/// (bare `ateam`, `--help`, `-h`). Banner is printed before clap takes
+/// over so its rendering doesn't touch cursor state in a way that
+/// overwrites lines above (some terminals + clap's error path
+/// interact badly with `before_help`).
+pub fn shows_help() -> bool {
+    let mut args = std::env::args().skip(1);
+    let first = match args.next() {
+        Some(a) => a,
+        None => return true, // bare invocation
+    };
+    matches!(first.as_str(), "--help" | "-h" | "help")
+}
+
 pub fn parse() -> Cli {
-    let cmd = Cli::command().before_help(banner());
-    let matches = cmd.get_matches();
-    Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit())
+    Cli::parse()
 }
 
 const HELP_STYLES: Styles = Styles::styled()
