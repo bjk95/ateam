@@ -43,8 +43,8 @@ Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 | `--skill <name>` | Specific skill names, repeatable; `*` = all |
 | `--all` | Equivalent to `--skill '*'` |
 | `-a` / `--agent <name>` | Target agents, repeatable; `*` = all enabled |
-| `-y` / `--yes` | Non-interactive |
-| `-g` / `--global` | Force global scope (overrides cwd auto-detect) |
+| `-y` / `--yes` | Non-interactive; in an unregistered git repo, auto-registers + project-scopes |
+| `-g` / `--global` | Force global scope (overrides cwd auto-detect and the auto-register prompt) |
 | `--profile <name>` | Tag entry with profile gates (repeatable) |
 | `--project <alias>` | Install into a registered project |
 | `--ref <ref>` | Pin to a specific git ref/tag/commit |
