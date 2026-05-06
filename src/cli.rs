@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::builder::styling::{AnsiColor, Styles};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use console::style;
 use std::path::PathBuf;
 
 const BANNER_LINES: &[&str] = &[
@@ -13,10 +12,32 @@ const BANNER_LINES: &[&str] = &[
     "╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝",
 ];
 
+// Subtle truecolor gradient from darker teal-cyan (top) to lighter cyan (bottom).
+// Six rows, one RGB tuple each. Modern terminals (iTerm2, Ghostty, Warp, VS Code,
+// Terminal.app) all render 24-bit color; older ones may render the nearest 256-color
+// approximation, which still preserves the shading direction.
+const BANNER_GRADIENT: &[(u8, u8, u8)] = &[
+    (0, 156, 178),
+    (0, 178, 198),
+    (0, 198, 215),
+    (28, 215, 230),
+    (60, 230, 240),
+    (95, 245, 250),
+];
+
 fn banner() -> String {
+    let use_color = console::colors_enabled();
     BANNER_LINES
         .iter()
-        .map(|l| format!("{}", style(l).cyan().bold()))
+        .zip(BANNER_GRADIENT.iter())
+        .map(|(line, (r, g, b))| {
+            if use_color {
+                // Truecolor + bold: ESC[1;38;2;R;G;Bm  …  ESC[0m
+                format!("\x1b[1;38;2;{};{};{}m{}\x1b[0m", r, g, b, line)
+            } else {
+                line.to_string()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
