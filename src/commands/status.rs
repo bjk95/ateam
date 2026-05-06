@@ -1,4 +1,5 @@
 use crate::config::MachineConfig;
+use crate::discover::{self, UnmanagedSkill};
 use crate::git_sync;
 use crate::lockfile::Lockfile;
 use crate::manifest::Manifest;
@@ -6,6 +7,7 @@ use crate::paths;
 use crate::ui;
 use anyhow::Result;
 use console::style;
+use std::collections::BTreeSet;
 
 pub fn run() -> Result<()> {
     let repo = paths::resolve_repo()?;
@@ -62,10 +64,49 @@ pub fn run() -> Result<()> {
         ));
     }
 
+    let home = paths::home_dir()?;
+    let unmanaged = discover::discover_unmanaged(&repo, &home, &lock);
+    if !unmanaged.is_empty() {
+        let n = unmanaged.len();
+        ui::plain(format!(
+            "  {} unmanaged skill{} in {} — run: ateam skills import",
+            n,
+            if n == 1 { "" } else { "s" },
+            summarize_unmanaged_dirs(&unmanaged),
+        ));
+        if ui::is_verbose() {
+            for u in &unmanaged {
+                let dirs = u
+                    .dirs
+                    .iter()
+                    .map(|p| paths::display_path(p))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                ui::plain(format!("    - {} (in {})", u.name, dirs));
+            }
+        }
+    }
+
     ui::detail(format!("repo: {}", paths::display_path(&repo)));
     ui::detail(format!("manifest: {} entries", manifest.entries.len()));
 
     Ok(())
+}
+
+fn summarize_unmanaged_dirs(unmanaged: &[UnmanagedSkill]) -> String {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for u in unmanaged {
+        for d in &u.dirs {
+            // Drop the trailing "/skills" so the message reads "~/.claude" not
+            // "~/.claude/skills" — the agent dir is the meaningful unit here.
+            let display = match d.parent() {
+                Some(p) => paths::display_path(p),
+                None => paths::display_path(d),
+            };
+            seen.insert(display);
+        }
+    }
+    seen.into_iter().collect::<Vec<_>>().join(", ")
 }
 
 fn count_dangling(manifest: &Manifest) -> usize {
