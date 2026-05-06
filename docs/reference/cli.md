@@ -104,15 +104,27 @@ ateam skills update --project foo  # only entries tagged with project alias `foo
 ## `ateam skills remove`
 
 Delete one or more skills from the lockfile and uninstall their symlinks. If
-any name isn't in the lockfile, nothing is removed and the command errors.
+any name isn't in the lockfile (within the selected scope), nothing is removed
+and the command errors.
 
 ```bash
-ateam skills remove <name>...
+ateam skills remove <name>...                  # one or more positional names
+ateam skills remove --all                      # every locked skill
+ateam skills remove --all -g                   # every globally-scoped skill
+ateam skills remove --all -a claude            # every skill targeting claude
+ateam skills remove foo bar -y                 # skip the confirmation prompt
 ```
 
-```bash
-ateam skills remove gstack-retro gstack-plan-design-review
-```
+| Flag | Behavior |
+|---|---|
+| `<name>...` (positional) | Skill names to remove. Repeatable. |
+| `--all` | Remove every locked skill (within `--agent` / `--global` scope). |
+| `-y` / `--yes` | Skip the confirmation prompt (also skipped when stdin is not a TTY). |
+| `-a` / `--agent <name>` | Only target entries whose agents list matches. Repeatable. |
+| `-g` / `--global` | Only target entries with no project alias. |
+
+A confirmation prompt lists the skills about to be removed and defaults to "no".
+Pass `-y` (or pipe stdin) to skip it.
 
 Local-source directories under `<repo>/skills/` are never deleted by ateam — you
 remove them yourself if you want them gone.

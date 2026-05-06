@@ -270,9 +270,25 @@ pub struct UpdateArgs {
 
 #[derive(Parser)]
 pub struct RemoveArgs {
-    /// One or more skill names to remove.
-    #[arg(required = true, num_args = 1..)]
+    /// Skill names to remove. Repeatable. Use `--all` to target every locked skill.
+    #[arg(value_name = "NAME", conflicts_with = "all")]
     pub names: Vec<String>,
+
+    /// Remove every locked skill (within --agent / --global scope if provided).
+    #[arg(long)]
+    pub all: bool,
+
+    /// Skip confirmation prompts (non-interactive).
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+
+    /// Restrict to entries targeting these agents. Repeatable. `*` = all enabled.
+    #[arg(short = 'a', long = "agent", value_name = "NAME")]
+    pub agents: Vec<String>,
+
+    /// Force global scope (Vercel-compat). Restrict to entries with no project alias.
+    #[arg(short = 'g', long)]
+    pub global: bool,
 }
 
 #[derive(Parser)]

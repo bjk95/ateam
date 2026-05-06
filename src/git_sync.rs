@@ -178,12 +178,9 @@ pub fn msg_add(source: &str, skills: &[String]) -> String {
     format!("add {} :: {}", source, list)
 }
 
-pub fn msg_remove(skill: &str) -> String {
-    format!("remove :: {}", skill)
-}
-
-pub fn msg_remove_bulk(skills: &[String]) -> String {
-    format!("remove :: {}", skills.join(", "))
+pub fn msg_remove(skills: &[String]) -> String {
+    let list = skills.join(", ");
+    format!("remove :: {}", list)
 }
 
 pub fn msg_deactivate(skill: &str) -> String {
