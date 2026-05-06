@@ -23,12 +23,23 @@ fn main() {
         .without_time()
         .init();
 
-    eprintln!();
-    eprintln!("{}", cli::banner());
-    eprintln!();
-
     let cli = cli::parse();
     ui::set_verbose(cli.verbose);
+    // `--quiet` and `skills list --json` both suppress the banner and any
+    // non-error UI output. JSON consumers (editor extensions) need stdout to
+    // be a clean document; quiet users want a silent run.
+    let json_list = matches!(
+        &cli.command,
+        cli::Command::Skills(cli::SkillsCommand::List(args)) if args.json
+    );
+    let suppress_banner = cli.quiet || json_list;
+    ui::set_quiet(cli.quiet || json_list);
+
+    if !suppress_banner {
+        eprintln!();
+        eprintln!("{}", cli::banner());
+        eprintln!();
+    }
 
     if !matches!(cli.command, cli::Command::Upgrade) {
         self_update::maybe_check();

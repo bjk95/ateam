@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 static VERBOSE: AtomicBool = AtomicBool::new(false);
+static QUIET: AtomicBool = AtomicBool::new(false);
 
 pub fn set_verbose(v: bool) {
     VERBOSE.store(v, Ordering::Relaxed);
@@ -13,7 +14,18 @@ pub fn is_verbose() -> bool {
     VERBOSE.load(Ordering::Relaxed)
 }
 
+pub fn set_quiet(v: bool) {
+    QUIET.store(v, Ordering::Relaxed);
+}
+
+pub fn is_quiet() -> bool {
+    QUIET.load(Ordering::Relaxed)
+}
+
 pub fn ok(msg: impl AsRef<str>) {
+    if is_quiet() {
+        return;
+    }
     println!("{}", format_ok(msg.as_ref()));
 }
 
@@ -26,22 +38,36 @@ pub fn warn(msg: impl AsRef<str>) {
 }
 
 pub fn detail(msg: impl AsRef<str>) {
+    if is_quiet() {
+        return;
+    }
     if is_verbose() {
         println!("{}", format_detail(msg.as_ref()));
     }
 }
 
 pub fn plain(msg: impl AsRef<str>) {
+    if is_quiet() {
+        return;
+    }
     println!("{}", msg.as_ref());
 }
 
 /// Vercel-skills-CLI-style step marker: cyan ◇ + message.
 pub fn diamond(msg: impl AsRef<str>) {
+    if is_quiet() {
+        return;
+    }
     println!("{}", format_diamond(msg.as_ref()));
 }
 
 pub fn step(msg: impl Into<String>) -> Step {
     let msg = msg.into();
+    if is_quiet() {
+        return Step {
+            inner: StepImpl::Static,
+        };
+    }
     if Term::stdout().is_term() {
         let pb = ProgressBar::new_spinner();
         pb.set_style(
@@ -189,5 +215,14 @@ mod tests {
         assert!(is_verbose());
         set_verbose(false);
         assert!(!is_verbose());
+    }
+
+    #[test]
+    fn quiet_flag_round_trips() {
+        init();
+        set_quiet(true);
+        assert!(is_quiet());
+        set_quiet(false);
+        assert!(!is_quiet());
     }
 }
