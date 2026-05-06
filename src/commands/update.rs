@@ -1,7 +1,7 @@
 use crate::cli::UpdateArgs;
 use crate::git_sync;
 use crate::install;
-use crate::lockfile::Lockfile;
+use crate::lockfile::{Lockfile, SkillEntry};
 use crate::paths;
 use crate::source::{github, Source};
 use crate::ui;
@@ -16,14 +16,25 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
     }
 
     let mut lock = Lockfile::load(&repo)?;
+    let project = args.project.as_deref();
     let names: Vec<String> = if args.names.is_empty() {
         lock.skills
             .iter()
-            .filter(|s| s.active)
+            .filter(|s| s.active && matches_scope(s, args.global, project))
             .map(|s| s.name.clone())
             .collect()
     } else {
-        args.names.clone()
+        args.names
+            .iter()
+            .filter(|n| {
+                lock.skills
+                    .iter()
+                    .find(|s| &s.name == *n)
+                    .map(|s| matches_scope(s, args.global, project))
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect()
     };
 
     let mut changed: Vec<(String, String, String)> = Vec::new(); // (name, old, new)
@@ -100,10 +111,20 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
     Ok(())
 }
 
+fn matches_scope(entry: &SkillEntry, global: bool, project: Option<&str>) -> bool {
+    if global {
+        return entry.project.is_none();
+    }
+    if let Some(alias) = project {
+        return entry.project.as_deref() == Some(alias);
+    }
+    true
+}
+
 fn check_and_refetch(
     repo: &Path,
     source: &Source,
-    entry: &crate::lockfile::SkillEntry,
+    entry: &SkillEntry,
 ) -> Result<Option<String>> {
     // Registry-resolved entries (path is None, source is github): refresh by
     // re-hitting skills.sh's blob endpoint and comparing hashes.
@@ -215,4 +236,43 @@ fn refetch_github(
 
 fn short(s: &str) -> String {
     s.chars().take(7).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(name: &str, project: Option<&str>) -> SkillEntry {
+        SkillEntry {
+            name: name.into(),
+            source: "local:skills/x".into(),
+            path: None,
+            git_ref: None,
+            tree_sha: None,
+            agents: vec!["*".into()],
+            profiles: vec![],
+            project: project.map(str::to_string),
+            active: true,
+            upstream: None,
+        }
+    }
+
+    #[test]
+    fn no_scope_flags_passes_everything() {
+        assert!(matches_scope(&entry("a", None), false, None));
+        assert!(matches_scope(&entry("a", Some("foo")), false, None));
+    }
+
+    #[test]
+    fn global_excludes_project_scoped_entries() {
+        assert!(matches_scope(&entry("a", None), true, None));
+        assert!(!matches_scope(&entry("a", Some("foo")), true, None));
+    }
+
+    #[test]
+    fn project_filter_matches_alias_only() {
+        assert!(matches_scope(&entry("a", Some("foo")), false, Some("foo")));
+        assert!(!matches_scope(&entry("a", Some("bar")), false, Some("foo")));
+        assert!(!matches_scope(&entry("a", None), false, Some("foo")));
+    }
 }

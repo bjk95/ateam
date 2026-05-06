@@ -236,6 +236,18 @@ pub struct ApplyArgs {
 pub struct UpdateArgs {
     /// Specific skill names to update. Empty = all.
     pub names: Vec<String>,
+
+    /// Skip confirmation prompts (non-interactive).
+    #[arg(short = 'y', long)]
+    pub yes: bool,
+
+    /// Restrict to entries without a project scope (global-only).
+    #[arg(short = 'g', long, conflicts_with = "project")]
+    pub global: bool,
+
+    /// Restrict to entries scoped to a registered project alias.
+    #[arg(long, value_name = "ALIAS")]
+    pub project: Option<String>,
 }
 
 #[derive(Parser)]
