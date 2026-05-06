@@ -21,7 +21,7 @@ pub fn run() -> Result<()> {
 
     let mut allowed: BTreeSet<String> = repo_cfg.declared_profiles.iter().cloned().collect();
     for r in instructions::reserved_identifiers() {
-        allowed.insert((*r).into());
+        allowed.insert(r.into());
     }
 
     let unknown = instructions::unknown_identifiers(&src, &allowed)?;

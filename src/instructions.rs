@@ -52,8 +52,11 @@ pub fn output_path(home: &Path, tool: Tool) -> PathBuf {
 }
 
 /// Reserved identifiers always available in the render context.
-pub fn reserved_identifiers() -> &'static [&'static str] {
-    &["claude", "codex", "hostname"]
+/// One ctx_flag per agent in the registry, plus `"hostname"`.
+pub fn reserved_identifiers() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = crate::agents::all().map(|a| a.ctx_flag).collect();
+    v.push("hostname");
+    v
 }
 
 /// Build the render context for a single tool render.
