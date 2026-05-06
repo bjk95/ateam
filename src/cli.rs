@@ -109,7 +109,9 @@ pub enum Command {
     /// Show what's locked vs installed vs drifted.
     Status,
 
-    /// Adopt a locally-installed skill into the lockfile.
+    /// Adopt locally-installed skills (and global instructions) into the lockfile.
+    /// With no arguments: bulk-import every skill in ~/.claude/skills,
+    /// ~/.codex/skills, ~/.agents/skills plus the global CLAUDE.md / AGENTS.md.
     Import(ImportArgs),
 
     /// Manage per-machine project alias map.
@@ -226,19 +228,19 @@ pub struct ListArgs {
 
 #[derive(Parser)]
 pub struct ImportArgs {
-    /// Skill name to adopt. Required unless --instructions is passed.
+    /// Skill name to adopt. Omit for bulk import (every skill on disk + instructions).
     pub name: Option<String>,
 
-    /// Import the global ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md as the
-    /// instructions template (and start syncing them).
+    /// Only import the global ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md as the
+    /// instructions template — skip skills.
     #[arg(long, conflicts_with_all = ["upstream", "project"])]
     pub instructions: bool,
 
-    /// Override detected upstream source.
+    /// Override detected upstream source. Single-skill mode only.
     #[arg(long, value_name = "SOURCE")]
     pub upstream: Option<String>,
 
-    /// Tag the imported entry with a project alias.
+    /// Tag the imported entry with a project alias. Single-skill mode only.
     #[arg(long, value_name = "ALIAS")]
     pub project: Option<String>,
 }

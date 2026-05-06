@@ -8,18 +8,24 @@ use crate::paths;
 use crate::source::Source;
 use crate::ui;
 use anyhow::{anyhow, bail, Context, Result};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
     let repo = paths::resolve_repo()?;
     let _repo_cfg = RepoConfig::load(&repo)?;
 
+    if args.instructions && args.name.is_some() {
+        bail!("`--instructions` is mutually exclusive with a skill name");
+    }
+
     if git_sync::enabled(no_sync) {
         git_sync::pre_pull(&repo)?;
     }
 
+    let home = paths::home_dir()?;
+
     if args.instructions {
-        let home = paths::home_dir()?;
         let template = import_instructions(&repo, &home)?;
         if git_sync::enabled(no_sync) {
             let msg = "import :: instructions (CLAUDE.md / AGENTS.md)".to_string();
@@ -36,48 +42,36 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
         return Ok(());
     }
 
-    let name = args
-        .name
-        .as_deref()
-        .ok_or_else(|| anyhow!("missing skill name (or pass --instructions)"))?;
+    if args.name.is_none() {
+        return run_bulk(&repo, &home, no_sync);
+    }
+
+    run_single(&repo, &home, &args, no_sync)
+}
+
+// ---------------------------------------------------------------------------
+// Single-skill import (the original behavior)
+
+fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Result<()> {
+    let name = args.name.as_deref().unwrap();
     let normalized = crate::lockfile::normalize_skill_name(name)?;
 
-    // Hunt across known agent dirs in $HOME for a directory matching the name.
-    let mut found: Option<PathBuf> = None;
-    let home = paths::home_dir()?;
-    for agent_dir in [
-        home.join(".claude").join("skills"),
-        home.join(".codex").join("skills"),
-        home.join(".agents").join("skills"),
-    ] {
-        let candidate = agent_dir.join(&normalized);
-        if candidate.exists() {
-            found = Some(candidate);
-            break;
-        }
-    }
-    let installed = found.ok_or_else(|| {
+    let installed = find_installed(home, &normalized).ok_or_else(|| {
         anyhow!(
             "no installed skill found named `{}` in ~/.claude/skills/, ~/.codex/skills/, or ~/.agents/skills/",
             normalized
         )
     })?;
 
-    // If it's a symlink into our own cache, no-op.
-    if let Ok(meta) = std::fs::symlink_metadata(&installed) {
-        if meta.file_type().is_symlink() {
-            let target = std::fs::read_link(&installed)?;
-            if target.starts_with(paths::cache_dir(&repo)) || target.starts_with(paths::local_skills_dir(&repo)) {
-                ui::ok(format!("{} already managed by ateam", normalized));
-                return Ok(());
-            }
-        }
+    if is_managed_by_ateam(repo, &installed)? {
+        ui::ok(format!("{} already managed by ateam", normalized));
+        return Ok(());
     }
 
-    let mut lock = Lockfile::load(&repo)?;
-    let entry = build_entry(&repo, &normalized, &installed, &args)?;
+    let mut lock = Lockfile::load(repo)?;
+    let entry = build_entry(repo, &normalized, &installed, args)?;
     let replaced = lock.upsert(entry);
-    lock.write(&repo)?;
+    lock.write(repo)?;
 
     if git_sync::enabled(no_sync) {
         let last = lock
@@ -85,7 +79,7 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
             .map(|e| e.source.clone())
             .unwrap_or_else(|| "unknown".into());
         let msg = git_sync::msg_import(&normalized, &last);
-        let _ = git_sync::commit_and_push(&repo, &msg);
+        let _ = git_sync::commit_and_push(repo, &msg);
     }
 
     ui::ok(format!(
@@ -99,6 +93,191 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Bulk import: scoop everything in ~/.claude/skills, ~/.codex/skills, ~/.agents/skills,
+// plus the global instructions, into the lockfile.
+
+fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
+    println!("ateam: scanning ~/.claude/skills, ~/.codex/skills, ~/.agents/skills...");
+
+    let mut lock = Lockfile::load(repo)?;
+    let outcome = bulk_import_skills(repo, home, &mut lock)?;
+
+    if outcome.imported > 0 || outcome.collisions > 0 || !outcome.errors.is_empty() {
+        lock.write(repo)?;
+    }
+
+    let instructions_template = match import_instructions(repo, home) {
+        Ok(p) => Some(p),
+        Err(e) => {
+            eprintln!("ateam: instructions skipped — {e:#}");
+            None
+        }
+    };
+
+    println!();
+    println!(
+        "ateam: imported {} skill(s); skipped {} already managed",
+        outcome.imported, outcome.skipped_managed
+    );
+    if outcome.collisions > 0 {
+        println!(
+            "  {} collision(s) — `<repo>/skills/<name>/` already existed; lockfile entry skipped",
+            outcome.collisions
+        );
+    }
+    if !outcome.errors.is_empty() {
+        println!("  errors:");
+        for (name, err) in &outcome.errors {
+            println!("    - {name}: {err}");
+        }
+    }
+    if let Some(p) = &instructions_template {
+        println!("  instructions template → {}", p.display());
+    }
+    if outcome.imported > 0 || instructions_template.is_some() {
+        println!();
+        println!("run `ateam apply` to materialize symlinks for the new entries.");
+    }
+
+    if git_sync::enabled(no_sync) && (outcome.imported > 0 || instructions_template.is_some()) {
+        let msg = format!(
+            "import :: bulk ({} skill(s){})",
+            outcome.imported,
+            if instructions_template.is_some() {
+                " + instructions"
+            } else {
+                ""
+            }
+        );
+        let _ = git_sync::commit_and_push(repo, &msg);
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct BulkOutcome {
+    pub imported: usize,
+    pub skipped_managed: usize,
+    pub collisions: usize,
+    pub errors: Vec<(String, String)>,
+}
+
+pub(crate) fn bulk_import_skills(
+    repo: &Path,
+    home: &Path,
+    lock: &mut Lockfile,
+) -> Result<BulkOutcome> {
+    let mut outcome = BulkOutcome::default();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+
+    for dir in agent_skill_dirs(home) {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => bail!("reading {}: {e}", dir.display()),
+        };
+        for entry in entries.flatten() {
+            let Ok(ft) = entry.file_type() else { continue };
+            if !ft.is_dir() && !ft.is_symlink() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            let installed = entry.path();
+
+            if is_managed_by_ateam(repo, &installed)? {
+                outcome.skipped_managed += 1;
+                continue;
+            }
+            if lock.find(&name).is_some() {
+                outcome.skipped_managed += 1;
+                continue;
+            }
+
+            let dest = paths::local_skills_dir(repo).join(&name);
+            if dest.exists() {
+                outcome.collisions += 1;
+                outcome
+                    .errors
+                    .push((name.clone(), format!("{} already exists", dest.display())));
+                continue;
+            }
+            if let Err(e) = std::fs::create_dir_all(paths::local_skills_dir(repo)) {
+                outcome.errors.push((name.clone(), format!("{e:#}")));
+                continue;
+            }
+
+            // Resolve symlinks before snapshotting so we copy the real content.
+            let src = std::fs::canonicalize(&installed).unwrap_or_else(|_| installed.clone());
+            if !src.is_dir() {
+                outcome
+                    .errors
+                    .push((name.clone(), format!("{} is not a directory", src.display())));
+                continue;
+            }
+            if let Err(e) = crate::install::copy_dir_recursive(&src, &dest) {
+                outcome.errors.push((name.clone(), format!("{e:#}")));
+                continue;
+            }
+
+            lock.upsert(SkillEntry {
+                name: name.clone(),
+                source: format!("local:skills/{}", name),
+                path: Some(format!("skills/{}", name)),
+                git_ref: None,
+                tree_sha: None,
+                agents: vec!["*".into()],
+                profiles: vec![],
+                project: None,
+            });
+            outcome.imported += 1;
+            println!("  + {name}");
+        }
+    }
+    Ok(outcome)
+}
+
+fn agent_skill_dirs(home: &Path) -> Vec<PathBuf> {
+    vec![
+        home.join(".claude").join("skills"),
+        home.join(".codex").join("skills"),
+        home.join(".agents").join("skills"),
+    ]
+}
+
+fn find_installed(home: &Path, normalized: &str) -> Option<PathBuf> {
+    for dir in agent_skill_dirs(home) {
+        let candidate = dir.join(normalized);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn is_managed_by_ateam(repo: &Path, installed: &Path) -> Result<bool> {
+    let Ok(meta) = std::fs::symlink_metadata(installed) else {
+        return Ok(false);
+    };
+    if !meta.file_type().is_symlink() {
+        return Ok(false);
+    }
+    let target = std::fs::read_link(installed)
+        .with_context(|| format!("reading symlink {}", installed.display()))?;
+    Ok(target.starts_with(paths::cache_dir(repo))
+        || target.starts_with(paths::local_skills_dir(repo)))
+}
+
+// ---------------------------------------------------------------------------
+// Instructions import (shared by --instructions and bulk).
 
 /// Import the existing global CLAUDE.md / AGENTS.md as the canonical
 /// template. Refuses if a template already exists. On success: writes the
@@ -118,21 +297,7 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
     let claude = read_optional(&claude_path)?;
     let codex = read_optional(&codex_path)?;
 
-    let canonical = match (claude.as_deref(), codex.as_deref()) {
-        (None, None) => bail!(
-            "nothing to import — neither {} nor {} exists",
-            claude_path.display(),
-            codex_path.display()
-        ),
-        (Some(c), None) => c.to_string(),
-        (None, Some(x)) => x.to_string(),
-        (Some(c), Some(x)) if c == x => c.to_string(),
-        (Some(_), Some(_)) => bail!(
-            "{} and {} differ — reconcile (or delete one) before importing.",
-            claude_path.display(),
-            codex_path.display()
-        ),
-    };
+    let canonical = pick_canonical(&claude_path, claude.as_deref(), &codex_path, codex.as_deref())?;
 
     if let Some(parent) = template.parent() {
         std::fs::create_dir_all(parent)
@@ -167,6 +332,56 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
     mf.write(repo)?;
 
     Ok(template)
+}
+
+fn pick_canonical(
+    claude_path: &Path,
+    claude: Option<&str>,
+    codex_path: &Path,
+    codex: Option<&str>,
+) -> Result<String> {
+    match (claude, codex) {
+        (None, None) => bail!(
+            "nothing to import — neither {} nor {} exists",
+            claude_path.display(),
+            codex_path.display()
+        ),
+        (Some(c), None) => Ok(c.to_string()),
+        (None, Some(x)) => Ok(x.to_string()),
+        (Some(c), Some(x)) if c == x => Ok(c.to_string()),
+        (Some(c), Some(x)) => prompt_pick(claude_path, c, codex_path, x),
+    }
+}
+
+fn prompt_pick(
+    claude_path: &Path,
+    claude: &str,
+    codex_path: &Path,
+    codex: &str,
+) -> Result<String> {
+    use dialoguer::{theme::ColorfulTheme, Select};
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        bail!(
+            "{} and {} differ — reconcile (or delete one) before importing.",
+            claude_path.display(),
+            codex_path.display()
+        );
+    }
+    let items = [
+        format!("Claude  — {} ({} bytes)", claude_path.display(), claude.len()),
+        format!("Codex   — {} ({} bytes)", codex_path.display(), codex.len()),
+    ];
+    let choice = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("CLAUDE.md and AGENTS.md differ. Which one should be the canonical template?")
+        .items(&items)
+        .default(0)
+        .interact()?;
+    Ok(if choice == 0 {
+        claude.to_string()
+    } else {
+        codex.to_string()
+    })
 }
 
 fn read_optional(p: &Path) -> Result<Option<String>> {
@@ -204,7 +419,8 @@ fn build_entry(
     }
     std::fs::create_dir_all(paths::local_skills_dir(repo))
         .with_context(|| format!("creating {}", paths::local_skills_dir(repo).display()))?;
-    crate::install::copy_dir_recursive(installed, &dest)?;
+    let src = std::fs::canonicalize(installed).unwrap_or_else(|_| installed.to_path_buf());
+    crate::install::copy_dir_recursive(&src, &dest)?;
     Ok(SkillEntry {
         name: name.to_string(),
         source: format!("local:skills/{}", name),
@@ -246,7 +462,17 @@ mod tests {
         fn template(&self) -> PathBuf {
             paths::instructions_template(self.repo.path())
         }
-        fn run(&self) -> Result<PathBuf> {
+        fn write_skill(&self, agent: &str, name: &str, body: &str) {
+            let dir = self
+                .home
+                .path()
+                .join(format!(".{}", agent))
+                .join("skills")
+                .join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("SKILL.md"), body).unwrap();
+        }
+        fn run_instructions(&self) -> Result<PathBuf> {
             import_instructions(self.repo.path(), self.home.path())
         }
     }
@@ -255,7 +481,7 @@ mod tests {
     fn imports_when_only_claude_exists() {
         let fx = Fixture::new();
         fx.write_claude("hello\n");
-        let template = fx.run().unwrap();
+        let template = fx.run_instructions().unwrap();
         assert_eq!(std::fs::read_to_string(&template).unwrap(), "hello\n");
         let lock = Lockfile::load(fx.repo.path()).unwrap();
         assert!(lock.instructions.is_some());
@@ -269,7 +495,7 @@ mod tests {
         let fx = Fixture::new();
         fx.write_claude("same\n");
         fx.write_codex("same\n");
-        fx.run().unwrap();
+        fx.run_instructions().unwrap();
         let mf = Manifest::load(fx.repo.path()).unwrap();
         assert_eq!(mf.entries.len(), 2);
     }
@@ -277,16 +503,17 @@ mod tests {
     #[test]
     fn errors_when_neither_exists() {
         let fx = Fixture::new();
-        let err = fx.run().unwrap_err();
+        let err = fx.run_instructions().unwrap_err();
         assert!(format!("{err}").contains("nothing to import"));
     }
 
     #[test]
-    fn errors_when_files_differ() {
+    fn non_interactive_diff_still_errors() {
+        // cargo test runs without a tty → prompt_pick falls through to error.
         let fx = Fixture::new();
         fx.write_claude("v1\n");
         fx.write_codex("v2\n");
-        let err = fx.run().unwrap_err();
+        let err = fx.run_instructions().unwrap_err();
         assert!(format!("{err}").contains("differ"));
     }
 
@@ -296,7 +523,73 @@ mod tests {
         fx.write_claude("any\n");
         std::fs::create_dir_all(fx.template().parent().unwrap()).unwrap();
         std::fs::write(fx.template(), "existing template").unwrap();
-        let err = fx.run().unwrap_err();
+        let err = fx.run_instructions().unwrap_err();
         assert!(format!("{err}").contains("already exists"));
+    }
+
+    #[test]
+    fn bulk_imports_skills_from_both_dirs() {
+        let fx = Fixture::new();
+        fx.write_skill("claude", "alpha", "alpha body");
+        fx.write_skill("codex", "beta", "beta body");
+        // Same skill name in both — should dedupe (claude wins, scanned first).
+        fx.write_skill("claude", "shared", "claude version");
+        fx.write_skill("codex", "shared", "codex version");
+
+        let mut lock = Lockfile::load(fx.repo.path()).unwrap();
+        let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
+
+        assert_eq!(outcome.imported, 3, "expected alpha, beta, shared");
+        assert_eq!(outcome.skipped_managed, 0);
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+
+        let names: Vec<_> = lock.skills.iter().map(|s| s.name.clone()).collect();
+        assert!(names.contains(&"alpha".to_string()));
+        assert!(names.contains(&"beta".to_string()));
+        assert!(names.contains(&"shared".to_string()));
+
+        // Snapshot of `shared` is the claude version (first seen).
+        let shared_body = std::fs::read_to_string(
+            fx.repo.path().join("skills/shared/SKILL.md"),
+        )
+        .unwrap();
+        assert_eq!(shared_body, "claude version");
+    }
+
+    #[test]
+    fn bulk_skips_already_in_lockfile() {
+        let fx = Fixture::new();
+        fx.write_skill("claude", "alpha", "body");
+        let mut lock = Lockfile::load(fx.repo.path()).unwrap();
+        lock.skills.push(SkillEntry {
+            name: "alpha".into(),
+            source: "github:foo/bar".into(),
+            path: Some("skills/alpha".into()),
+            git_ref: None,
+            tree_sha: None,
+            agents: vec!["*".into()],
+            profiles: vec![],
+            project: None,
+        });
+        let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
+        assert_eq!(outcome.imported, 0);
+        assert_eq!(outcome.skipped_managed, 1);
+    }
+
+    #[test]
+    fn bulk_skips_symlinks_into_ateam_cache() {
+        let fx = Fixture::new();
+        // Pretend a skill is already an ateam-managed symlink.
+        let cache_target = paths::cache_dir(fx.repo.path()).join("alpha");
+        std::fs::create_dir_all(&cache_target).unwrap();
+        std::fs::write(cache_target.join("SKILL.md"), "cached").unwrap();
+        let claude_skills = fx.home.path().join(".claude/skills");
+        std::fs::create_dir_all(&claude_skills).unwrap();
+        std::os::unix::fs::symlink(&cache_target, claude_skills.join("alpha")).unwrap();
+
+        let mut lock = Lockfile::load(fx.repo.path()).unwrap();
+        let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
+        assert_eq!(outcome.imported, 0);
+        assert_eq!(outcome.skipped_managed, 1);
     }
 }
