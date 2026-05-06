@@ -1,0 +1,33 @@
+name: Auto-tag
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Bumps the patch/minor/major version from conventional-commit prefixes
+      # (feat:, fix:, BREAKING CHANGE:) since the last tag, then pushes a
+      # signed `vX.Y.Z` tag. With `default_bump: false`, plain commits do
+      # nothing — only conventional commits cut a release.
+      #
+      # The token MUST be a PAT, not GITHUB_TOKEN. Tags pushed via the
+      # default GITHUB_TOKEN do not fire downstream `on: push: tags`
+      # workflows (GitHub's anti-loop safeguard), so release.yml would
+      # silently never run. Create a fine-grained PAT with `contents: write`
+      # on this repo and store it as the secret `RELEASE_TAG_PAT`.
+      - name: Bump version and tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.RELEASE_TAG_PAT }}
+          release_branches: main
+          default_bump: false
