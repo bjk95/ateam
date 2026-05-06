@@ -137,12 +137,12 @@ pub fn instructions_template(repo: &Path) -> PathBuf {
 
 /// Per-agent skill install path under a given install root (`~` or a project root).
 pub fn agent_skill_path(install_root: &Path, agent: &str, skill_name: &str) -> Result<PathBuf> {
-    let agent_dir = match agent {
-        "claude-code" => install_root.join(".claude").join("skills"),
-        "codex" => install_root.join(".codex").join("skills"),
-        other => return Err(anyhow!("unknown agent `{}`", other)),
-    };
-    Ok(agent_dir.join(skill_name))
+    let def = crate::agents::lookup(agent)
+        .ok_or_else(|| anyhow!("unknown agent `{}`", agent))?;
+    let subdir = def
+        .skills_subdir
+        .ok_or_else(|| anyhow!("agent `{}` has no skills directory", agent))?;
+    Ok(install_root.join(subdir).join(skill_name))
 }
 
 pub fn home_dir() -> Result<PathBuf> {
@@ -164,4 +164,29 @@ pub fn display_path(p: &Path) -> String {
         }
     }
     p.display().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_skill_path_matches_known_layout() {
+        let root = PathBuf::from("/tmp/install-root");
+        assert_eq!(
+            agent_skill_path(&root, "claude-code", "foo").unwrap(),
+            PathBuf::from("/tmp/install-root/.claude/skills/foo"),
+        );
+        assert_eq!(
+            agent_skill_path(&root, "codex", "foo").unwrap(),
+            PathBuf::from("/tmp/install-root/.codex/skills/foo"),
+        );
+    }
+
+    #[test]
+    fn agent_skill_path_rejects_unknown_agent() {
+        let root = PathBuf::from("/tmp/install-root");
+        let err = agent_skill_path(&root, "no-such-agent", "foo").unwrap_err();
+        assert!(format!("{err}").contains("unknown agent"));
+    }
 }
