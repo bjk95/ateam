@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 /// expensive to call per skill — call once, look up many.
 pub fn build_index(home: &Path) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    index_claude_marketplaces(&mut map, home);
+    index_claude_marketplaces(home, &mut map);
     map
 }
 
@@ -50,7 +50,7 @@ struct MarketplaceSource {
     url: String,
 }
 
-fn index_claude_marketplaces(map: &mut HashMap<String, String>, home: &Path) {
+pub fn index_claude_marketplaces(home: &Path, map: &mut HashMap<String, String>) {
     let plugins_dir = home.join(".claude/plugins");
     let installed = match std::fs::read_to_string(plugins_dir.join("installed_plugins.json")) {
         Ok(s) => match serde_json::from_str::<InstalledPlugins>(&s) {
