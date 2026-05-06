@@ -435,7 +435,7 @@ fn prompt_install_scope(alias: &str, git_root: &Path, assume_yes: bool) -> Resul
     );
     let choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Install scope")
-        .items(&[&project_label, "Global (~)"])
+        .items(&[project_label.as_str(), "Global (~)"])
         .default(0)
         .interact()?;
     Ok(Some(choice == 0))
