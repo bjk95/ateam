@@ -240,7 +240,9 @@ pub struct UpdateArgs {
 
 #[derive(Parser)]
 pub struct RemoveArgs {
-    pub name: String,
+    /// One or more skill names to remove.
+    #[arg(required = true, num_args = 1..)]
+    pub names: Vec<String>,
 }
 
 #[derive(Parser)]

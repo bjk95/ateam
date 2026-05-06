@@ -84,10 +84,15 @@ ateam skills update <name>...      # specific entries
 
 ## `ateam skills remove`
 
-Delete a skill from the lockfile and uninstall its symlinks.
+Delete one or more skills from the lockfile and uninstall their symlinks. If
+any name isn't in the lockfile, nothing is removed and the command errors.
 
 ```bash
-ateam skills remove <name>
+ateam skills remove <name>...
+```
+
+```bash
+ateam skills remove gstack-retro gstack-plan-design-review
 ```
 
 Local-source directories under `<repo>/skills/` are never deleted by ateam — you

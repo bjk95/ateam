@@ -182,6 +182,10 @@ pub fn msg_remove(skill: &str) -> String {
     format!("remove :: {}", skill)
 }
 
+pub fn msg_remove_bulk(skills: &[String]) -> String {
+    format!("remove :: {}", skills.join(", "))
+}
+
 pub fn msg_deactivate(skill: &str) -> String {
     format!("deactivate :: {}", skill)
 }
