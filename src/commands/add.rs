@@ -190,6 +190,10 @@ fn pick_skills<'a>(
         ui::detail("run with `--list` to see all available skills");
     }
 
+    if out.is_empty() {
+        bail!("no skills installed — none of the requested --skill names matched");
+    }
+
     Ok(out)
 }
 
@@ -532,4 +536,55 @@ fn tempdir(repo: &Path) -> Result<TempDir> {
     std::fs::create_dir_all(&p)
         .with_context(|| format!("creating {}", p.display()))?;
     Ok(TempDir { path: p })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn skill(name: &str) -> DiscoveredSkill {
+        DiscoveredSkill {
+            name: name.into(),
+            description: None,
+            dir: PathBuf::new(),
+            rel_skill_md: PathBuf::new(),
+            source_hash: None,
+        }
+    }
+
+    fn args_with_skills(names: &[&str]) -> AddArgs {
+        AddArgs {
+            source: "test".into(),
+            list: false,
+            skill: names.iter().map(|s| (*s).into()).collect(),
+            all: false,
+            agents: vec![],
+            yes: false,
+            global: false,
+            profile: vec![],
+            project: None,
+            r#ref: None,
+        }
+    }
+
+    #[test]
+    fn pick_skills_bails_when_no_named_skill_matches() {
+        let discovered = vec![skill("foo"), skill("bar")];
+        let args = args_with_skills(&["typo"]);
+        let err = pick_skills(&discovered, &args).unwrap_err();
+        assert!(
+            err.to_string().contains("no skills installed"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn pick_skills_returns_partial_when_some_match() {
+        let discovered = vec![skill("foo"), skill("bar")];
+        let args = args_with_skills(&["foo", "typo"]);
+        let out = pick_skills(&discovered, &args).expect("partial match should succeed");
+        let names: Vec<&str> = out.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["foo"]);
+    }
 }
