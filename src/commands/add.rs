@@ -110,7 +110,14 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
 fn fetch_package(source: &Source, git_ref: Option<&str>, dest: &Path) -> Result<PathBuf> {
     match source {
         Source::Github { owner, repo } => {
-            let r = git_ref.unwrap_or(github::default_branch_fallback());
+            let resolved;
+            let r = match git_ref {
+                Some(r) => r,
+                None => {
+                    resolved = github::default_branch(owner, repo);
+                    resolved.as_str()
+                }
+            };
             github::fetch_tarball(owner, repo, r, dest)
         }
         Source::Git { url } => {
@@ -462,7 +469,7 @@ fn install_one(
                 let git_ref = args
                     .r#ref
                     .clone()
-                    .unwrap_or_else(|| github::default_branch_fallback().to_string());
+                    .unwrap_or_else(|| github::default_branch(owner, r));
                 let commit_sha = github::resolve_ref(owner, r, &git_ref).unwrap_or_else(|e| {
                     tracing::warn!("could not resolve ref for {}/{}@{}: {}", owner, r, git_ref, e);
                     String::new()

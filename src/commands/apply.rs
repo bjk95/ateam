@@ -102,11 +102,11 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             (Source::from_lockfile_string(&entry.source), entry.tree_sha.as_ref())
         {
             if let Some(path) = &entry.path {
-                if let Ok(commit_sha) = github::resolve_ref(
-                    &owner,
-                    &r,
-                    entry.git_ref.as_deref().unwrap_or(github::default_branch_fallback()),
-                ) {
+                let r_ref = entry
+                    .git_ref
+                    .clone()
+                    .unwrap_or_else(|| github::default_branch(&owner, &r));
+                if let Ok(commit_sha) = github::resolve_ref(&owner, &r, &r_ref) {
                     if let Ok(Some(latest)) = github::subtree_sha(&owner, &r, &commit_sha, path) {
                         if Some(&latest) != entry.tree_sha.as_ref() {
                             tracing::info!("drift detected for {} (refetching)", entry.name);
@@ -321,7 +321,10 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
         .ok_or_else(|| anyhow!("lockfile entry `{}` missing `path`", entry.name))?;
     match source {
         Source::Github { owner, repo: r } => {
-            let r_ref = entry.git_ref.clone().unwrap_or_else(|| github::default_branch_fallback().to_string());
+            let r_ref = entry
+                .git_ref
+                .clone()
+                .unwrap_or_else(|| github::default_branch(&owner, &r));
             let commit_sha = github::resolve_ref(&owner, &r, &r_ref)?;
             // If the upstream subpath has moved/been removed, fall through to
             // skills.sh — the registry's blob endpoint often still serves a

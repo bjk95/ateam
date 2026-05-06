@@ -144,7 +144,7 @@ fn check_and_refetch(
             let r_ref = entry
                 .git_ref
                 .clone()
-                .unwrap_or_else(|| github::default_branch_fallback().to_string());
+                .unwrap_or_else(|| github::default_branch(owner, r));
             let commit_sha = github::resolve_ref(owner, r, &r_ref)?;
             let latest = match github::subtree_sha(owner, r, &commit_sha, &path)? {
                 Some(s) => s,
