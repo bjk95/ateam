@@ -13,12 +13,20 @@ pub enum LinkOutcome {
     Replaced,
     /// Existing real file/dir was moved aside (only with `force`).
     MovedAside { backup: PathBuf },
+    /// Existing real dir's content matched our snapshot byte-for-byte and was
+    /// removed in place (no `force` needed — the data is already in the
+    /// snapshot, so the redundant copy is safe to delete).
+    AutoHealed,
     /// Refused because a real file/dir exists. Caller should escalate or skip.
     Refused,
 }
 
 /// Create a symlink at `link` pointing at `target`. Idempotent.
-/// Replaces existing symlinks unconditionally; refuses on real files unless `force`.
+/// Replaces existing symlinks unconditionally; refuses on real files unless
+/// `force`, with one exception: if the existing real directory's content is
+/// byte-for-byte identical to `target`, it's removed silently (covers the
+/// "skill installed pre-ateam, then imported" case where both copies still
+/// exist on disk).
 pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOutcome> {
     if let Some(parent) = link.parent() {
         std::fs::create_dir_all(parent)
@@ -39,6 +47,22 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
                 .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
             return Ok(LinkOutcome::Replaced);
         } else {
+            // Auto-heal: byte-identical copy is redundant; safe to drop.
+            if content_matches(link, target).unwrap_or(false) {
+                if meta.is_dir() {
+                    std::fs::remove_dir_all(link).with_context(|| {
+                        format!("removing redundant copy at {}", link.display())
+                    })?;
+                } else {
+                    std::fs::remove_file(link).with_context(|| {
+                        format!("removing redundant copy at {}", link.display())
+                    })?;
+                }
+                symlink(target, link).with_context(|| {
+                    format!("creating symlink {} → {}", link.display(), target.display())
+                })?;
+                return Ok(LinkOutcome::AutoHealed);
+            }
             if !force {
                 return Ok(LinkOutcome::Refused);
             }
@@ -54,6 +78,12 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
     symlink(target, link)
         .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
     Ok(LinkOutcome::Created)
+}
+
+fn content_matches(a: &Path, b: &Path) -> Result<bool> {
+    let ha = crate::source::local::content_hash(a)?;
+    let hb = crate::source::local::content_hash(b)?;
+    Ok(ha == hb)
 }
 
 /// Atomically materialize a fetched skill into `<repo>/skills/<name>/`.

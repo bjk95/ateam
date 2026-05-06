@@ -152,7 +152,8 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced
                 | install::LinkOutcome::AlreadyCorrect
-                | install::LinkOutcome::MovedAside { .. } => {
+                | install::LinkOutcome::MovedAside { .. }
+                | install::LinkOutcome::AutoHealed => {
                     new_manifest.entries.push(ManifestEntry {
                         path: link.clone(),
                         kind: EntryKind::Symlink,
