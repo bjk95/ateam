@@ -91,7 +91,10 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
         } else {
             git_sync::msg_update_bulk(changed.len())
         };
-        let _ = git_sync::commit_and_push(&repo, &msg);
+        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
+        }
     }
 
     Ok(())

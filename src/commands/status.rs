@@ -1,4 +1,5 @@
 use crate::config::MachineConfig;
+use crate::git_sync;
 use crate::lockfile::Lockfile;
 use crate::manifest::Manifest;
 use crate::paths;
@@ -13,15 +14,16 @@ pub fn run() -> Result<()> {
     let machine = MachineConfig::load(&repo)?;
 
     let dangling = count_dangling(&manifest);
+    let unpushed = git_sync::unpushed_count(&repo).unwrap_or(0);
 
-    // Headline: ✓ when healthy, ⚠ when dangling links exist.
+    // Headline: ✓ when healthy, ⚠ when dangling links or unpushed commits exist.
     let suffix = if machine.profiles.is_empty() {
         String::new()
     } else {
         format!(" · {}", machine.profiles.join(", "))
     };
     let headline = format!("ateam{}", suffix);
-    if dangling == 0 {
+    if dangling == 0 && unpushed == 0 {
         ui::ok(&headline);
     } else {
         ui::warn(&headline);
@@ -49,6 +51,14 @@ pub fn run() -> Result<()> {
             "  {}  {} broken links — run: ateam apply",
             style("✗").red(),
             dangling
+        ));
+    }
+    if unpushed > 0 {
+        ui::plain(format!(
+            "  {}  {} unpushed commit{} — will push on the next mutating command",
+            style("⚠").yellow(),
+            unpushed,
+            if unpushed == 1 { "" } else { "s" }
         ));
     }
 

@@ -98,7 +98,10 @@ pub fn run(args: AddArgs, no_sync: bool) -> Result<()> {
 
     if git_sync::enabled(no_sync) {
         let msg = git_sync::msg_add(&source.lockfile_string(), &installed);
-        let _ = git_sync::commit_and_push(&repo, &msg);
+        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
+        }
     }
 
     Ok(())
