@@ -12,6 +12,7 @@ mod paths;
 mod repo_lock;
 mod self_update;
 mod source;
+mod subagent;
 mod ui;
 mod upstream;
 

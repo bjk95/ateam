@@ -183,6 +183,7 @@ mod tests {
     fn empty_lock() -> Lockfile {
         Lockfile {
             skills: vec![],
+            subagents: vec![],
             instructions: None,
         }
     }
