@@ -10,8 +10,6 @@ pub struct DiscoveredSkill {
     pub description: Option<String>,
     /// Filesystem path to the skill directory (containing SKILL.md).
     pub dir: PathBuf,
-    /// Path of SKILL.md relative to the package root (e.g. `skills/foo/SKILL.md`).
-    pub rel_skill_md: PathBuf,
     /// Authoritative version hash carried by the source (e.g., the
     /// `skillsComputedHash` returned by skills.sh's blob endpoint). When set,
     /// `install_one` uses this verbatim as the lockfile's `tree_sha` instead
@@ -30,11 +28,11 @@ struct Frontmatter {
 /// parse its YAML frontmatter, and return one entry per skill.
 pub fn walk_package(root: &Path) -> Result<Vec<DiscoveredSkill>> {
     let mut out = Vec::new();
-    walk(root, root, &mut out)?;
+    walk(root, &mut out)?;
     Ok(out)
 }
 
-fn walk(root: &Path, dir: &Path, out: &mut Vec<DiscoveredSkill>) -> Result<()> {
+fn walk(dir: &Path, out: &mut Vec<DiscoveredSkill>) -> Result<()> {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return Ok(()),
@@ -52,9 +50,9 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<DiscoveredSkill>) -> Result<()> {
             .file_type()
             .with_context(|| format!("stat {}", path.display()))?;
         if ft.is_dir() {
-            walk(root, &path, out)?;
+            walk(&path, out)?;
         } else if ft.is_file() && path.file_name() == Some(std::ffi::OsStr::new("SKILL.md")) {
-            if let Some(skill) = parse_skill_md(root, &path)? {
+            if let Some(skill) = parse_skill_md(&path)? {
                 out.push(skill);
             }
         }
@@ -62,7 +60,7 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<DiscoveredSkill>) -> Result<()> {
     Ok(())
 }
 
-fn parse_skill_md(root: &Path, file: &Path) -> Result<Option<DiscoveredSkill>> {
+fn parse_skill_md(file: &Path) -> Result<Option<DiscoveredSkill>> {
     let content =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let parsed = gray_matter::Matter::<gray_matter::engine::YAML>::new().parse(&content);
@@ -82,16 +80,11 @@ fn parse_skill_md(root: &Path, file: &Path) -> Result<Option<DiscoveredSkill>> {
         .parent()
         .ok_or_else(|| anyhow!("SKILL.md has no parent: {}", file.display()))?
         .to_path_buf();
-    let rel_skill_md = file
-        .strip_prefix(root)
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|_| file.to_path_buf());
 
     Ok(Some(DiscoveredSkill {
         name,
         description: frontmatter.description,
         dir,
-        rel_skill_md,
         source_hash: None,
     }))
 }

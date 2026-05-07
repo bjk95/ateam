@@ -130,10 +130,6 @@ pub fn local_subagent_path(repo: &Path, name: &str) -> PathBuf {
     local_subagents_dir(repo).join(format!("{}.md", name))
 }
 
-pub fn instructions_dir(repo: &Path) -> PathBuf {
-    repo.join("instructions")
-}
-
 pub fn instructions_template(repo: &Path) -> PathBuf {
     crate::instructions::template_path(repo)
 }

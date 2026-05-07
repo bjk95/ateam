@@ -650,7 +650,6 @@ mod tests {
             name: name.into(),
             description: None,
             dir: PathBuf::new(),
-            rel_skill_md: PathBuf::new(),
             source_hash: None,
         }
     }

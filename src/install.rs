@@ -12,7 +12,7 @@ pub enum LinkOutcome {
     /// Replaced an existing symlink that pointed elsewhere.
     Replaced,
     /// Existing real file/dir was moved aside (only with `force`).
-    MovedAside { backup: PathBuf },
+    MovedAside,
     /// Existing real dir's content matched our snapshot byte-for-byte and was
     /// removed in place (no `force` needed — the data is already in the
     /// snapshot, so the redundant copy is safe to delete).
@@ -71,7 +71,7 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
                 .with_context(|| format!("moving aside {} → {}", link.display(), backup.display()))?;
             symlink(target, link)
                 .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
-            return Ok(LinkOutcome::MovedAside { backup });
+            return Ok(LinkOutcome::MovedAside);
         }
     }
 
@@ -323,7 +323,7 @@ pub enum CopyDirOutcome {
     Created,
     Replaced,
     AlreadyCorrect,
-    MovedAside { backup: PathBuf },
+    MovedAside,
     Refused,
 }
 
@@ -379,7 +379,7 @@ pub fn install_copy_dir(
     std::fs::rename(dst, &backup)
         .with_context(|| format!("moving aside {} → {}", dst.display(), backup.display()))?;
     copy_dir_recursive(src, dst)?;
-    Ok(CopyDirOutcome::MovedAside { backup })
+    Ok(CopyDirOutcome::MovedAside)
 }
 
 fn content_matches_dir(a: &Path, b: &Path) -> Result<bool> {
