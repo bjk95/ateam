@@ -21,7 +21,7 @@ export default defineConfig({
         replacesTitle: false,
       },
       social: {
-        github: 'https://github.com/bradleykester/agents',
+        github: 'https://github.com/bjk95/agents',
       },
       customCss: [
         './src/styles/tokens.css',

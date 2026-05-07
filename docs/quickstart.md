@@ -52,8 +52,8 @@ and Codex now see the same skill.
 
 ## Next
 
-- [Project-scoped skills](/concepts/project-scope/) — install a skill into a
+- [Project-scoped skills](./concepts/project-scope.md) — install a skill into a
   specific project's `.claude/skills/` instead of user-global.
-- [Profiles](/concepts/profiles/) — gate skills by machine (work / personal /
+- [Profiles](./concepts/profiles.md) — gate skills by machine (work / personal /
   devbox).
-- [`agents` CLI reference](/reference/cli/) — every flag.
+- [`agents` CLI reference](./reference/cli.md) — every flag.
