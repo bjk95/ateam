@@ -33,7 +33,7 @@ impl RepoLock {
             .with_context(|| format!("opening lock file {}", path.display()))?;
 
         match file.try_lock_exclusive() {
-            Ok(()) => return Ok(Self { file, path }),
+            Ok(()) => Ok(Self { file, path }),
             Err(_) if no_wait => {
                 bail!(
                     "another `agents` process holds the lock at {}; rerun without --no-wait or wait for it to finish",
@@ -41,16 +41,14 @@ impl RepoLock {
                 );
             }
             Err(_) => {
-                crate::ui::detail(format!(
-                    "waiting for another agents process to release {}",
-                    path.display()
-                ));
+                let step =
+                    crate::ui::step("waiting for another agents process to release repo lock");
+                file.lock_exclusive()
+                    .with_context(|| format!("acquiring exclusive lock on {}", path.display()))?;
+                step.finish();
+                Ok(Self { file, path })
             }
         }
-
-        file.lock_exclusive()
-            .with_context(|| format!("acquiring exclusive lock on {}", path.display()))?;
-        Ok(Self { file, path })
     }
 }
 
