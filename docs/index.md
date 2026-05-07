@@ -24,9 +24,9 @@ your work machine appears on your personal machine after `agents apply`.
 ## Status
 
 v1 is functional end-to-end against the live `vercel-labs/agent-skills` registry.
-See the [installation guide](/install/) to get running, then read the
-[quickstart](/quickstart/) for the first 5 minutes.
+See the [installation guide](./install.md) to get running, then read the
+[quickstart](./quickstart.md) for the first 5 minutes.
 
 ## Source
 
-`agents` is open source. [Read the code on GitHub](https://github.com/bradleykester/agents).
+`agents` is open source. [Read the code on GitHub](https://github.com/bjk95/agents).

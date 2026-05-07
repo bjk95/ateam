@@ -56,4 +56,4 @@ atomically.
 agents --version
 ```
 
-If that prints a version, you're done. Move on to the [quickstart](/quickstart/).
+If that prints a version, you're done. Move on to the [quickstart](./quickstart.md).
