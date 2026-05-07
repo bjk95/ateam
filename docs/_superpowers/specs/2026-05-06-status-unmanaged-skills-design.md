@@ -1,19 +1,19 @@
-# Surface unmanaged skills in `ateam status`
+# Surface unmanaged skills in `agents status`
 
 **Date:** 2026-05-06
 **Status:** Implemented (beads-qmt)
 
 ## Goal
 
-When Claude, Codex, or another agent authors a skill via its native path (e.g. `anthropic-skills:skill-creator` writing into `~/.claude/skills/<name>/`), the resulting directory is invisible to ateam until the user remembers to run `ateam skills import`. The discoverability gap is the actual friction — `import` already does the right thing once invoked.
+When Claude, Codex, or another agent authors a skill via its native path (e.g. `anthropic-skills:skill-creator` writing into `~/.claude/skills/<name>/`), the resulting directory is invisible to agents until the user remembers to run `agents skills import`. The discoverability gap is the actual friction — `import` already does the right thing once invoked.
 
-`ateam status` is extended to surface this drift. When unmanaged skill directories exist in any of the watched agent dirs, status prints one body line counting them and pointing at `ateam skills import`. Verbose mode lists names and the dirs each one was seen in.
+`agents status` is extended to surface this drift. When unmanaged skill directories exist in any of the watched agent dirs, status prints one body line counting them and pointing at `agents skills import`. Verbose mode lists names and the dirs each one was seen in.
 
-The headline (`✓ ateam` / `⚠ ateam`) is unchanged — unmanaged skills are not a broken state, just an "adoption pending" state.
+The headline (`✓ agents` / `⚠ agents`) is unchanged — unmanaged skills are not a broken state, just an "adoption pending" state.
 
 ## Out of scope
 
-- A new `ateam skills create` command (rejected during brainstorming: AI agents already author skills well; ateam scaffolding would duplicate worse).
+- A new `agents skills create` command (rejected during brainstorming: AI agents already author skills well; agents scaffolding would duplicate worse).
 - Auto-importing on detection (rejected: removes user review before content lands in the synced repo).
 - A `--ignore` list for skills the user deliberately keeps unmanaged (deferred: no observed need; revisit when one lands).
 - Drift surfacing for instructions, hooks, agents, or MCP configs (this change is scoped to skills only).
@@ -21,14 +21,14 @@ The headline (`✓ ateam` / `⚠ ateam`) is unchanged — unmanaged skills are n
 ## High-level flow
 
 ```
-ateam status
+agents status
   │
   ├─► load lockfile, manifest, machine config
   ├─► count_dangling          [existing]
   ├─► unpushed_count          [existing]
   ├─► discover_unmanaged      [NEW]
   │     ├─ scan ~/.claude/skills, ~/.codex/skills, ~/.agents/skills
-  │     ├─ for each entry: skip if hidden, symlink-into-ateam, or in lockfile
+  │     ├─ for each entry: skip if hidden, symlink-into-agents, or in lockfile
   │     ├─ dedup by name; aggregate dirs per name
   │     └─ return Vec<UnmanagedSkill>, sorted by name
   │
@@ -38,7 +38,7 @@ ateam status
         ├─ "N projects: …"
         ├─ broken-links line (existing)
         ├─ unpushed line (existing)
-        └─ "N unmanaged skills in <dirs> — run: ateam skills import"   [NEW; default]
+        └─ "N unmanaged skills in <dirs> — run: agents skills import"   [NEW; default]
               under -v: per-skill list with origin dirs
 ```
 
@@ -90,7 +90,7 @@ let unmanaged = discover::discover_unmanaged(&repo, &home, &lock);
 if !unmanaged.is_empty() {
     let dirs_summary = summarize_dirs(&unmanaged); // e.g. "~/.claude, ~/.codex"
     ui::plain(format!(
-        "  {} unmanaged skill{} in {} — run: ateam skills import",
+        "  {} unmanaged skill{} in {} — run: agents skills import",
         unmanaged.len(),
         if unmanaged.len() == 1 { "" } else { "s" },
         dirs_summary,
@@ -125,8 +125,8 @@ The deeper refactor — having `bulk_import_skills` itself call `discover_unmana
 |---|---|
 | Empty agent dir | not counted |
 | Agent dir does not exist on disk | silently skipped |
-| Symlink whose target is inside the ateam repo cache or local-skills dir | skipped (managed) |
-| Symlink to a path outside the ateam repo (user manually symlinked) | reported as unmanaged. User can ignore the message; revisit if anyone complains |
+| Symlink whose target is inside the agents repo cache or local-skills dir | skipped (managed) |
+| Symlink to a path outside the agents repo (user manually symlinked) | reported as unmanaged. User can ignore the message; revisit if anyone complains |
 | Same skill name present in both `~/.claude/skills` and `~/.codex/skills` | counted once, both dirs listed under `-v` |
 | Skill name in lockfile but no directory exists on disk | not counted by `discover_unmanaged`; surfaced via the existing `dangling` channel |
 | Deactivated skill (lockfile entry, `active: false`, directory absent) | not counted (no directory to flag) |

@@ -34,7 +34,7 @@ fn add(repo: &Path, url: &str) -> Result<()> {
     }
 
     let branch = current_branch(repo)?;
-    println!("ateam: pushing {} to origin ({})...", branch, url);
+    println!("agents: pushing {} to origin ({})...", branch, url);
     let push = git(repo, &["push", "-u", "origin", &branch])?;
     if !push.status.success() {
         // Roll back the remote so the user isn't left with a half-configured state.
@@ -45,7 +45,7 @@ fn add(repo: &Path, url: &str) -> Result<()> {
             String::from_utf8_lossy(&push.stderr).trim()
         );
     }
-    println!("ateam: remote configured. mutating commands now auto-pull/commit/push.");
+    println!("agents: remote configured. mutating commands now auto-pull/commit/push.");
     Ok(())
 }
 
@@ -60,7 +60,7 @@ fn list(repo: &Path) -> Result<()> {
     let s = String::from_utf8_lossy(&out.stdout);
     let trimmed = s.trim();
     if trimmed.is_empty() {
-        println!("(no remotes configured — run `ateam remote add <url>`)");
+        println!("(no remotes configured — run `agents remote add <url>`)");
     } else {
         println!("{}", trimmed);
     }
@@ -101,7 +101,7 @@ fn current_branch(repo: &Path) -> Result<String> {
     }
     let branch = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if branch.is_empty() || branch == "HEAD" {
-        bail!("repo has no commits yet — run `ateam apply` (or commit something) before adding a remote");
+        bail!("repo has no commits yet — run `agents apply` (or commit something) before adding a remote");
     }
     Ok(branch)
 }

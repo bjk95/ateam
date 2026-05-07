@@ -54,7 +54,7 @@ const HELP_STYLES: Styles = Styles::styled()
 
 #[derive(Parser)]
 #[command(
-    name = "ateam",
+    name = "agents",
     version,
     about = "Multi-machine AI skills sync",
     styles = HELP_STYLES,
@@ -67,7 +67,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_sync: bool,
 
-    /// Fail fast if another `ateam` process holds the repo lock instead of waiting.
+    /// Fail fast if another `agents` process holds the repo lock instead of waiting.
     #[arg(long, global = true)]
     pub no_wait: bool,
 
@@ -82,7 +82,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Bootstrap: scaffold a fresh ateam-config repo or clone an existing one.
+    /// Bootstrap: scaffold a fresh agents-config repo or clone an existing one.
     Init(InitArgs),
 
     /// Materialize the lockfile: install all active locked skills.
@@ -99,24 +99,24 @@ pub enum Command {
     #[command(subcommand)]
     Project(ProjectCommand),
 
-    /// Self-update: download the latest ateam release and replace this binary.
+    /// Self-update: download the latest agents release and replace this binary.
     Upgrade,
 
-    /// Manage the ateam-config repo's git remote.
+    /// Manage the agents-config repo's git remote.
     #[command(subcommand)]
     Remote(RemoteCommand),
 
     /// Validate the instructions template against declared profiles.
     Validate,
 
-    /// Open `$EDITOR` on the ateam state directory.
+    /// Open `$EDITOR` on the agents state directory.
     Edit,
 
     /// Manage the instructions template (CLAUDE.md / AGENTS.md source).
     #[command(subcommand)]
     Instructions(InstructionsCommand),
 
-    /// Manage which AI harnesses ateam syncs to (claude-code, codex, opencode, gemini).
+    /// Manage which AI harnesses agents syncs to (claude-code, codex, opencode, gemini).
     #[command(subcommand)]
     Harness(HarnessCommand),
 }
@@ -126,16 +126,16 @@ pub enum HarnessCommand {
     /// List every registered harness and whether it's enabled on this repo.
     List,
 
-    /// Enable one or more harnesses (writes to ateam.toml and re-applies).
+    /// Enable one or more harnesses (writes to agents.toml and re-applies).
     Add {
-        /// Harness ids to enable. See `ateam harness list` for valid ids.
+        /// Harness ids to enable. See `agents harness list` for valid ids.
         #[arg(required = true)]
         ids: Vec<String>,
     },
 
-    /// Disable one or more harnesses (writes to ateam.toml and re-applies).
+    /// Disable one or more harnesses (writes to agents.toml and re-applies).
     Remove {
-        /// Harness ids to disable. See `ateam harness list` for valid ids.
+        /// Harness ids to disable. See `agents harness list` for valid ids.
         #[arg(required = true)]
         ids: Vec<String>,
     },
@@ -194,7 +194,7 @@ pub struct InitArgs {
     #[arg(long)]
     pub scaffold: bool,
 
-    /// Override default repo location (~/.config/ateam/). Writes pointer file.
+    /// Override default repo location (~/.config/agents/). Writes pointer file.
     #[arg(long)]
     pub repo: Option<PathBuf>,
 
@@ -351,7 +351,7 @@ pub struct ListArgs {
     pub json: bool,
 
     /// Print only skill names, one per line, with no styling. For piping into
-    /// `ateam skills remove`.
+    /// `agents skills remove`.
     #[arg(long)]
     pub names: bool,
 }
@@ -399,7 +399,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
     let no_sync = cli.no_sync;
     let no_wait = cli.no_wait;
 
-    // Mutating commands take an exclusive flock on `<repo>/.ateam/lock` to
+    // Mutating commands take an exclusive flock on `<repo>/.agents/lock` to
     // serialize concurrent read-modify-write of the lockfile and manifest.
     // `init` bootstraps the repo so it has no repo to lock against; read-only
     // commands don't mutate state.

@@ -5,8 +5,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const TTL: Duration = Duration::from_secs(24 * 3600);
 const REPO_OWNER: &str = "bjk95";
-const REPO_NAME: &str = "ateam";
-const APP_NAME: &str = "ateam";
+const REPO_NAME: &str = "agents";
+const APP_NAME: &str = "agents";
 
 pub(crate) fn is_cache_fresh(path: &Path) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
@@ -22,12 +22,12 @@ fn cache_path() -> Result<PathBuf> {
     if let Some(custom) = std::env::var_os("XDG_CACHE_HOME") {
         let p = PathBuf::from(custom);
         if !p.as_os_str().is_empty() {
-            return Ok(p.join("ateam").join("update-check"));
+            return Ok(p.join("agents").join("update-check"));
         }
     }
     let dirs = directories::BaseDirs::new()
         .ok_or_else(|| anyhow!("could not determine home dir"))?;
-    Ok(dirs.home_dir().join(".cache").join("ateam").join("update-check"))
+    Ok(dirs.home_dir().join(".cache").join("agents").join("update-check"))
 }
 
 fn touch_cache(path: &Path) -> Result<()> {
@@ -85,7 +85,7 @@ pub(crate) fn maybe_check() {
         }
         match run_update(false) {
             Ok(Some((from, to))) => {
-                eprintln!("ateam: updated {} → {}", from, to);
+                eprintln!("agents: updated {} → {}", from, to);
                 touch_cache(&cache)?;
             }
             Ok(None) => {
@@ -102,9 +102,9 @@ pub(crate) fn maybe_check() {
 
 pub(crate) fn force_upgrade() -> Result<()> {
     match run_update(true)? {
-        Some((from, to)) => println!("ateam: updated {} → {}", from, to),
+        Some((from, to)) => println!("agents: updated {} → {}", from, to),
         None => println!(
-            "ateam: already at latest ({})",
+            "agents: already at latest ({})",
             env!("CARGO_PKG_VERSION")
         ),
     }

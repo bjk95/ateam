@@ -365,7 +365,7 @@ fn resolve_install_root(
         let path = machine
             .projects
             .get(alias)
-            .ok_or_else(|| anyhow!("project alias `{}` not registered (run `ateam project register`)", alias))?;
+            .ok_or_else(|| anyhow!("project alias `{}` not registered (run `agents project register`)", alias))?;
         return Ok(InstallRoot::Project {
             alias: alias.clone(),
             path: path.clone(),
@@ -493,7 +493,7 @@ fn install_one(
         }
         Source::Github { .. } | Source::Git { .. } => {
             // Snapshot into <repo>/skills/<name>/ so the content travels with
-            // the ateam-config repo via git instead of being refetched on
+            // the agents-config repo via git instead of being refetched on
             // every machine.
             let slot = install::prepare_cache_slot(repo, &skill.name)?;
             install::copy_dir_recursive(&skill.dir, &slot.tmp)?;
@@ -523,7 +523,7 @@ fn install_one(
             match install::install_copy_dir(&link, &canonical, false, false)? {
                 install::CopyDirOutcome::Refused => {
                     ui::warn(format!(
-                        "refused to install {} for {}: real dir at {} (rerun with `ateam apply --copy --force`)",
+                        "refused to install {} for {}: real dir at {} (rerun with `agents apply --copy --force`)",
                         skill.name,
                         harness,
                         paths::display_path(&link)
@@ -538,7 +538,7 @@ fn install_one(
         match install::install_symlink(&link, &canonical, false)? {
             install::LinkOutcome::Refused => {
                 ui::warn(format!(
-                    "refused to install {} for {}: real dir at {} (rerun with `ateam apply --force`)",
+                    "refused to install {} for {}: real dir at {} (rerun with `agents apply --force`)",
                     skill.name,
                     harness,
                     paths::display_path(&link)

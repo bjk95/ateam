@@ -2,16 +2,16 @@ use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-const DEFAULT_REPO_DIR_NAME: &str = "ateam";
-const POINTER_FILE_NAME: &str = "ateam.toml";
+const DEFAULT_REPO_DIR_NAME: &str = "agents";
+const POINTER_FILE_NAME: &str = "agents.toml";
 
 #[derive(Deserialize)]
 struct Pointer {
     repo: PathBuf,
 }
 
-/// Resolve the ateam repo path: pointer file at `~/.config/ateam.toml` wins,
-/// else the default `~/.config/ateam/` directory.
+/// Resolve the agents repo path: pointer file at `~/.config/agents.toml` wins,
+/// else the default `~/.config/agents/` directory.
 pub fn resolve_repo() -> Result<PathBuf> {
     let cfg_home = config_home()?;
     let pointer = cfg_home.join(POINTER_FILE_NAME);
@@ -23,11 +23,11 @@ pub fn resolve_repo() -> Result<PathBuf> {
         return Ok(expand_tilde(&parsed.repo));
     }
     let default = cfg_home.join(DEFAULT_REPO_DIR_NAME);
-    if default.join("ateam.toml").exists() {
+    if default.join("agents.toml").exists() {
         return Ok(default);
     }
     Err(anyhow!(
-        "no ateam repo found.\n  expected pointer file at {} or default repo at {}.\n  run `ateam init` to bootstrap.",
+        "no agents repo found.\n  expected pointer file at {} or default repo at {}.\n  run `agents init` to bootstrap.",
         pointer.display(),
         default.display()
     ))
@@ -97,23 +97,23 @@ fn toml_string(p: &Path) -> String {
 // Per-skill paths inside the repo
 
 pub fn lockfile(repo: &Path) -> PathBuf {
-    repo.join("ateam.lock.toml")
+    repo.join("agents.lock.toml")
 }
 
 pub fn repo_config(repo: &Path) -> PathBuf {
-    repo.join("ateam.toml")
+    repo.join("agents.toml")
 }
 
 pub fn machine_config(repo: &Path) -> PathBuf {
-    repo.join(".ateam").join("machine.toml")
+    repo.join(".agents").join("machine.toml")
 }
 
 pub fn manifest_file(repo: &Path) -> PathBuf {
-    repo.join(".ateam").join("manifest.toml")
+    repo.join(".agents").join("manifest.toml")
 }
 
 pub fn tmp_dir(repo: &Path) -> PathBuf {
-    repo.join(".ateam").join("tmp")
+    repo.join(".agents").join("tmp")
 }
 
 pub fn local_skills_dir(repo: &Path) -> PathBuf {

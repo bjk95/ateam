@@ -1,4 +1,4 @@
-# Multi-agent registry: extend ateam to OpenCode and Gemini CLI
+# Multi-agent registry: extend agents to OpenCode and Gemini CLI
 
 **Date:** 2026-05-06
 **Status:** Approved, awaiting implementation plan
@@ -13,8 +13,8 @@ The motivating shape is from `WISHLIST.md`:
 
 The need has arisen. Live verification of the four candidate agents (OpenCode, Gemini CLI, Cursor, Copilot) against current docs surfaced two findings that shaped the scope:
 
-1. **OpenCode and Gemini CLI both implement the same `SKILL.md` open standard as Claude Code and Codex.** Frontmatter (`name`, `description`), directory structure, name validation regex are identical. They are pure path-mapping additions — no new artifact type, no translation, no behavior change to ateam's install/symlink logic.
-2. **Cursor and Copilot are not file-syncable globally today.** Cursor User Rules live in app settings, not a file. Copilot personal instructions live in VS Code settings. Project-level rules live inside the project repo, outside ateam's sync scope. They are out of scope for this spec — see "Out of scope" below.
+1. **OpenCode and Gemini CLI both implement the same `SKILL.md` open standard as Claude Code and Codex.** Frontmatter (`name`, `description`), directory structure, name validation regex are identical. They are pure path-mapping additions — no new artifact type, no translation, no behavior change to agents's install/symlink logic.
+2. **Cursor and Copilot are not file-syncable globally today.** Cursor User Rules live in app settings, not a file. Copilot personal instructions live in VS Code settings. Project-level rules live inside the project repo, outside agents's sync scope. They are out of scope for this spec — see "Out of scope" below.
 
 ## Scope
 
@@ -29,11 +29,11 @@ The need has arisen. Live verification of the four candidate agents (OpenCode, G
 **Out of scope (do not slip back in):**
 
 - **Cursor and Copilot.** No globally-syncable file surface today. Revisit if/when those tools add one, or as a separate "project-level install" feature with its own spec.
-- **Single-file rules / `.mdc` / `.instructions.md` artifact types.** ateam's skill model is "directory containing SKILL.md". Single-file rules are a different artifact and would need their own design.
+- **Single-file rules / `.mdc` / `.instructions.md` artifact types.** agents's skill model is "directory containing SKILL.md". Single-file rules are a different artifact and would need their own design.
 - **Translation between formats.** No conversion from `SKILL.md` to Cursor `.mdc` or to Copilot `.instructions.md`.
 - **Runtime-extensible registry.** No TOML config defining custom agents, no plugin loading, no `Box<dyn Agent>`. The registry is a `&'static [AgentDef]` compiled into the binary. Users wanting another agent file an issue.
-- **Per-agent disable command.** If `ateam.toml` does not already support `enabled_agents` editing through a CLI command today, the implementation plan can either add one or document the manual edit. Either is acceptable.
-- **Auto-discovery.** ateam does not check whether `~/.gemini/` or `~/.config/opencode/` exists before enabling. Files materialize on `apply` regardless of whether the user has those tools installed. This is a deliberate consequence of "all enabled by default" — see Migration notes.
+- **Per-agent disable command.** If `agents.toml` does not already support `enabled_agents` editing through a CLI command today, the implementation plan can either add one or document the manual edit. Either is acceptable.
+- **Auto-discovery.** agents does not check whether `~/.gemini/` or `~/.config/opencode/` exists before enabling. Files materialize on `apply` regardless of whether the user has those tools installed. This is a deliberate consequence of "all enabled by default" — see Migration notes.
 
 ## High-level flow
 
@@ -205,7 +205,7 @@ fn default_agents() -> Vec<String> {
 }
 ```
 
-This is the explicit user decision: all four agents are in the default-enabled set. The behavioral consequences for existing users depend on whether they have an explicit `enabled_agents` line in `ateam.toml` — see Migration notes.
+This is the explicit user decision: all four agents are in the default-enabled set. The behavioral consequences for existing users depend on whether they have an explicit `enabled_agents` line in `agents.toml` — see Migration notes.
 
 ### 6. `src/commands/import.rs` — bulk-scan paths
 
@@ -227,28 +227,28 @@ The user-facing string at `import.rs:61` and `import.rs:102` (`"... in ~/.claude
 
 Both rows verified live on 2026-05-06 against:
 
-- OpenCode skills format: <https://opencode.ai/docs/skills/> ("Skills are directories containing a single `SKILL.md` file" — same `name`+`description` frontmatter, plus optional `license`/`compatibility`/`metadata` which ateam ignores)
+- OpenCode skills format: <https://opencode.ai/docs/skills/> ("Skills are directories containing a single `SKILL.md` file" — same `name`+`description` frontmatter, plus optional `license`/`compatibility`/`metadata` which agents ignores)
 - OpenCode global config: <https://opencode.ai/docs/rules/> (`~/.config/opencode/AGENTS.md`)
 - Gemini CLI skills format: <https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/skills.md> (same SKILL.md standard, cites [agentskills.io](https://agentskills.io))
 - Gemini CLI GEMINI.md: <https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/gemini-md.md> (`~/.gemini/GEMINI.md` global, plain markdown)
 
-No translation needed. ateam's existing symlink-from-cache install logic (`src/install.rs`) works unchanged for both — it materializes a skill directory at the agent's `skills_subdir`/`<name>` path, which is exactly what OpenCode and Gemini scan for.
+No translation needed. agents's existing symlink-from-cache install logic (`src/install.rs`) works unchanged for both — it materializes a skill directory at the agent's `skills_subdir`/`<name>` path, which is exactly what OpenCode and Gemini scan for.
 
 ## Migration notes (v0.3 release)
 
 Two user-visible changes:
 
-1. **New files materialize on `ateam apply`.** Existing users on v0.2.x have `enabled_agents = ["claude-code", "codex"]` in their `ateam.toml` (either explicitly or via the default). When they upgrade to v0.3 and run `ateam apply`, two new files appear:
+1. **New files materialize on `agents apply`.** Existing users on v0.2.x have `enabled_agents = ["claude-code", "codex"]` in their `agents.toml` (either explicitly or via the default). When they upgrade to v0.3 and run `agents apply`, two new files appear:
    - `~/.gemini/GEMINI.md`
    - `~/.config/opencode/AGENTS.md`
 
    Each contains the same baseline instructions as their existing `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`, with the relevant `{{#if gemini}}` / `{{#if opencode}}` Handlebars sections active.
 
-   This is the explicit consequence of "all enabled by default". To opt out, the user edits `ateam.toml` and removes the unwanted agents from `enabled_agents`.
+   This is the explicit consequence of "all enabled by default". To opt out, the user edits `agents.toml` and removes the unwanted agents from `enabled_agents`.
 
-2. **No automatic backfill of `enabled_agents`.** Users with an explicit `enabled_agents = ["claude-code", "codex"]` in their `ateam.toml` keep that exact list — they do not get OpenCode and Gemini added behind their back. Only users relying on the default (no `enabled_agents` line, or running `ateam init` fresh on v0.3) get the four-agent default.
+2. **No automatic backfill of `enabled_agents`.** Users with an explicit `enabled_agents = ["claude-code", "codex"]` in their `agents.toml` keep that exact list — they do not get OpenCode and Gemini added behind their back. Only users relying on the default (no `enabled_agents` line, or running `agents init` fresh on v0.3) get the four-agent default.
 
-   This means existing `ateam.toml` files written by `ateam init` on v0.2 have a hardcoded two-agent list and will NOT pick up the new agents. The release note should call out the one-line edit (`enabled_agents = ["claude-code", "codex", "opencode", "gemini"]`) for users who want the new default.
+   This means existing `agents.toml` files written by `agents init` on v0.2 have a hardcoded two-agent list and will NOT pick up the new agents. The release note should call out the one-line edit (`enabled_agents = ["claude-code", "codex", "opencode", "gemini"]`) for users who want the new default.
 
 The release note (CHANGELOG entry) should state both points plainly. No silent behavior change for users with explicit config; new files appear for users who relied on the default.
 
@@ -267,39 +267,39 @@ Phase 2 additions get matching tests:
 - `agent_skill_path("gemini", "foo")` → `<root>/.gemini/skills/foo`
 - Render the instructions template with `Tool::from_id("opencode")` and `Tool::from_id("gemini")` — assert the file goes to the correct path and `{{#if opencode}}` / `{{#if gemini}}` resolve correctly.
 
-End-to-end (manual): on a fresh `ateam init` with all four agents enabled, `ateam apply` produces the four files at the expected paths and a fixture skill installs into all four `skills/` directories.
+End-to-end (manual): on a fresh `agents init` with all four agents enabled, `agents apply` produces the four files at the expected paths and a fixture skill installs into all four `skills/` directories.
 
 ## Open questions for the implementation plan
 
 These are deferred from the spec to the implementation plan — they are HOW questions, not WHAT questions:
 
-1. ~~Does today's `ateam.toml` editing flow already support enabling/disabling agents through a CLI command, or do users edit the file by hand?~~ **Resolved by addendum below — three new commands replace the manual edit.**
-2. Whether to provide a one-shot `ateam config migrate` command that adds OpenCode and Gemini to existing users' explicit `enabled_agents` lists with confirmation. Likely YAGNI for v0.3 — the manual edit is one line — but worth flagging.
+1. ~~Does today's `agents.toml` editing flow already support enabling/disabling agents through a CLI command, or do users edit the file by hand?~~ **Resolved by addendum below — three new commands replace the manual edit.**
+2. Whether to provide a one-shot `agents config migrate` command that adds OpenCode and Gemini to existing users' explicit `enabled_agents` lists with confirmation. Likely YAGNI for v0.3 — the manual edit is one line — but worth flagging.
 3. Test fixture organization: should tests reference the production `REGISTRY` or use a separate `TEST_REGISTRY`? The latter avoids brittle test changes when we add agent #5.
 
 ---
 
-## Addendum: `ateam agents` subcommand
+## Addendum: `agents agents` subcommand
 
 **Date:** 2026-05-06 (same day, follow-on)
 
-The migration story above told users to edit `ateam.toml` by hand to opt in/out of agents. That's friction. This addendum adds three subcommands so the TOML edit becomes the unusual path, not the default.
+The migration story above told users to edit `agents.toml` by hand to opt in/out of agents. That's friction. This addendum adds three subcommands so the TOML edit becomes the unusual path, not the default.
 
 ### Commands
 
 ```
-ateam agents list              # show all registry agents with [enabled]/[disabled] status
-ateam agents add <id>...       # enable one or more agents (variadic)
-ateam agents remove <id>...    # disable one or more agents (variadic)
+agents agents list              # show all registry agents with [enabled]/[disabled] status
+agents agents add <id>...       # enable one or more agents (variadic)
+agents agents remove <id>...    # disable one or more agents (variadic)
 ```
 
 ### Behavior (mirrors `skills activate`/`deactivate`)
 
 For `add` and `remove`:
 
-1. `pre_pull` if auto-sync enabled (matches every other mutating command in ateam)
+1. `pre_pull` if auto-sync enabled (matches every other mutating command in agents)
 2. Validate each id against the registry; reject unknown ids with `error: unknown agent 'foo'. valid: claude-code, codex, opencode, gemini`
-3. Load `RepoConfig` (which materializes the four-agent default if `enabled_agents` is absent), mutate the list, write back to `ateam.toml`
+3. Load `RepoConfig` (which materializes the four-agent default if `enabled_agents` is absent), mutate the list, write back to `agents.toml`
 4. Auto-run `apply` so files materialize on `add` / disappear on `remove` — matches the skill activate/deactivate convention; without it `add gemini` is a half-action because the user expects `~/.gemini/GEMINI.md` to appear immediately
 5. `commit_and_push` if auto-sync enabled
 
@@ -307,9 +307,9 @@ For `list`: read-only, prints a table.
 
 ### Decisions
 
-- **Idempotent**: `add gemini` when already enabled prints `ateam: gemini already enabled` and exits 0 (not an error). Same for `remove` of a not-enabled agent. Treats user intent as "make it so", not "perform exact diff".
-- **Refuse to remove the last enabled agent**: empty `enabled_agents` would disable ateam itself, almost certainly accidental. Error with hint: `cannot remove last enabled agent (would disable ateam). use 'ateam agents add <id>' first or remove the line manually.`
-- **Variadic positionals**: `ateam agents add gemini opencode` works in one call, matching the `bd close <id>...` pattern.
+- **Idempotent**: `add gemini` when already enabled prints `agents: gemini already enabled` and exits 0 (not an error). Same for `remove` of a not-enabled agent. Treats user intent as "make it so", not "perform exact diff".
+- **Refuse to remove the last enabled agent**: empty `enabled_agents` would disable agents itself, almost certainly accidental. Error with hint: `cannot remove last enabled agent (would disable agents). use 'agents agents add <id>' first or remove the line manually.`
+- **Variadic positionals**: `agents agents add gemini opencode` works in one call, matching the `bd close <id>...` pattern.
 - **List output format**: shows ALL registry agents with `[enabled]/[disabled]` markers — more useful than only listing enabled, because it shows users what they could enable.
 
 ### `agents list` output
@@ -329,11 +329,11 @@ gemini        enabled   ~/.gemini/skills                 ~/.gemini/GEMINI.md
 - Modify: `src/commands/mod.rs` — register module
 - Modify: `src/main.rs` — dispatch arm
 - Modify: `src/git_sync.rs` — `msg_agents_add(&[String])` and `msg_agents_remove(&[String])` helpers matching existing `msg_activate`
-- Modify: `docs/concepts/agents.md` — replace "edit `ateam.toml`" guidance with `ateam agents add/remove`
+- Modify: `docs/concepts/agents.md` — replace "edit `agents.toml`" guidance with `agents agents add/remove`
 
 ### Tests
 
-- `agents list` against the production registry returns expected status (when no `ateam.toml`, all four `enabled`; when `enabled_agents = ["claude-code"]` only that one shows enabled)
+- `agents list` against the production registry returns expected status (when no `agents.toml`, all four `enabled`; when `enabled_agents = ["claude-code"]` only that one shows enabled)
 - `agents add gemini` to a config with explicit `["claude-code", "codex"]` produces `["claude-code", "codex", "gemini"]`
 - `agents add gemini` to a config that already has gemini reports already-enabled and leaves the file untouched
 - `agents add no-such-agent` fails with the "valid agents" message and writes nothing

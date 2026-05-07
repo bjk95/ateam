@@ -24,7 +24,7 @@ pub fn run() -> Result<()> {
     } else {
         format!(" · {}", machine.profiles.join(", "))
     };
-    let headline = format!("ateam{}", suffix);
+    let headline = format!("agents{}", suffix);
     if dangling == 0 && unpushed == 0 {
         ui::ok(&headline);
     } else {
@@ -50,7 +50,7 @@ pub fn run() -> Result<()> {
     }
     if dangling > 0 {
         ui::plain(format!(
-            "  {}  {} broken links — run: ateam apply",
+            "  {}  {} broken links — run: agents apply",
             style("✗").red(),
             dangling
         ));
@@ -69,7 +69,7 @@ pub fn run() -> Result<()> {
     if !unmanaged.is_empty() {
         let n = unmanaged.len();
         ui::plain(format!(
-            "  {} unmanaged skill{} in {} — run: ateam skills import",
+            "  {} unmanaged skill{} in {} — run: agents skills import",
             n,
             if n == 1 { "" } else { "s" },
             summarize_unmanaged_dirs(&unmanaged),

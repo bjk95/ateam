@@ -1,7 +1,7 @@
 # CLI color and hierarchy refresh
 
 **Status:** approved 2026-05-06
-**Scope:** rewrite the human-facing output of every `ateam` subcommand. No
+**Scope:** rewrite the human-facing output of every `agents` subcommand. No
 behavior changes — same exit codes, same files written, same errors raised.
 Only what the user reads on stdout/stderr changes.
 
@@ -67,7 +67,7 @@ documents what we use.
 ### tracing
 
 `tracing_subscriber` setup in `main.rs` stays in place. **Default filter
-changes from `"ateam=info,warn"` to `"ateam=warn"`** — today the `info`
+changes from `"agents=info,warn"` to `"agents=warn"`** — today the `info`
 default means `tracing::info!("drift detected for …")` in `apply.rs` prints
 unprefixed alongside our new `ui::*` lines, breaking the visual hierarchy.
 Bumping the default to `warn` keeps `RUST_LOG` as the developer-debug
@@ -85,7 +85,7 @@ escape hatch; the two stay independent.
 | `·` | dim grey | stdout | sub-detail; only printed when verbose | `ui::detail` |
 
 Format: `<symbol><two spaces><message>`. Message is lowercase, no trailing
-period, no `ateam:` prefix (the symbol is the prefix). When color is
+period, no `agents:` prefix (the symbol is the prefix). When color is
 disabled (`NO_COLOR=1`, non-TTY, or `console` decides the terminal can't),
 symbols still print — only the ANSI codes are stripped.
 
@@ -103,18 +103,18 @@ restores roughly today's output level.
 Scaffold (default):
 ```
 → scaffolding repo
-✓ initialized ateam
+✓ initialized agents
 ```
 
 Clone (default):
 ```
-→ cloning git@github.com:you/ateam-config.git
-✓ initialized ateam
+→ cloning git@github.com:you/agents-config.git
+✓ initialized agents
 ```
 
 `-v` adds, after the `✓` line:
 ```
-·  repo: ~/.config/ateam
+·  repo: ~/.config/agents
 ·  profiles: personal
 ```
 If profiles is empty (`--profiles` not passed), suppress the `· profiles:`
@@ -148,7 +148,7 @@ Partial failure:
 `-v` adds, between `→ fetching` and the install lines:
 ```
 ·  source: github:vercel-labs/agent-skills
-·  snapshot: ~/.config/ateam/skills/deploy-to-vercel
+·  snapshot: ~/.config/agents/skills/deploy-to-vercel
 ```
 and one `·  linked <path>` line per agent symlink under each `✓ installed`.
 
@@ -184,13 +184,13 @@ Dry-run default:
 
 Dry-run `-v` adds one dim line per planned link:
 ```
-·  ~/.claude/skills/deploy-to-vercel → ~/.config/ateam/skills/deploy-to-vercel
+·  ~/.claude/skills/deploy-to-vercel → ~/.config/agents/skills/deploy-to-vercel
 ```
 
 Unregistered project alias (default and `-v`):
 ```
 ⚠ unregistered project: foo (used by skill1, skill2)
-  run: ateam project add foo <path>
+  run: agents project add foo <path>
 ✓ applied 3 skills
 ```
 The hint line is plain (no symbol) and indented two spaces under the
@@ -236,13 +236,13 @@ No verbose-only additions.
 
 Already-managed:
 ```
-✓ deploy-to-vercel already managed by ateam
+✓ deploy-to-vercel already managed by agents
 ```
 
 Newly imported / updated:
 ```
 ✓ imported deploy-to-vercel
-  run: ateam apply to materialize
+  run: agents apply to materialize
 ```
 
 `-v` adds `·  source: local:skills/deploy-to-vercel`.
@@ -250,9 +250,9 @@ Newly imported / updated:
 ### `project add` / `project remove` / `project list`
 
 ```
-✓ registered project ateam → ~/dev/ateam
-✓ removed project ateam
-⚠ no project ateam registered
+✓ registered project agents → ~/dev/agents
+✓ removed project agents
+⚠ no project agents registered
 ```
 
 List (no skills, no projects → friendly empty message):
@@ -262,7 +262,7 @@ List (no skills, no projects → friendly empty message):
 
 Otherwise (plain rows, alias in default color, path dimmed via `console`):
 ```
-ateam   ~/dev/ateam
+agents   ~/dev/agents
 work    ~/work/canva
 ```
 
@@ -290,7 +290,7 @@ Source rendering rules:
 `-v` appends a dim qualifier line under each entry, only including
 fields that are non-default:
 ```
-·  scope: project=ateam · profiles: work
+·  scope: project=agents · profiles: work
 ```
 If scope is global and profiles is empty, the dim line is suppressed.
 
@@ -298,29 +298,29 @@ If scope is global and profiles is empty, the dim line is suppressed.
 
 Healthy:
 ```
-✓ ateam · personal
+✓ agents · personal
   12 skills installed
-  2 projects: ateam, work
+  2 projects: agents, work
 ```
 
 With dangling links:
 ```
-⚠ ateam · personal
+⚠ agents · personal
   12 skills installed
-  2 projects: ateam, work
-  ✗ 3 broken links — run: ateam apply
+  2 projects: agents, work
+  ✗ 3 broken links — run: agents apply
 ```
 
 `-v` appends:
 ```
-·  repo: ~/.config/ateam
+·  repo: ~/.config/agents
 ·  manifest: 24 entries
 ```
 
-The `·` after `ateam` is a literal middle-dot separator character, not the
+The `·` after `agents` is a literal middle-dot separator character, not the
 dim sub-detail symbol — same glyph, different role. The list after it is
 the active profiles joined by `, `. If profiles is empty: omit the
-`· …` suffix entirely so the line reads just `✓ ateam`.
+`· …` suffix entirely so the line reads just `✓ agents`.
 
 ### Top-level errors
 
@@ -333,12 +333,12 @@ After: `main` catches the `Err` and routes through `ui::fail`:
 
 The error chain (`{:#}` formatting) is included on the same line, e.g.:
 ```
-✗ refused to clone into non-empty /Users/brad/.config/ateam: …
+✗ refused to clone into non-empty /Users/brad/.config/agents: …
 ```
 
 ### `git_sync` warnings
 
-Every `eprintln!("ateam: warning — …")` and `eprintln!("ateam: note — …")`
+Every `eprintln!("agents: warning — …")` and `eprintln!("agents: note — …")`
 in `src/git_sync.rs` is rewritten as `ui::warn(...)`. The "remote moved
 during op, rebasing and retrying push…" line becomes a `ui::step` that
 finishes with `ui::ok` / `ui::warn`.
@@ -393,7 +393,7 @@ Two layers:
    placement, color stripping in non-TTY mode, `~` substitution.
 
 2. **End-to-end smoke run.** Manually exercise each subcommand in a
-   throwaway repo (`ateam init --scaffold`, `add` / `list` / `status` /
+   throwaway repo (`agents init --scaffold`, `add` / `list` / `status` /
    `apply` / `update` / `remove`) once with default output and once with
    `-v`. Verify the visual layout matches the per-command examples above.
    This is a manual gate, not an automated test — the existing test suite

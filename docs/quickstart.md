@@ -9,41 +9,41 @@ visible in both Claude Code and Codex.
 ## 1. Bootstrap a fresh repo
 
 ```bash
-ateam init --scaffold --profiles personal
+agents init --scaffold --profiles personal
 ```
 
-This creates `~/.config/ateam/` with the lockfile, `.ateam/` state dir, and an
+This creates `~/.config/agents/` with the lockfile, `.agents/` state dir, and an
 initial git commit. No remote yet — that's optional.
 
 ## 2. Install a skill from skills.sh
 
 ```bash
-ateam skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
+agents skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
 ```
 
-Behind the scenes ateam:
+Behind the scenes agents:
 
 1. Fetches the skill folder from the GitHub repo.
 2. Records a lockfile entry with the GitHub tree SHA so updates are detectable.
 3. Symlinks `~/.claude/skills/deploy-to-vercel` and `~/.codex/skills/deploy-to-vercel`
-   into the canonical copy inside the ateam repo.
+   into the canonical copy inside the agents repo.
 4. Auto-commits the lockfile change. (Push happens once you wire a remote.)
 
 ## 3. Wire a remote — auto-sync activates
 
 ```bash
-ateam remote add git@github.com:you/ateam-config.git
+agents remote add git@github.com:you/agents-config.git
 ```
 
 `remote add` sets `origin` and pushes the current branch upstream in one step.
-From now on every `ateam skills add` / `update` / `remove` pulls, commits, and
+From now on every `agents skills add` / `update` / `remove` pulls, commits, and
 pushes without you ever typing `git`.
 
 ## 4. On a second machine
 
 ```bash
-ateam init git@github.com:you/ateam-config.git --profiles work
-ateam apply
+agents init git@github.com:you/agents-config.git --profiles work
+agents apply
 ```
 
 `init` clones the config repo. `apply` reads the lockfile, refetches every
@@ -56,4 +56,4 @@ and Codex now see the same skill.
   specific project's `.claude/skills/` instead of user-global.
 - [Profiles](/concepts/profiles/) — gate skills by machine (work / personal /
   devbox).
-- [`ateam` CLI reference](/reference/cli/) — every flag.
+- [`agents` CLI reference](/reference/cli/) — every flag.

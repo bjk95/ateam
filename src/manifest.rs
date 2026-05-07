@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Manifest {
-    /// All paths ateam wrote in the most recent successful apply.
+    /// All paths agents wrote in the most recent successful apply.
     #[serde(default, rename = "entry")]
     pub entries: Vec<ManifestEntry>,
 }
@@ -47,7 +47,7 @@ impl Manifest {
                 .with_context(|| format!("creating {}", parent.display()))?;
         }
         let body = if self.entries.is_empty() {
-            "# ateam manifest — managed by `ateam apply`\n".to_string()
+            "# agents manifest — managed by `agents apply`\n".to_string()
         } else {
             toml::to_string_pretty(self).context("serializing manifest")?
         };

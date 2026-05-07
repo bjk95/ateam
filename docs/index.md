@@ -1,20 +1,20 @@
 ---
-title: ateam
+title: agents
 description: Multi-machine AI skills sync — Vercel-compatible CLI with invisible git auto-sync.
 template: doc
 ---
 
-# ateam
+# agents
 
-`ateam` is a Rust CLI that syncs AI coding-assistant skills across your machines.
+`agents` is a Rust CLI that syncs AI coding-assistant skills across your machines.
 It speaks the same flags as `npx skills add`, stores everything in one git repo,
 and runs `git pull` / `git commit` / `git push` invisibly so a skill installed on
-your work machine appears on your personal machine after `ateam apply`.
+your work machine appears on your personal machine after `agents apply`.
 
 ## What you get
 
 - A drop-in for `npx skills add` (`--list`, `--skill`, `--all`, `-a`, `-y`, `-g`).
-- One lockfile, one `~/.config/ateam/` repo, zero pollution of project repos.
+- One lockfile, one `~/.config/agents/` repo, zero pollution of project repos.
 - Project-scoped skills via per-machine path aliases — different filesystem
   layout on every machine, same identifiers.
 - Soft-disable via `skills deactivate` / `skills activate` — quarantine a skill
@@ -29,4 +29,4 @@ See the [installation guide](/install/) to get running, then read the
 
 ## Source
 
-`ateam` is open source. [Read the code on GitHub](https://github.com/bradleykester/ateam).
+`agents` is open source. [Read the code on GitHub](https://github.com/bradleykester/agents).

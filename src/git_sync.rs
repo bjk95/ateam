@@ -8,7 +8,7 @@ pub fn enabled(no_sync_flag: bool) -> bool {
     if no_sync_flag {
         return false;
     }
-    match std::env::var("ATEAM_NO_SYNC") {
+    match std::env::var("AGENTS_NO_SYNC") {
         Ok(v) => v != "1" && !v.eq_ignore_ascii_case("true"),
         Err(_) => true,
     }
@@ -49,7 +49,7 @@ pub fn pre_pull(repo: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Stage tracked ateam files, commit if there are changes, push if remote exists.
+/// Stage tracked agents files, commit if there are changes, push if remote exists.
 /// Returns whether a commit was made.
 pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     if !is_git_repo(repo) {
@@ -57,7 +57,7 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     }
     let _ = run(
         repo,
-        &["add", "ateam.toml", "ateam.lock.toml", "skills", "instructions"],
+        &["add", "agents.toml", "agents.lock.toml", "skills", "instructions"],
     )?;
 
     let diff = run(repo, &["diff", "--cached", "--quiet"])?;

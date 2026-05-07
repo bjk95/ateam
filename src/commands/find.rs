@@ -15,7 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const SEARCH_API_BASE: &str = "https://skills.sh";
-const USER_AGENT: &str = concat!("ateam/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("agents/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Deserialize)]
 struct SearchResponse {
@@ -44,10 +44,10 @@ pub fn run(args: FindArgs, no_sync: bool) -> Result<()> {
                 "{}",
                 style("Tip: if running in a coding agent, follow these steps:").dim()
             ));
-            ui::plain(format!("{}", style("  1) ateam skills find <query>").dim()));
+            ui::plain(format!("{}", style("  1) agents skills find <query>").dim()));
             ui::plain(format!(
                 "{}",
-                style("  2) ateam skills add <owner/repo> --skill <name>").dim()
+                style("  2) agents skills add <owner/repo> --skill <name>").dim()
             ));
             Ok(())
         }
@@ -70,7 +70,7 @@ enum FindMode {
 
 fn select_mode(query: &str, stdin_is_tty: bool, stdout_is_tty: bool) -> FindMode {
     // A non-empty query short-circuits the TTY check: results stream to stdout
-    // in any context so `ateam skills find foo | head` works in pipes/agents.
+    // in any context so `agents skills find foo | head` works in pipes/agents.
     if !query.is_empty() {
         return FindMode::NonInteractive;
     }
@@ -525,7 +525,7 @@ mod tests {
 
     #[test]
     fn non_empty_query_runs_non_interactive_in_any_tty_context() {
-        // Regression: `ateam skills find foo | head` must hit the search API
+        // Regression: `agents skills find foo | head` must hit the search API
         // and stream results to stdout regardless of stdin/stdout TTY status.
         for stdin_tty in [true, false] {
             for stdout_tty in [true, false] {

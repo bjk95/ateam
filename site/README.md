@@ -1,4 +1,4 @@
-# ateam docs site
+# agents docs site
 
 Astro + Starlight + Vite. The content collection is a symlink to the repo-root
 `docs/` directory, so:

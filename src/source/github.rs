@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-const USER_AGENT: &str = concat!("ateam/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("agents/", env!("CARGO_PKG_VERSION"));
 const FALLBACK_BRANCH: &str = "main";
 
 /// Resolve a branch/tag/sha into a definite commit SHA.

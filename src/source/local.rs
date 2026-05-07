@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
-/// Resolve a `local:` source path against the ateam repo root.
+/// Resolve a `local:` source path against the agents repo root.
 /// `path_in_source` may be relative ("skills/foo") or absolute.
 pub fn resolve(repo: &Path, path_in_source: &Path) -> Result<PathBuf> {
     let resolved = if path_in_source.is_absolute() {

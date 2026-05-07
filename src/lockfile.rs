@@ -58,7 +58,7 @@ pub struct SkillEntry {
     pub active: bool,
 
     /// Origin repo for snapshotted (`local:`) entries — populated automatically
-    /// by `ateam skills import` when discoverable. None for non-local sources
+    /// by `agents skills import` when discoverable. None for non-local sources
     /// (where `source` already encodes the upstream) or when discovery failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream: Option<String>,
@@ -105,7 +105,7 @@ impl Lockfile {
             .context("refusing to write lockfile with duplicate skill names")?;
         let path = crate::paths::lockfile(repo);
         let body = if self.skills.is_empty() && self.instructions.is_none() {
-            "# ateam lockfile — managed by `ateam`\n".to_string()
+            "# agents lockfile — managed by `agents`\n".to_string()
         } else {
             toml::to_string_pretty(self).context("serializing lockfile")?
         };

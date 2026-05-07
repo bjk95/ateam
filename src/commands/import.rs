@@ -32,11 +32,11 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
             let _ = git_sync::commit_and_push(&repo, &msg);
         }
         println!(
-            "ateam: imported instructions template → {}",
+            "agents: imported instructions template → {}",
             template.display()
         );
         println!(
-            "edit the template to add Handlebars gates ({}), then `ateam apply` to re-render.",
+            "edit the template to add Handlebars gates ({}), then `agents apply` to re-render.",
             "{{#if work}}"
         );
         return Ok(());
@@ -68,8 +68,8 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
         )
     })?;
 
-    if is_managed_by_ateam(repo, &installed)? {
-        ui::ok(format!("{} already managed by ateam", normalized));
+    if is_managed_by_agents(repo, &installed)? {
+        ui::ok(format!("{} already managed by agents", normalized));
         return Ok(());
     }
 
@@ -77,7 +77,7 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
         let upstream_index = crate::upstream::build_index(home);
         if let Some(plugin_source) = upstream_index.get(&normalized) {
             bail!(
-                "{} is plugin-managed by {} — ateam won't take ownership. Manage it via `claude plugin` commands.",
+                "{} is plugin-managed by {} — agents won't take ownership. Manage it via `claude plugin` commands.",
                 normalized,
                 plugin_source
             );
@@ -103,7 +103,7 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
         if replaced { "updated" } else { "imported" },
         normalized
     ));
-    ui::plain("  run: ateam apply to materialize");
+    ui::plain("  run: agents apply to materialize");
     if let Some(entry) = lock.find(&normalized) {
         ui::detail(format!("source: {}", entry.source));
     }
@@ -116,7 +116,7 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
 
 fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     println!(
-        "ateam: scanning {}...",
+        "agents: scanning {}...",
         crate::discover::harness_skill_dirs(home)
             .iter()
             .map(|p| crate::paths::display_path(p))
@@ -134,14 +134,14 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     let instructions_template = match import_instructions(repo, home) {
         Ok(p) => Some(p),
         Err(e) => {
-            eprintln!("ateam: instructions skipped — {e:#}");
+            eprintln!("agents: instructions skipped — {e:#}");
             None
         }
     };
 
     println!();
     println!(
-        "ateam: imported {} skill(s); skipped {} already managed",
+        "agents: imported {} skill(s); skipped {} already managed",
         outcome.imported, outcome.skipped_managed
     );
     if outcome.skipped_plugin > 0 {
@@ -172,7 +172,7 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     }
     if outcome.imported > 0 || instructions_template.is_some() {
         println!();
-        println!("run `ateam apply` to materialize symlinks for the new entries.");
+        println!("run `agents apply` to materialize symlinks for the new entries.");
     }
 
     if git_sync::enabled(no_sync) && (outcome.imported > 0 || instructions_template.is_some()) {
@@ -229,7 +229,7 @@ pub(crate) fn bulk_import_skills(
             }
             let installed = entry.path();
 
-            if is_managed_by_ateam(repo, &installed)? {
+            if is_managed_by_agents(repo, &installed)? {
                 outcome.skipped_managed += 1;
                 continue;
             }
@@ -288,7 +288,7 @@ pub(crate) fn bulk_import_skills(
     }
 
     // Backfill: re-discover upstream for any local entry that doesn't have one.
-    // Lets the user re-run `ateam skills import` to pick up upstream info that
+    // Lets the user re-run `agents skills import` to pick up upstream info that
     // wasn't being recorded when they first imported.
     for entry in lock.skills.iter_mut() {
         if entry.upstream.is_none() && entry.source.starts_with("local:") {
@@ -312,7 +312,7 @@ fn find_installed(home: &Path, normalized: &str) -> Option<PathBuf> {
     None
 }
 
-fn is_managed_by_ateam(repo: &Path, installed: &Path) -> Result<bool> {
+fn is_managed_by_agents(repo: &Path, installed: &Path) -> Result<bool> {
     let Ok(meta) = std::fs::symlink_metadata(installed) else {
         return Ok(false);
     };
@@ -499,7 +499,7 @@ mod tests {
             let repo = tempfile::tempdir().unwrap();
             let home = tempfile::tempdir().unwrap();
             RepoConfig::default().write(repo.path()).unwrap();
-            std::fs::create_dir_all(repo.path().join(".ateam")).unwrap();
+            std::fs::create_dir_all(repo.path().join(".agents")).unwrap();
             Self { repo, home }
         }
         fn write_claude(&self, body: &str) {
@@ -683,9 +683,9 @@ mod tests {
     }
 
     #[test]
-    fn bulk_skips_symlinks_into_ateam_local() {
+    fn bulk_skips_symlinks_into_agents_local() {
         let fx = Fixture::new();
-        // Pretend a skill is already an ateam-managed symlink.
+        // Pretend a skill is already an agents-managed symlink.
         let local_target = paths::local_skills_dir(fx.repo.path()).join("alpha");
         std::fs::create_dir_all(&local_target).unwrap();
         std::fs::write(local_target.join("SKILL.md"), "snapshot").unwrap();
@@ -702,7 +702,7 @@ mod tests {
     #[test]
     fn bulk_skips_plugin_managed_skills() {
         let fx = Fixture::new();
-        // alpha is plugin-managed; ateam must not snapshot it.
+        // alpha is plugin-managed; agents must not snapshot it.
         fx.write_skill("claude", "alpha", "alpha body");
         fx.write_plugin_skill(
             "frontend-design",

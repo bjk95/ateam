@@ -19,7 +19,7 @@ pub fn run(args: DeactivateArgs, no_sync: bool) -> Result<()> {
         None => bail!("no skill named `{}` in lockfile", args.name),
     };
     if !lock.skills[idx].active {
-        println!("ateam: `{}` already deactivated", args.name);
+        println!("agents: `{}` already deactivated", args.name);
         return Ok(());
     }
     lock.skills[idx].active = false;
@@ -36,7 +36,7 @@ pub fn run(args: DeactivateArgs, no_sync: bool) -> Result<()> {
         .collect();
     for path in &to_remove {
         if let Err(e) = install::uninstall_path(path) {
-            eprintln!("ateam: warning — couldn't remove {}: {:#}", path.display(), e);
+            eprintln!("agents: warning — couldn't remove {}: {:#}", path.display(), e);
         }
     }
     manifest.entries.retain(|m| m.skill != args.name);
@@ -47,6 +47,6 @@ pub fn run(args: DeactivateArgs, no_sync: bool) -> Result<()> {
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
-    println!("ateam: deactivated `{}`", args.name);
+    println!("agents: deactivated `{}`", args.name);
     Ok(())
 }

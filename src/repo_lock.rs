@@ -4,9 +4,9 @@ use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 
 /// Exclusive flock guarding all mutations of the repo's lockfile and manifest.
-/// Held for the lifetime of a single `ateam` mutating command so concurrent
-/// invocations serialize on read-modify-write of `ateam.lock.toml` and
-/// `.ateam/manifest.toml`.
+/// Held for the lifetime of a single `agents` mutating command so concurrent
+/// invocations serialize on read-modify-write of `agents.lock.toml` and
+/// `.agents/manifest.toml`.
 #[derive(Debug)]
 pub struct RepoLock {
     file: File,
@@ -14,7 +14,7 @@ pub struct RepoLock {
 }
 
 impl RepoLock {
-    /// Acquire an exclusive lock on `<repo>/.ateam/lock`.
+    /// Acquire an exclusive lock on `<repo>/.agents/lock`.
     ///
     /// Tries non-blocking first. If the lock is held and `no_wait` is true,
     /// returns an error immediately. Otherwise blocks until the holder releases.
@@ -36,13 +36,13 @@ impl RepoLock {
             Ok(()) => return Ok(Self { file, path }),
             Err(_) if no_wait => {
                 bail!(
-                    "another `ateam` process holds the lock at {}; rerun without --no-wait or wait for it to finish",
+                    "another `agents` process holds the lock at {}; rerun without --no-wait or wait for it to finish",
                     path.display()
                 );
             }
             Err(_) => {
                 crate::ui::detail(format!(
-                    "waiting for another ateam process to release {}",
+                    "waiting for another agents process to release {}",
                     path.display()
                 ));
             }
@@ -63,7 +63,7 @@ impl Drop for RepoLock {
 }
 
 fn lock_path(repo: &Path) -> PathBuf {
-    repo.join(".ateam").join("lock")
+    repo.join(".agents").join("lock")
 }
 
 #[cfg(test)]
@@ -74,7 +74,7 @@ mod tests {
     fn acquire_creates_lock_file() {
         let tmp = tempfile::tempdir().unwrap();
         let _lock = RepoLock::acquire(tmp.path(), false).expect("first acquire");
-        assert!(tmp.path().join(".ateam").join("lock").exists());
+        assert!(tmp.path().join(".agents").join("lock").exists());
     }
 
     #[test]
@@ -83,7 +83,7 @@ mod tests {
         let _held = RepoLock::acquire(tmp.path(), false).expect("first acquire");
         let err = RepoLock::acquire(tmp.path(), true).expect_err("expected contention error");
         assert!(
-            err.to_string().contains("another `ateam` process"),
+            err.to_string().contains("another `agents` process"),
             "unexpected error: {}",
             err
         );
