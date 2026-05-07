@@ -1,37 +1,54 @@
 # Agents
 
-**Install an AI skill once. Run it on every agent, on every machine.**
+**One source. Every harness. Every machine.**
 
-Add a skill — or edit your `CLAUDE.md` — on your laptop and it appears on
-your work box. Claude Code sees it. Codex sees it. No re-installing, no
-copy-pasting between `~/.claude/skills`, no maintaining `CLAUDE.md` and
-`AGENTS.md` side by side, no `git push` — agents syncs everything invisibly.
+Add a skill, edit your `CLAUDE.md`, or drop in a code-reviewer subagent on
+your laptop. Claude Code, Codex, OpenCode, and Gemini CLI all see it. Your
+work box sees it tomorrow. No re-installing, no copy-pasting between
+`~/.claude/skills` and `~/.codex/skills`, no maintaining `CLAUDE.md` and
+`AGENTS.md` side by side, no juggling four flavors of subagent frontmatter,
+no `git push` — agents syncs everything invisibly.
 
-## What agents gives you
+## Three artifacts, all first-class
 
-- **One install, every tool.** `agents skills add deploy-to-vercel` lands in
-  Claude Code *and* Codex from a single command. No more installing the same
-  skill twice.
-- **One source for `CLAUDE.md` and `AGENTS.md`.** A single Handlebars template
-  at `instructions/instructions.md.hbs` renders to both files, with
-  profile-gated fragments so your work laptop and home machine read different
-  instructions from the same source. Adopt your existing globals with
-  `agents skills import --instructions`.
+agents tracks the three filesystem-rooted things every AI coding harness
+cares about, and re-shapes each one for whichever tools you use:
+
+- **Skills.** SKILL.md packages from skills.sh, GitHub, or local paths.
+  `agents skills add deploy-to-vercel` lands in Claude Code, Codex, OpenCode,
+  *and* Gemini CLI from a single command. Drop-in for `npx skills add` —
+  every flag from Vercel's CLI works the same way.
+- **Instructions.** A single Handlebars template at
+  `instructions/instructions.md.hbs` renders to `~/.claude/CLAUDE.md`,
+  `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`, and
+  `~/.gemini/GEMINI.md`. Profile-gated fragments let your work laptop and
+  home machine read different rules from the same source. Adopt your
+  existing globals with `agents skills import --instructions`.
+- **Subagents.** A single canonical Markdown file at `<repo>/agents/<name>.md`
+  with multi-harness frontmatter renders to each harness's native format —
+  YAML+Markdown for Claude/OpenCode/Gemini, TOML for Codex. Set the right
+  model id per harness in one file; never maintain four flavors by hand.
+
+## What ties them together
+
 - **One install, every machine.** Wire a git remote and every `add` /
-  `update` / `remove` propagates. Open a fresh laptop, run `agents apply`, and
-  your full skill library is there in seconds.
-- **Invisible git.** Pull, commit, and push happen in the background on every
-  command. Soft-fails offline so you're never blocked from working locally.
-- **Profiles.** Tag skills `work` or `personal`. Work laptop gets the work
-  skills; home machine doesn't. One source of truth, profile-gated outputs.
+  `update` / `remove` / `instructions edit` propagates. Open a fresh laptop,
+  run `agents apply`, and your full setup is there in seconds.
+- **Invisible git.** Pull, commit, and push happen in the background on
+  every command. Soft-fails offline so you're never blocked from working
+  locally.
+- **Profiles.** Tag skills and subagents `work` or `personal`. Work laptop
+  gets the work ones; home machine doesn't. One source of truth,
+  profile-gated outputs.
 - **Project scope.** Drop a skill into one repo's `.claude/skills` without
   polluting your globals. The same project lives at different paths on
   different machines — agents handles the alias.
 - **Soft-disable.** `agents skills deactivate` unlinks a skill from your
-  agents but keeps the lockfile entry. No usage tracking; reversible cleanup
-  for skills you suspect you don't need.
-- **Drop-in for `npx skills`.** Every flag from Vercel's CLI works as
-  `agents skills add`. Already using the Vercel one? Switch in a minute.
+  harnesses but keeps the lockfile entry. No usage tracking; reversible
+  cleanup for skills you suspect you don't need.
+- **Toggleable harnesses.** `agents harness add gemini` /
+  `agents harness remove gemini` flips a harness on or off and re-applies
+  in one step.
 
 > **Status:** v1, stable on macOS + Linux. Tested end-to-end against the live
 > [skills.sh](https://skills.sh) registry.
@@ -56,11 +73,16 @@ To build from source, see [docs/install.md](./docs/install.md).
 # 1. Bootstrap a config repo at ~/.config/agents/
 agents init --scaffold
 
-# 2. Install a skill — it appears in Claude Code AND Codex
+# 2. Install a skill — it appears in every enabled harness
 agents skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
-ls ~/.claude/skills/ ~/.codex/skills/   # both now have it
 
-# 3. Wire a remote so other machines can sync
+# 3. Drop in a subagent — same thing, every harness
+agents subagents add vercel-labs/agent-skills --subagent code-reviewer -y
+
+# 4. Adopt your existing CLAUDE.md / AGENTS.md as the instructions template
+agents skills import --instructions
+
+# 5. Wire a remote so other machines can sync
 agents remote add git@github.com:you/agents-config.git
 ```
 
@@ -69,11 +91,11 @@ On a second machine:
 ```bash
 agents init git@github.com:you/agents-config.git
 agents apply
-# every skill from machine A now lives on machine B
+# every skill, subagent, and instructions file from machine A now lives on machine B
 ```
 
-That's it. From now on every `agents skills add` / `update` / `remove` syncs
-invisibly.
+That's it. From now on every `agents skills add` / `subagents add` /
+`instructions edit` syncs invisibly.
 
 ## Docs
 
@@ -82,7 +104,7 @@ directly:
 
 - [Installation](./docs/install.md)
 - [Quickstart](./docs/quickstart.md)
-- Concepts: [Auto-sync](./docs/concepts/auto-sync.md) · [Profiles](./docs/concepts/profiles.md) · [Project scope](./docs/concepts/project-scope.md)
+- Concepts: [Harnesses](./docs/concepts/harness.md) · [Auto-sync](./docs/concepts/auto-sync.md) · [Profiles](./docs/concepts/profiles.md) · [Project scope](./docs/concepts/project-scope.md)
 - Reference: [CLI](./docs/reference/cli.md) · [Lockfile format](./docs/reference/lockfile.md)
 - [Troubleshooting](./docs/operate/troubleshooting.md)
 
