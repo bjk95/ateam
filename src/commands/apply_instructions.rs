@@ -206,8 +206,8 @@ fn prompt_collision(path: &Path) -> Result<CollisionChoice> {
     let choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .items(&[
-            "Skip syncing instructions on this machine (record in machine.toml)",
-            "Cancel — leave the file alone for this run",
+            "Skip on this machine — persistent opt-out (records instructions_skip in machine.toml)",
+            "Cancel — abort this apply; prompt again next run",
             "Overwrite — back up the existing file and use the managed version",
         ])
         .default(1)
