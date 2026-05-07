@@ -54,10 +54,6 @@ impl Manifest {
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
-
-    pub fn contains_path(&self, p: &Path) -> bool {
-        self.entries.iter().any(|e| e.path == p)
-    }
 }
 
 pub fn now_unix() -> u64 {
