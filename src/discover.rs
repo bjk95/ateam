@@ -100,7 +100,7 @@ fn parse_skill_md(root: &Path, file: &Path) -> Result<Option<DiscoveredSkill>> {
 // Unmanaged-skill detection
 // ============================================================================
 
-/// A skill directory found in an agent's skills dir that ateam isn't tracking.
+/// A skill directory found in an agent's skills dir that agents isn't tracking.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnmanagedSkill {
     pub name: String,
@@ -109,7 +109,7 @@ pub struct UnmanagedSkill {
     pub dirs: Vec<PathBuf>,
 }
 
-/// Conventional agent-skills directories ateam scans, in canonical order.
+/// Conventional agent-skills directories agents scans, in canonical order.
 /// Derived from the agent registry plus the cross-tool `.agents/skills/`
 /// alias (honored by Gemini and OpenCode but not bound to any single agent).
 pub fn harness_skill_dirs(home: &Path) -> Vec<PathBuf> {
@@ -120,10 +120,10 @@ pub fn harness_skill_dirs(home: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-/// Scan the agent skills dirs for skills not yet adopted by ateam.
+/// Scan the agent skills dirs for skills not yet adopted by agents.
 ///
 /// A directory is unmanaged when it isn't hidden, isn't a symlink whose
-/// target lives inside the ateam repo (`skills/`), and its name isn't
+/// target lives inside the agents repo (`skills/`), and its name isn't
 /// already in the lockfile. Cross-tool dedup: a skill present in multiple
 /// agent dirs returns one entry with all dirs aggregated.
 pub fn discover_unmanaged(

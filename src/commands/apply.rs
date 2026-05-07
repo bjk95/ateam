@@ -265,7 +265,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             alias,
             names.join(", ")
         ));
-        ui::plain(format!("  run: ateam project add {} <path>", alias));
+        ui::plain(format!("  run: agents project add {} <path>", alias));
     }
 
     if lockfile_dirty && !args.dry_run {

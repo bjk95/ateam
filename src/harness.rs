@@ -24,7 +24,7 @@ pub type UpstreamIndexer = fn(&Path, &mut HashMap<String, String>);
 /// same id are the same agent).
 #[derive(Debug, Clone, Copy)]
 pub struct HarnessDef {
-    /// Stable agent identifier used in `ateam.toml` `enabled_harnesses` and
+    /// Stable agent identifier used in `agents.toml` `enabled_harnesses` and
     /// in lockfile `agents` lists. Examples: `"claude-code"`, `"codex"`.
     pub id: &'static str,
     /// Human-readable name for UI surfaces.

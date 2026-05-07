@@ -17,7 +17,7 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
         None => bail!("no skill named `{}` in lockfile", args.name),
     };
     if lock.skills[idx].active {
-        println!("ateam: `{}` already active", args.name);
+        println!("agents: `{}` already active", args.name);
         return Ok(());
     }
     lock.skills[idx].active = true;
@@ -41,6 +41,6 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
-    println!("ateam: activated `{}`", args.name);
+    println!("agents: activated `{}`", args.name);
     Ok(())
 }

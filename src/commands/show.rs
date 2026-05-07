@@ -22,7 +22,7 @@ pub fn run(args: ShowArgs) -> Result<()> {
 
     if !skill_md.exists() {
         bail!(
-            "SKILL.md not found at {} — run `ateam apply` to materialize the snapshot",
+            "SKILL.md not found at {} — run `agents apply` to materialize the snapshot",
             skill_md.display()
         );
     }

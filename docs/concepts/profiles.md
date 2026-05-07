@@ -9,20 +9,20 @@ land on different machines.
 Each machine declares its profile set at `init`:
 
 ```bash
-ateam init --scaffold --profiles work,shared
-ateam init <git-url> --profiles personal
+agents init --scaffold --profiles work,shared
+agents init <git-url> --profiles personal
 ```
 
-The list lives in `<repo>/.ateam/machine.toml` (gitignored). Each machine writes
+The list lives in `<repo>/.agents/machine.toml` (gitignored). Each machine writes
 its own.
 
 ## Tagging a skill with profile gates
 
 ```bash
-ateam skills add canva/agent-skills --skill internal --profile work -y
+agents skills add canva/agent-skills --skill internal --profile work -y
 ```
 
-The lockfile entry gets `profiles = ["work"]`. `ateam apply` only installs the
+The lockfile entry gets `profiles = ["work"]`. `agents apply` only installs the
 entry on machines whose profile set intersects `["work"]`. A `personal`-only
 machine skips it.
 

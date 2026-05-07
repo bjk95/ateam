@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: Every ateam command and flag.
+description: Every agents command and flag.
 ---
 
 ## Global flags
@@ -9,8 +9,8 @@ These work on every subcommand.
 
 | Flag | Behavior |
 |---|---|
-| `--no-sync` | Skip auto pull/commit/push for this invocation. Equivalent: `ATEAM_NO_SYNC=1`. |
-| `--no-wait` | Fail fast if another `ateam` process holds the repo lock instead of waiting. |
+| `--no-sync` | Skip auto pull/commit/push for this invocation. Equivalent: `AGENTS_NO_SYNC=1`. |
+| `--no-wait` | Fail fast if another `agents` process holds the repo lock instead of waiting. |
 | `-v` / `--verbose` | Show extra detail (paths, SHAs, per-harness links). |
 | `-q` / `--quiet` | Suppress non-error output: banner, success lines, progress spinners, plain text. Errors and warnings still print to stderr. |
 
@@ -18,37 +18,37 @@ These work on every subcommand.
 
 Mutating commands (`apply`, `skills add`/`update`/`remove`/`import`/`activate`/`deactivate`,
 `project add`/`remove`, `remote add`, `edit`, `instructions edit`) take an exclusive
-`flock` on `<repo>/.ateam/lock` for the duration of the command. A second invocation
-waits for the first to finish before reading and writing `ateam.lock.toml` and
-`.ateam/manifest.toml`, so concurrent runs cannot clobber each other's edits.
+`flock` on `<repo>/.agents/lock` for the duration of the command. A second invocation
+waits for the first to finish before reading and writing `agents.lock.toml` and
+`.agents/manifest.toml`, so concurrent runs cannot clobber each other's edits.
 
 Pass `--no-wait` to fail fast instead of blocking. Read-only commands (`status`,
 `skills list`/`show`/`find`, `instructions diff`/`show`, `validate`, `project list`,
 `remote list`) take no lock.
 
-## `ateam init`
+## `agents init`
 
-Bootstrap a fresh ateam-config repo or clone an existing one.
+Bootstrap a fresh agents-config repo or clone an existing one.
 
 ```bash
-ateam init                         # interactive: clone or scaffold?
-ateam init <git-url>               # clone into ~/.config/ateam/
-ateam init --scaffold              # fresh empty repo at ~/.config/ateam/
-ateam init --repo <path>           # use a non-default location
-ateam init ... --profiles a,b      # set this machine's profile list
+agents init                         # interactive: clone or scaffold?
+agents init <git-url>               # clone into ~/.config/agents/
+agents init --scaffold              # fresh empty repo at ~/.config/agents/
+agents init --repo <path>           # use a non-default location
+agents init ... --profiles a,b      # set this machine's profile list
 ```
 
-## `ateam apply`
+## `agents apply`
 
 Materialize the lockfile (active entries only).
 
 ```bash
-ateam apply [--dry-run] [-a <harness>...] [--project <alias>] [--force] [--copy]
+agents apply [--dry-run] [-a <harness>...] [--project <alias>] [--force] [--copy]
 ```
 
 If a real directory already sits at a target path (e.g. a skill installed by
 hand or by `npx skills`), apply auto-heals it: if its contents match the
-snapshot at `<repo>/skills/<name>/` byte-for-byte, ateam removes the dir and
+snapshot at `<repo>/skills/<name>/` byte-for-byte, agents removes the dir and
 replaces it with a symlink. No `--force` needed and no data loss is possible
 because the snapshot already has the same bytes. If the contents don't match,
 apply refuses — `--force` is the escape hatch and moves the conflicting
@@ -59,15 +59,15 @@ filesystems where symlinks misbehave (network mounts, some Docker volumes).
 The copy is recorded in the manifest so the next `apply` without `--copy`
 cleanly swaps it back to a symlink.
 
-## `ateam status`
+## `agents status`
 
 ```bash
-ateam status                       # repo path, profiles, manifest health
+agents status                       # repo path, profiles, manifest health
 ```
 
-## `ateam skills add` (Vercel-compatible)
+## `agents skills add` (Vercel-compatible)
 
-Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
+Drop-in replacement for `npx skills add` — same flags, swap `npx` for `agents`.
 
 | Flag | Behavior |
 |---|---|
@@ -88,21 +88,21 @@ Drop-in replacement for `npx skills add` — same flags, swap `npx` for `ateam`.
 ### skills.sh registry fallback
 
 When `--skill <name>` doesn't match anything in the cloned GitHub repo's tree,
-ateam falls back to the [skills.sh](https://skills.sh) blob endpoint and
+agents falls back to the [skills.sh](https://skills.sh) blob endpoint and
 installs from the registry's snapshot. Mirrors `npx skills add` — covers
 skills that have been renamed, moved, or removed upstream but are still
 served from the registry's cache. Only fires for github sources with an
 explicit `--skill <name>` (not `--all` / `*`).
 
-## `ateam skills update`
+## `agents skills update`
 
 Check GitHub tree SHAs and refetch any drifted skills. Skips deactivated entries.
 
 ```bash
-ateam skills update                # all active entries
-ateam skills update <name>...      # specific entries
-ateam skills update --global       # only global-scoped entries
-ateam skills update --project foo  # only entries tagged with project alias `foo`
+agents skills update                # all active entries
+agents skills update <name>...      # specific entries
+agents skills update --global       # only global-scoped entries
+agents skills update --project foo  # only entries tagged with project alias `foo`
 ```
 
 | Flag | Behavior |
@@ -114,18 +114,18 @@ ateam skills update --project foo  # only entries tagged with project alias `foo
 
 `--global` and `--project` are mutually exclusive.
 
-## `ateam skills remove`
+## `agents skills remove`
 
 Delete one or more skills from the lockfile and uninstall their symlinks. If
 any name isn't in the lockfile (within the selected scope), nothing is removed
 and the command errors.
 
 ```bash
-ateam skills remove <name>...                  # one or more positional names
-ateam skills remove --all                      # every locked skill
-ateam skills remove --all -g                   # every globally-scoped skill
-ateam skills remove --all -a claude            # every skill targeting claude
-ateam skills remove foo bar -y                 # skip the confirmation prompt
+agents skills remove <name>...                  # one or more positional names
+agents skills remove --all                      # every locked skill
+agents skills remove --all -g                   # every globally-scoped skill
+agents skills remove --all -a claude            # every skill targeting claude
+agents skills remove foo bar -y                 # skip the confirmation prompt
 ```
 
 | Flag | Behavior |
@@ -140,42 +140,42 @@ A confirmation prompt lists the skills about to be removed and defaults to "no".
 Pass `-y` (or pipe stdin) to skip it.
 
 When no positional names are given, `--all` isn't set, and stdin is a pipe,
-names are read from stdin (whitespace-separated). `ateam skills list` auto-
+names are read from stdin (whitespace-separated). `agents skills list` auto-
 switches to names-only output when its stdout is a pipe, so the obvious form
 just works:
 
 ```bash
-ateam skills list | ateam skills remove
-ateam skills list --project canva | ateam skills remove
+agents skills list | agents skills remove
+agents skills list --project canva | agents skills remove
 ```
 
 Pass `--names` explicitly if you want plain names on a TTY (e.g. into a file).
 
-Local-source directories under `<repo>/skills/` are never deleted by ateam — you
+Local-source directories under `<repo>/skills/` are never deleted by agents — you
 remove them yourself if you want them gone.
 
-## `ateam skills deactivate` / `ateam skills activate`
+## `agents skills deactivate` / `agents skills activate`
 
 Soft-disable a skill without losing its lockfile entry. Deactivating immediately
 unlinks the skill from `~/.claude/skills/` and `~/.codex/skills/`; activating
 re-materializes it.
 
 ```bash
-ateam skills deactivate <name>
-ateam skills activate <name>
+agents skills deactivate <name>
+agents skills activate <name>
 ```
 
 The `active` flag rides with the skill in the lockfile, so deactivating on one
-machine deactivates everywhere after the next sync. `ateam skills list` marks
+machine deactivates everywhere after the next sync. `agents skills list` marks
 deactivated entries with `[off]`.
 
-## `ateam skills list`
+## `agents skills list`
 
 ```bash
-ateam skills list                  # all locked skills (active + [off])
-ateam skills list --project canva  # only entries scoped to one project
-ateam skills list --json           # versioned JSON for editor integrations
-ateam skills list --names          # force one-name-per-line output on a TTY
+agents skills list                  # all locked skills (active + [off])
+agents skills list --project canva  # only entries scoped to one project
+agents skills list --json           # versioned JSON for editor integrations
+agents skills list --names          # force one-name-per-line output on a TTY
 ```
 
 Entries are sorted by source (remote) alphabetically, then by name within each
@@ -183,12 +183,12 @@ source. This applies to all output modes (default, `--names`, `--json`).
 
 When stdout is not a terminal (i.e. piped or redirected), `list` auto-switches
 to plain names-only output — same as passing `--names` — so it composes cleanly
-with `xargs` and `ateam skills remove`. `--json` overrides this and always
+with `xargs` and `agents skills remove`. `--json` overrides this and always
 emits JSON.
 
 ```bash
-ateam skills list | ateam skills remove                   # remove all (with prompt)
-ateam skills list --project canva | xargs ateam skills remove -y
+agents skills list | agents skills remove                   # remove all (with prompt)
+agents skills list --project canva | xargs agents skills remove -y
 ```
 
 ### `--json` schema
@@ -235,106 +235,106 @@ Every field is always present, even when null/empty, so consumers can rely on
 the shape without defaulting. New fields may be added without bumping the
 version; renames or semantic changes will bump it.
 
-## `ateam skills show`
+## `agents skills show`
 
 Print the `SKILL.md` for a locked skill to stdout. Reads the snapshot at
 `<repo>/skills/<name>/SKILL.md` (or the `local:` path for user-authored skills).
 Useful for piping into `less`, `grep`, or another harness.
 
 ```bash
-ateam skills show deploy-to-vercel
-ateam skills show deploy-to-vercel | less
+agents skills show deploy-to-vercel
+agents skills show deploy-to-vercel | less
 ```
 
-If the snapshot is missing, ateam tells you to run `ateam apply` first.
+If the snapshot is missing, agents tells you to run `agents apply` first.
 
-## `ateam skills find`
+## `agents skills find`
 
 Search the [skills.sh](https://skills.sh) registry. Two modes:
 
 ```bash
-ateam skills find deploy vercel     # non-interactive: print matches and exit
-ateam skills find                   # interactive picker (TTY only)
+agents skills find deploy vercel     # non-interactive: print matches and exit
+agents skills find                   # interactive picker (TTY only)
 ```
 
 Pipe-friendly. The non-interactive form prints `owner/repo --skill <name>` lines
-you can feed straight into `ateam skills add`. Run from a non-TTY shell with no
-query and ateam prints a two-step hint instead of opening a picker.
+you can feed straight into `agents skills add`. Run from a non-TTY shell with no
+query and agents prints a two-step hint instead of opening a picker.
 
-## `ateam skills import`
+## `agents skills import`
 
 Adopt an installed-locally skill (or your global `CLAUDE.md` / `AGENTS.md`) into
 the synced lockfile.
 
 ```bash
-ateam skills import                                   # bulk: every skill on disk + instructions
-ateam skills import <name>                            # snapshot a single skill into <repo>/skills/
-ateam skills import <name> --upstream github:foo/bar  # track upstream instead of snapshotting
-ateam skills import <name> --project canva            # tag with project alias
-ateam skills import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
+agents skills import                                   # bulk: every skill on disk + instructions
+agents skills import <name>                            # snapshot a single skill into <repo>/skills/
+agents skills import <name> --upstream github:foo/bar  # track upstream instead of snapshotting
+agents skills import <name> --project canva            # tag with project alias
+agents skills import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
 ```
 
 Bulk mode (no name) walks `~/.claude/skills`, `~/.codex/skills`, and
 `~/.agents/skills`, plus the global `CLAUDE.md` / `AGENTS.md`. When the two
-instruction files differ, ateam shows an interactive picker so you choose which
+instruction files differ, agents shows an interactive picker so you choose which
 becomes the canonical template. Orphan snapshot directories (already in
 `<repo>/skills/` but missing from the lockfile) are adopted instead of erroring.
 
 Plugin-managed skills (those installed via `claude plugin add` from a
 marketplace) are detected through `~/.claude/plugins/installed_plugins.json`
 and **skipped** — both bulk and single import refuse to take ownership, since
-Claude's plugin updater would race ateam's symlink on the next plugin sync.
+Claude's plugin updater would race agents's symlink on the next plugin sync.
 Single import errors out with the upstream source named; bulk prints a `·`
 line per skipped plugin skill and continues. Manage those skills via the
 `claude plugin` commands instead.
 
-For each adopted skill, ateam also auto-discovers upstream by inspecting the
+For each adopted skill, agents also auto-discovers upstream by inspecting the
 on-disk skill folder for a `.git/config` or sibling git checkout — so a skill
 imported from a local clone of `github.com/foo/bar` gets a `github:foo/bar`
 source automatically. Pass `--upstream` to override.
 
-## `ateam upgrade`
+## `agents upgrade`
 
-Self-update: download the latest `ateam` release and replace this binary.
+Self-update: download the latest `agents` release and replace this binary.
 Bypasses the 24h TTL check that runs implicitly before every other command.
 
 ```bash
-ateam upgrade
+agents upgrade
 ```
 
-Prints `ateam: updated X → Y` on success or `ateam: already at latest (X)`
+Prints `agents: updated X → Y` on success or `agents: already at latest (X)`
 when no upgrade was needed. Exits non-zero on failure.
 
 The implicit check runs at most once every 24 hours, soft-fails on any
 network/filesystem error, and never blocks the command you actually ran.
 There is no env-var opt-out; if you don't want updates, ignore the
-occasional `ateam: updated …` line — the cache is at `~/.cache/ateam/`.
+occasional `agents: updated …` line — the cache is at `~/.cache/agents/`.
 
-## `ateam project`
+## `agents project`
 
 Manage this machine's alias→path map.
 
 ```bash
-ateam project add <alias> <path>     # register
-ateam project list                   # show
-ateam project remove <alias>         # forget
+agents project add <alias> <path>     # register
+agents project list                   # show
+agents project remove <alias>         # forget
 ```
 
 `add` accepts `register` as a hidden alias for muscle memory.
 
-## `ateam remote`
+## `agents remote`
 
-Manage the ateam-config repo's git remote without dropping into `git -C`.
+Manage the agents-config repo's git remote without dropping into `git -C`.
 
 ```bash
-ateam remote add <git-url>           # set origin and push current branch upstream
-ateam remote list                    # print configured remotes (`git remote -v`)
+agents remote add <git-url>           # set origin and push current branch upstream
+agents remote list                    # print configured remotes (`git remote -v`)
 ```
 
 `remote add` refuses to clobber an existing `origin` and rolls itself back if
 the initial push fails (so you don't end up half-configured).
 
-## `ateam validate`
+## `agents validate`
 
 Lint the instructions template at `<repo>/instructions/instructions.md.hbs`.
 Checks that every Handlebars identifier referenced in the template is either a
@@ -342,7 +342,7 @@ declared profile or one of the reserved identifiers (`claude`, `codex`,
 `hostname`).
 
 ```bash
-ateam validate
+agents validate
 ```
 
 Exits zero if the template is missing (nothing to validate) or all identifiers

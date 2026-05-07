@@ -104,7 +104,7 @@ pub fn apply(
             CopyOutcome::Written | CopyOutcome::MovedAside { .. } => {
                 if let CopyOutcome::MovedAside { backup } = &result {
                     eprintln!(
-                        "ateam: moved aside existing {} → {}",
+                        "agents: moved aside existing {} → {}",
                         out.display(),
                         backup.display()
                     );
@@ -126,13 +126,13 @@ pub fn apply(
                         machine.instructions_skip = true;
                         outcome.instructions_skip_set = true;
                         eprintln!(
-                            "ateam: instructions sync disabled on this machine (recorded in machine.toml). re-enable by clearing `instructions_skip` and re-running."
+                            "agents: instructions sync disabled on this machine (recorded in machine.toml). re-enable by clearing `instructions_skip` and re-running."
                         );
                         return Ok(outcome);
                     }
                     CollisionChoice::Cancel => {
                         eprintln!(
-                            "ateam: cancelled — {} left untouched. rerun with --force to overwrite, or back it up first.",
+                            "agents: cancelled — {} left untouched. rerun with --force to overwrite, or back it up first.",
                             out.display()
                         );
                         return Ok(outcome);
@@ -173,13 +173,13 @@ fn prompt_collision(path: &Path) -> Result<CollisionChoice> {
     if !std::io::stdin().is_terminal() {
         // Non-interactive: default to cancel so we don't accidentally skip forever.
         eprintln!(
-            "ateam: refusing to overwrite existing {} (non-interactive). rerun with --force or set `instructions_skip = true` in machine.toml to skip on this machine.",
+            "agents: refusing to overwrite existing {} (non-interactive). rerun with --force or set `instructions_skip = true` in machine.toml to skip on this machine.",
             path.display()
         );
         return Ok(CollisionChoice::Cancel);
     }
     let prompt = format!(
-        "{} already exists and isn't tracked by ateam.\n  How should ateam proceed?",
+        "{} already exists and isn't tracked by agents.\n  How should agents proceed?",
         path.display()
     );
     let choice = Select::with_theme(&ColorfulTheme::default())
@@ -216,7 +216,7 @@ mod tests {
                 enabled_harnesses: vec!["claude-code".into(), "codex".into()],
             };
             repo_cfg.write(repo.path()).unwrap();
-            std::fs::create_dir_all(repo.path().join(".ateam")).unwrap();
+            std::fs::create_dir_all(repo.path().join(".agents")).unwrap();
             let mut machine = MachineConfig::default();
             machine.profiles = machine_profiles.iter().map(|s| (*s).to_string()).collect();
             machine.write(repo.path()).unwrap();
@@ -343,7 +343,7 @@ mod tests {
     fn pre_existing_file_refused_without_force() {
         let fx = Fixture::new(&["work"], &["work"]);
         fx.write_template("template body\n");
-        // Pre-create a colliding file outside ateam's manifest.
+        // Pre-create a colliding file outside agents's manifest.
         let claude_out = fx.output_path(Harness::CLAUDE);
         std::fs::create_dir_all(claude_out.parent().unwrap()).unwrap();
         std::fs::write(&claude_out, "user-managed content").unwrap();

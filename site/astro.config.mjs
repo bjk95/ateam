@@ -4,8 +4,8 @@ import starlight from '@astrojs/starlight';
 
 // Read GitHub repo info from env so the action passes the right base path.
 // Falls back to no-base for local dev.
-const repoBase = process.env.ATEAM_BASE || '/';
-const siteUrl = process.env.ATEAM_SITE_URL || 'https://example.github.io';
+const repoBase = process.env.AGENTS_BASE || '/';
+const siteUrl = process.env.AGENTS_SITE_URL || 'https://example.github.io';
 
 export default defineConfig({
   site: siteUrl,
@@ -13,7 +13,7 @@ export default defineConfig({
   trailingSlash: 'ignore',
   integrations: [
     starlight({
-      title: 'ateam',
+      title: 'agents',
       description: 'Multi-machine AI skills sync — Vercel-compatible CLI with invisible git auto-sync.',
       logo: {
         light: './src/assets/logo.svg',
@@ -21,7 +21,7 @@ export default defineConfig({
         replacesTitle: false,
       },
       social: {
-        github: 'https://github.com/bradleykester/ateam',
+        github: 'https://github.com/bradleykester/agents',
       },
       customCss: [
         './src/styles/tokens.css',

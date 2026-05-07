@@ -50,14 +50,14 @@ jobs:
           # GitHub Pages project sites live at https://<owner>.github.io/<repo>/
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
           OWNER="${GITHUB_REPOSITORY%/*}"
-          echo "ATEAM_BASE=/${REPO_NAME}/" >> "$GITHUB_ENV"
-          echo "ATEAM_SITE_URL=https://${OWNER}.github.io" >> "$GITHUB_ENV"
+          echo "AGENTS_BASE=/${REPO_NAME}/" >> "$GITHUB_ENV"
+          echo "AGENTS_SITE_URL=https://${OWNER}.github.io" >> "$GITHUB_ENV"
 
       - name: Build site
         working-directory: site
         env:
-          ATEAM_BASE: ${{ env.ATEAM_BASE }}
-          ATEAM_SITE_URL: ${{ env.ATEAM_SITE_URL }}
+          AGENTS_BASE: ${{ env.AGENTS_BASE }}
+          AGENTS_SITE_URL: ${{ env.AGENTS_SITE_URL }}
         run: pnpm exec astro build
 
       - name: Upload artifact

@@ -47,7 +47,7 @@ pub struct MachineConfig {
     pub profiles: Vec<String>,
     #[serde(default)]
     pub projects: BTreeMap<String, PathBuf>,
-    /// If set, `ateam apply` skips writing instruction files on this machine.
+    /// If set, `agents apply` skips writing instruction files on this machine.
     /// Recorded when the user picks "skip" at the first-run collision prompt.
     #[serde(default, skip_serializing_if = "is_false")]
     pub instructions_skip: bool,

@@ -220,7 +220,7 @@ fn plan_remove(current: &[String], to_remove: &[String]) -> Result<RemovePlan> {
     }
     if !removed.is_empty() && next.is_empty() {
         return Err(anyhow!(
-            "cannot remove last enabled harness (would disable ateam).\n  use 'ateam harness add <id>' first, or edit ateam.toml manually if you really want this."
+            "cannot remove last enabled harness (would disable agents).\n  use 'agents harness add <id>' first, or edit agents.toml manually if you really want this."
         ));
     }
     Ok(RemovePlan {

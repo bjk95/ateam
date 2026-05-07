@@ -70,7 +70,7 @@ pub fn fetch(owner: &str, repo: &str, slug: &str) -> Result<Option<DownloadRespo
     );
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
-        .user_agent("ateam-cli")
+        .user_agent("agents-cli")
         .build()
         .context("building http client")?;
     let response = client.get(&url).send().context("calling skills.sh")?;

@@ -79,7 +79,7 @@ pub type UpstreamIndexer = fn(&Path, &mut HashMap<String, String>);
 /// future agents that surface only one of the two can be added cleanly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AgentDef {
-    /// Stable agent identifier used in `ateam.toml` `enabled_agents` and
+    /// Stable agent identifier used in `agents.toml` `enabled_agents` and
     /// in lockfile `agents` lists. Examples: `"claude-code"`, `"codex"`.
     pub id: &'static str,
     /// Human-readable name for UI surfaces.
@@ -870,7 +870,7 @@ The current line 61 contains a hand-written list of paths in an error message:
 And line 102 has another:
 
 ```rust
-    println!("ateam: scanning ~/.claude/skills, ~/.codex/skills, ~/.agents/skills...");
+    println!("agents: scanning ~/.claude/skills, ~/.codex/skills, ~/.agents/skills...");
 ```
 
 Replace line 61 (the `find_installed` error message) with:
@@ -905,7 +905,7 @@ Replace line 102 with:
 
 ```rust
     println!(
-        "ateam: scanning {}...",
+        "agents: scanning {}...",
         agent_skill_dirs(home)
             .iter()
             .map(|p| crate::paths::display_path(p))
@@ -954,7 +954,7 @@ the same source so they stay accurate as agents are added."
 **Files:**
 - Modify: `src/agents.rs` (add two `pub const` items + extend `REGISTRY`)
 
-This is the moment behavior changes. Default-agent count grows from 2 to 4, and `ateam apply` on a default-config repo will materialize new files at `~/.config/opencode/AGENTS.md` and `~/.gemini/GEMINI.md`.
+This is the moment behavior changes. Default-agent count grows from 2 to 4, and `agents apply` on a default-config repo will materialize new files at `~/.config/opencode/AGENTS.md` and `~/.gemini/GEMINI.md`.
 
 - [ ] **Step 1: Add the two new `pub const` items**
 
@@ -1127,14 +1127,14 @@ Expected: all pass — old tests + the new opencode/gemini lookups + path tests 
 
 - [ ] **Step 9: Manual smoke test**
 
-Build a release binary and run an end-to-end sanity check on the four-agent default. (Skip if you don't have an `~/.config/ateam/` repo — the unit tests cover the same paths.)
+Build a release binary and run an end-to-end sanity check on the four-agent default. (Skip if you don't have an `~/.config/agents/` repo — the unit tests cover the same paths.)
 
 ```bash
 cargo build --release
-ATEAM=$(pwd)/target/release/ateam
-mkdir -p /tmp/ateam-smoke && cd /tmp/ateam-smoke
-HOME=/tmp/ateam-smoke "$ATEAM" init --scaffold --profiles personal
-HOME=/tmp/ateam-smoke "$ATEAM" apply
+AGENTS=$(pwd)/target/release/agents
+mkdir -p /tmp/agents-smoke && cd /tmp/agents-smoke
+HOME=/tmp/agents-smoke "$AGENTS" init --scaffold --profiles personal
+HOME=/tmp/agents-smoke "$AGENTS" apply
 ls -la .claude .codex .config/opencode .gemini
 ```
 
@@ -1151,9 +1151,9 @@ gemini (.gemini/skills + GEMINI.md). Both use the same SKILL.md
 format as Claude Code and Codex per the agentskills.io standard.
 
 default_agents() now returns all four. Existing users with explicit
-enabled_agents in ateam.toml keep their list; users on the default
+enabled_agents in agents.toml keep their list; users on the default
 will see new files at ~/.config/opencode/AGENTS.md and
-~/.gemini/GEMINI.md after the next 'ateam apply'."
+~/.gemini/GEMINI.md after the next 'agents apply'."
 ```
 
 ---
@@ -1174,7 +1174,7 @@ Create `docs/concepts/agents.md`:
 ```markdown
 # Supported agents
 
-ateam syncs skills and instructions across these agents. Each agent has a stable id used in `ateam.toml`'s `enabled_agents` list and in lockfile entries' `agents` field.
+agents syncs skills and instructions across these agents. Each agent has a stable id used in `agents.toml`'s `enabled_agents` list and in lockfile entries' `agents` field.
 
 | id | tool | skills directory | global instructions file |
 |---|---|---|---|
@@ -1187,7 +1187,7 @@ All four use the same `SKILL.md` format ([agentskills.io](https://agentskills.io
 
 ## Default-enabled set
 
-By default, all four agents are enabled. ateam's `apply` will write instructions files and install skill symlinks for each one — even if the agent itself isn't installed on this machine. To opt out, edit `ateam.toml`:
+By default, all four agents are enabled. agents's `apply` will write instructions files and install skill symlinks for each one — even if the agent itself isn't installed on this machine. To opt out, edit `agents.toml`:
 
 ```toml
 enabled_agents = ["claude-code", "codex"]  # only these two
@@ -1275,7 +1275,7 @@ Expected: clean build with no warnings about the new code (existing warnings unc
 - [ ] **Step 3: Sanity-check the binary's behavior**
 
 ```bash
-./target/release/ateam --help
+./target/release/agents --help
 ```
 
 Expected: command help renders correctly. The CLI surface itself didn't change — only the agent registry did.

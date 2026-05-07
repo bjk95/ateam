@@ -25,7 +25,7 @@ pub enum LinkOutcome {
 /// Replaces existing symlinks unconditionally; refuses on real files unless
 /// `force`, with one exception: if the existing real directory's content is
 /// byte-for-byte identical to `target`, it's removed silently (covers the
-/// "skill installed pre-ateam, then imported" case where both copies still
+/// "skill installed pre-agents, then imported" case where both copies still
 /// exist on disk).
 pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOutcome> {
     if let Some(parent) = link.parent() {
@@ -92,7 +92,7 @@ fn content_matches(a: &Path, b: &Path) -> Result<bool> {
 /// into the final snapshot slot. Failure between the two leaves the tmp
 /// untouched (caller can call `sweep_tmp` on next apply to clean up). The
 /// snapshot lives under `skills/` so it's tracked by git and travels to other
-/// machines as part of the ateam-config repo — no per-machine refetch needed.
+/// machines as part of the agents-config repo — no per-machine refetch needed.
 pub fn prepare_cache_slot(repo: &Path, skill_name: &str) -> Result<CacheSlot> {
     let dest_root = crate::paths::local_skills_dir(repo);
     let tmp_root = crate::paths::tmp_dir(repo);
@@ -163,7 +163,7 @@ fn quarantine_path(tmp: &Path) -> PathBuf {
     tmp.with_file_name(name)
 }
 
-/// Sweep stale dirs out of `<repo>/.ateam/tmp/` from previous failed apply runs.
+/// Sweep stale dirs out of `<repo>/.agents/tmp/` from previous failed apply runs.
 pub fn sweep_tmp(repo: &Path) -> Result<()> {
     let tmp_root = crate::paths::tmp_dir(repo);
     if !tmp_root.exists() {
@@ -209,7 +209,7 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Remove a path that ateam previously wrote (symlink or empty dir).
+/// Remove a path that agents previously wrote (symlink or empty dir).
 /// No-op if absent. Refuses to recursively delete real directories.
 pub fn uninstall_path(path: &Path) -> Result<()> {
     let meta = match std::fs::symlink_metadata(path) {
@@ -240,7 +240,7 @@ pub enum CopyOutcome {
 }
 
 /// Atomically write `content` to `path`. If a file exists at `path` and
-/// `was_managed` is false (meaning ateam didn't write it last apply), refuse
+/// `was_managed` is false (meaning agents didn't write it last apply), refuse
 /// unless `force` is set (in which case the existing file is moved aside).
 pub fn install_copy(
     path: &Path,
@@ -291,7 +291,7 @@ fn write_atomically(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-/// Remove a regular file or directory ateam previously wrote via
+/// Remove a regular file or directory agents previously wrote via
 /// `install_copy` / `install_copy_dir`. No-op if absent. Refuses to remove
 /// symlinks (those go through `uninstall_path`) or other unexpected types.
 pub fn uninstall_copy(path: &Path) -> Result<()> {
@@ -329,7 +329,7 @@ pub enum CopyDirOutcome {
 
 /// Recursively copy `src` into `dst`. Used for `--copy` mode where filesystems
 /// can't reliably handle symlinks. If `was_managed`, an existing dst was put
-/// there by ateam's previous apply and may be replaced freely; otherwise a
+/// there by agents's previous apply and may be replaced freely; otherwise a
 /// pre-existing dst is moved aside (with `force`) or refused.
 pub fn install_copy_dir(
     dst: &Path,

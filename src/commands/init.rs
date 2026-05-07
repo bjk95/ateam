@@ -32,7 +32,7 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     write_or_clear_pointer(&target)?;
 
-    ui::ok("initialized ateam");
+    ui::ok("initialized agents");
     ui::detail(format!("repo: {}", paths::display_path(&target)));
     if !args.profiles.is_empty() {
         ui::detail(format!("profiles: {}", args.profiles.join(", ")));
@@ -57,7 +57,7 @@ fn resolve_mode(args: &InitArgs) -> Result<Mode> {
 fn prompt_mode() -> Result<Mode> {
     use dialoguer::{theme::ColorfulTheme, Select};
     let choice = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("ateam-config repo")
+        .with_prompt("agents-config repo")
         .items(&["Clone an existing git URL", "Scaffold a fresh empty repo"])
         .default(0)
         .interact()?;
@@ -90,7 +90,7 @@ fn scaffold(target: &Path) -> Result<()> {
         }
         if !is_empty(target)? {
             bail!(
-                "{} exists and is not an ateam repo. refusing to scaffold over non-empty dir.",
+                "{} exists and is not an agents repo. refusing to scaffold over non-empty dir.",
                 target.display()
             );
         }
@@ -138,16 +138,16 @@ fn clone(url: &str, target: &Path) -> Result<()> {
 
 fn write_empty_lockfile(target: &Path) -> Result<()> {
     let path = paths::lockfile(target);
-    std::fs::write(&path, "# ateam lockfile — managed by `ateam`\n")
+    std::fs::write(&path, "# agents lockfile — managed by `agents`\n")
         .with_context(|| format!("writing {}", path.display()))?;
     Ok(())
 }
 
 fn ensure_gitignore(target: &Path) -> Result<()> {
     let path = target.join(".gitignore");
-    let needed = ".ateam/\n";
+    let needed = ".agents/\n";
     let current = std::fs::read_to_string(&path).unwrap_or_default();
-    if current.lines().any(|l| l.trim() == ".ateam/" || l.trim() == ".ateam") {
+    if current.lines().any(|l| l.trim() == ".agents/" || l.trim() == ".agents") {
         return Ok(());
     }
     let mut new = current;
@@ -197,7 +197,7 @@ fn initial_commit_if_clean(target: &Path) -> Result<()> {
     let add = Command::new("git")
         .arg("-C")
         .arg(target)
-        .args(["add", "ateam.toml", "ateam.lock.toml", ".gitignore"])
+        .args(["add", "agents.toml", "agents.lock.toml", ".gitignore"])
         .status()
         .context("git add during init")?;
     if !add.success() {
@@ -207,7 +207,7 @@ fn initial_commit_if_clean(target: &Path) -> Result<()> {
     let commit = Command::new("git")
         .arg("-C")
         .arg(target)
-        .args(["commit", "--quiet", "-m", "init :: ateam scaffold"])
+        .args(["commit", "--quiet", "-m", "init :: agents scaffold"])
         .status()
         .context("git commit during init")?;
     if !commit.success() {
