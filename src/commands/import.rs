@@ -224,6 +224,9 @@ pub(crate) fn bulk_import_skills(
             if name.starts_with('.') {
                 continue;
             }
+            if !entry.path().join("SKILL.md").is_file() {
+                continue;
+            }
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -680,6 +683,22 @@ mod tests {
         // Adoption preserves the existing snapshot — does NOT clobber with fresh body.
         let body = std::fs::read_to_string(dest.join("SKILL.md")).unwrap();
         assert_eq!(body, "stale orphan body");
+    }
+
+    #[test]
+    fn bulk_skips_container_dirs_without_top_level_skill_md() {
+        let fx = Fixture::new();
+        let container = fx.home.path().join(".codex/skills/superpowers");
+        let nested = container.join("brainstorming");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("SKILL.md"), "nested body").unwrap();
+
+        let mut lock = Lockfile::load(fx.repo.path()).unwrap();
+        let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
+
+        assert_eq!(outcome.imported, 0);
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+        assert!(lock.find("superpowers").is_none());
     }
 
     #[test]
