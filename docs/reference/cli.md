@@ -273,17 +273,17 @@ Pipe-friendly. The non-interactive form prints `owner/repo --skill <name>` lines
 you can feed straight into `agents skills add`. Run from a non-TTY shell with no
 query and agents prints a two-step hint instead of opening a picker.
 
-## `agents skills import`
+## `agents import`
 
 Adopt an installed-locally skill (or your global `CLAUDE.md` / `AGENTS.md`) into
 the synced lockfile.
 
 ```bash
-agents skills import                                   # bulk: every skill on disk + instructions
-agents skills import <name>                            # snapshot a single skill into <repo>/skills/
-agents skills import <name> --upstream github:foo/bar  # track upstream instead of snapshotting
-agents skills import <name> --project canva            # tag with project alias
-agents skills import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
+agents import                                   # bulk: every skill on disk + instructions
+agents import <name>                            # snapshot a single skill into <repo>/skills/
+agents import <name> --upstream github:foo/bar  # track upstream instead of snapshotting
+agents import <name> --project canva            # tag with project alias
+agents import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
 ```
 
 Bulk mode (no name) walks `~/.claude/skills`, `~/.codex/skills`, and

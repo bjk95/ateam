@@ -35,7 +35,7 @@ in sync through the git remote.
   `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`, and
   `~/.gemini/GEMINI.md`. Profile-gated fragments let work and home machines
   read different rules from the same template. Adopt your existing globals
-  with `agents skills import --instructions`.
+  with `agents import --instructions`.
 - **Subagents.** One Markdown file at `<repo>/agents/<name>.md` with
   multi-harness frontmatter renders to YAML+Markdown for Claude, OpenCode,
   and Gemini, and to TOML for Codex.
@@ -88,7 +88,7 @@ agents skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
 agents subagents add vercel-labs/agent-skills --subagent code-reviewer -y
 
 # 4. Adopt your existing CLAUDE.md / AGENTS.md as the instructions template
-agents skills import --instructions
+agents import --instructions
 
 # 5. Wire a remote so other machines can sync
 agents remote add git@github.com:you/agents-config.git

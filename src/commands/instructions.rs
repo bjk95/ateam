@@ -23,7 +23,7 @@ fn edit(no_sync: bool) -> Result<()> {
     let template = paths::instructions_template(&repo);
     if !template.exists() {
         bail!(
-            "instructions template not found at {} — run `agents skills import --instructions` to bootstrap",
+            "instructions template not found at {} — run `agents import --instructions` to bootstrap",
             template.display()
         );
     }
@@ -100,7 +100,7 @@ fn show() -> Result<()> {
     let template = paths::instructions_template(&repo);
     if !template.exists() {
         bail!(
-            "instructions template not found at {} — run `agents skills import --instructions` to bootstrap",
+            "instructions template not found at {} — run `agents import --instructions` to bootstrap",
             template.display()
         );
     }
