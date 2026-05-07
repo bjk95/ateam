@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, Version};
+use axoupdater::{AxoUpdater, AxoupdateError, ReleaseSource, ReleaseSourceType, Version};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -25,9 +25,13 @@ fn cache_path() -> Result<PathBuf> {
             return Ok(p.join("agents").join("update-check"));
         }
     }
-    let dirs = directories::BaseDirs::new()
-        .ok_or_else(|| anyhow!("could not determine home dir"))?;
-    Ok(dirs.home_dir().join(".cache").join("agents").join("update-check"))
+    let dirs =
+        directories::BaseDirs::new().ok_or_else(|| anyhow!("could not determine home dir"))?;
+    Ok(dirs
+        .home_dir()
+        .join(".cache")
+        .join("agents")
+        .join("update-check"))
 }
 
 fn touch_cache(path: &Path) -> Result<()> {
@@ -44,7 +48,15 @@ fn build_updater() -> AxoUpdater {
     // Populates install_prefix (and source/current_version) from the receipt
     // the cargo-dist shell installer writes. Without this, run_sync fails with
     // NotConfigured { missing_field: "install_prefix" }.
-    let _ = u.load_receipt();
+    // Older installs may not have a receipt, so fall back to this executable's
+    // install prefix in that case.
+    if let Err(AxoupdateError::NoReceipt { .. }) = u.load_receipt() {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(prefix) = install_prefix_for_exe(&exe) {
+                u.set_install_dir(prefix.to_string_lossy().into_owned());
+            }
+        }
+    }
     u.set_release_source(ReleaseSource {
         release_type: ReleaseSourceType::GitHub,
         owner: REPO_OWNER.into(),
@@ -55,6 +67,16 @@ fn build_updater() -> AxoUpdater {
         let _ = u.set_current_version(version);
     }
     u
+}
+
+fn install_prefix_for_exe(exe: &Path) -> Option<PathBuf> {
+    let dir = exe.parent()?;
+    if dir.file_name().is_some_and(|name| name == "bin") {
+        if let Some(parent) = dir.parent() {
+            return Some(parent.to_path_buf());
+        }
+    }
+    Some(dir.to_path_buf())
 }
 
 fn run_update(loud: bool) -> Result<Option<(String, String)>> {
@@ -103,10 +125,7 @@ pub(crate) fn maybe_check() {
 pub(crate) fn force_upgrade() -> Result<()> {
     match run_update(true)? {
         Some((from, to)) => println!("agents: updated {} → {}", from, to),
-        None => println!(
-            "agents: already at latest ({})",
-            env!("CARGO_PKG_VERSION")
-        ),
+        None => println!("agents: already at latest ({})", env!("CARGO_PKG_VERSION")),
     }
     if let Ok(cache) = cache_path() {
         let _ = touch_cache(&cache);
@@ -146,5 +165,39 @@ mod tests {
             !is_cache_fresh(&path),
             "file with mtime 24h01m ago should be stale"
         );
+    }
+
+    #[test]
+    fn updater_has_install_dir_without_receipt() {
+        let dir = TempDir::new().unwrap();
+        let old_config_path = std::env::var_os("AXOUPDATER_CONFIG_PATH");
+        std::env::set_var("AXOUPDATER_CONFIG_PATH", dir.path());
+
+        let updater = build_updater();
+        let install_root = updater.install_prefix_root();
+        let current_exe = std::env::current_exe().unwrap();
+        let expected = install_prefix_for_exe(&current_exe)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+
+        match old_config_path {
+            Some(value) => std::env::set_var("AXOUPDATER_CONFIG_PATH", value),
+            None => std::env::remove_var("AXOUPDATER_CONFIG_PATH"),
+        }
+
+        let install_root =
+            install_root.expect("missing receipt should fall back to current executable dir");
+        assert_eq!(install_root.as_str(), expected);
+    }
+
+    #[test]
+    fn install_prefix_for_exe_strips_bin_dir() {
+        let dir = TempDir::new().unwrap();
+        let exe = dir.path().join("bin").join("agents");
+
+        let prefix = install_prefix_for_exe(&exe).unwrap();
+
+        assert_eq!(prefix, dir.path());
     }
 }
