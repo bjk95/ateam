@@ -50,6 +50,24 @@ If the contents differ, apply refuses. Two ways to recover:
 2. Run `agents apply --force` — agents moves the conflicting directory aside
    to `<name>.bak.<unix-ts>` rather than deleting it.
 
+## Pre-existing instructions file (`CLAUDE.md`, `AGENTS.md`, …)
+
+When `agents apply` would write a managed instructions file but a foreign one
+already lives at that path, an interactive prompt offers three options:
+
+1. **Skip syncing instructions on this machine** — persistent opt-out. Records
+   `instructions_skip = true` in `machine.toml` so future runs stop prompting
+   and stop syncing instructions on this machine. To re-enable, clear that flag.
+2. **Cancel** — abort this `apply` run. The instructions pass exits early (no
+   remaining harnesses are processed either) and nothing is recorded. The next
+   run will prompt again.
+3. **Overwrite** — adopt the managed version. The existing file is moved aside
+   to `<name>.bak.<unix-ts>` (same semantics as `agents apply --force`) and the
+   managed version is written.
+
+In non-interactive contexts (no TTY) apply defaults to Cancel. Use
+`agents apply --force` to overwrite without the prompt.
+
 ## `Author identity unknown` during `agents init` or auto-sync
 
 git itself isn't configured. One-time per machine:

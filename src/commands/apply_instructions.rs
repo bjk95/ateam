@@ -137,6 +137,26 @@ pub fn apply(
                         );
                         return Ok(outcome);
                     }
+                    CollisionChoice::Overwrite => {
+                        let forced = install::install_copy(&out, &rendered, was_managed, true)
+                            .with_context(|| format!("writing {}", out.display()))?;
+                        if let CopyOutcome::MovedAside { backup } = &forced {
+                            eprintln!(
+                                "agents: moved aside existing {} → {}",
+                                out.display(),
+                                backup.display()
+                            );
+                        }
+                        new_manifest.entries.push(ManifestEntry {
+                            path: out,
+                            kind: EntryKind::Copy,
+                            skill: "_instructions".into(),
+                            harness: harness.id().into(),
+                            target: template_path.clone(),
+                            applied_at: manifest::now_unix(),
+                        });
+                        outcome.written += 1;
+                    }
                 }
             }
         }
@@ -165,6 +185,7 @@ pub fn resolve_tools(repo_cfg: &RepoConfig, entry: &InstructionsEntry) -> Vec<Ha
 enum CollisionChoice {
     Skip,
     Cancel,
+    Overwrite,
 }
 
 fn prompt_collision(path: &Path) -> Result<CollisionChoice> {
@@ -185,13 +206,15 @@ fn prompt_collision(path: &Path) -> Result<CollisionChoice> {
     let choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .items(&[
-            "Skip syncing instructions on this machine (record in machine.toml)",
-            "Cancel — leave the file alone for this run",
+            "Skip on this machine — persistent opt-out (records instructions_skip in machine.toml)",
+            "Cancel — abort this apply; prompt again next run",
+            "Overwrite — back up the existing file and use the managed version",
         ])
         .default(1)
         .interact()?;
     Ok(match choice {
         0 => CollisionChoice::Skip,
+        2 => CollisionChoice::Overwrite,
         _ => CollisionChoice::Cancel,
     })
 }
