@@ -235,6 +235,7 @@ mod tests {
         fn lock_with_instructions(&self) -> Lockfile {
             Lockfile {
                 skills: Vec::new(),
+                subagents: Vec::new(),
                 instructions: Some(InstructionsEntry::default()),
             }
         }
@@ -242,6 +243,7 @@ mod tests {
         fn lock_empty(&self) -> Lockfile {
             Lockfile {
                 skills: Vec::new(),
+                subagents: Vec::new(),
                 instructions: None,
             }
         }

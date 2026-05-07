@@ -15,5 +15,6 @@ pub mod remote;
 pub mod remove;
 pub mod show;
 pub mod status;
+pub mod subagents;
 pub mod update;
 pub mod validate;

@@ -35,6 +35,75 @@ unlinks it from every enabled harness's skills directory (e.g.,
 re-materializes it without refetching. The flag rides with the skill across
 the team — deactivating in one machine syncs everywhere.
 
+## Subagents
+
+Subagents are stored as a single canonical Markdown file at
+`<repo>/agents/<name>.md`. On every `apply`, agents **renders** the canonical
+into each enabled harness's native format:
+
+| Harness | Output path | Format |
+|---|---|---|
+| Claude Code | `~/.claude/agents/<name>.md` | YAML frontmatter + Markdown body |
+| Codex | `~/.codex/agents/<name>.toml` | TOML with `developer_instructions` holding the body |
+| OpenCode | `~/.config/opencode/agents/<name>.md` | YAML frontmatter (no `name`, derived from filename) + body |
+| Gemini | `~/.gemini/agents/<name>.md` | YAML frontmatter + body |
+
+A symlink can't serve all four (Codex needs `.toml` with different field
+names), so subagents go through render-and-write the same way
+`instructions/` files do.
+
+### Canonical file shape
+
+```markdown
+---
+name: code-reviewer
+description: PR reviewer focused on correctness, security, and missing tests.
+
+# Per-harness model selection — only the keys you set get rendered
+model:
+  claude: sonnet                  # sonnet | opus | haiku | full-id | inherit
+  codex: gpt-5.3-codex-spark
+  opencode: anthropic/claude-sonnet
+  gemini: gemini-2.5-pro
+
+# Effort: only Claude + Codex understand it
+effort:
+  claude: medium                  # low | medium | high | xhigh | max
+  codex: medium                   # rendered as model_reasoning_effort
+
+# Shared
+skills: [code-review-checklist]
+color: yellow                     # red | blue | green | yellow | purple | orange | pink | cyan
+---
+
+You are a senior code reviewer focused on correctness, security,
+and missing tests. Prioritize behavior regressions and missing
+test coverage.
+```
+
+Required: `name`, `description`, body. Everything else is optional and only
+emitted into a harness's rendered output if set. No translation across naming
+conventions — agents doesn't map `Read` ↔ `read_file` or `sonnet` ↔ a Codex
+model id. Set the right value per harness.
+
+### Lockfile entry
+
+```toml
+[[subagent]]
+name = "code-reviewer"
+source = "github:vercel-labs/agent-skills"
+path = "agents/code-reviewer.md"      # path within the source repo
+ref = "main"                          # optional pin
+file_sha = "ba7816bf…"                # sha256 of the canonical file at install time
+harnesses = ["*"]                     # filter; "*" = every harness with subagent support
+profiles = ["work"]                   # optional
+active = true                         # absent or true = install
+```
+
+Same `active`, profile, and project semantics as `[[skill]]`. Harnesses
+without a subagent install path are silently skipped (today every harness has
+one — claude-code, codex, opencode, gemini).
+
 ## Source types
 
 | Prefix | Use |
@@ -42,6 +111,7 @@ the team — deactivating in one machine syncs everywhere.
 | `github:owner/repo` | A GitHub repo (default for `owner/repo` shorthand) |
 | `git:<url>` | Any other git URL |
 | `local:skills/<name>` | A user-authored skill kept in `<repo>/skills/` |
+| `local:agents/<name>.md` | A user-authored subagent kept in `<repo>/agents/` |
 
 ## Update detection
 
