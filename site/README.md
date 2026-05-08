@@ -11,7 +11,7 @@ Astro + Starlight + Vite. The content collection is a symlink to the repo-root
 
 ```bash
 cd site
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev          # http://localhost:4321
 pnpm build        # static output in site/dist
 pnpm preview      # serve the built output

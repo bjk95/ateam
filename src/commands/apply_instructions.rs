@@ -19,6 +19,7 @@ pub struct ApplyOutcome {
 ///
 /// Returns the count of files written and whether the lockfile or machine.toml
 /// need to be persisted by the caller.
+#[allow(clippy::too_many_arguments)]
 pub fn apply(
     repo: &Path,
     home: &Path,
@@ -241,8 +242,10 @@ mod tests {
             };
             repo_cfg.write(repo.path()).unwrap();
             std::fs::create_dir_all(repo.path().join(".agents")).unwrap();
-            let mut machine = MachineConfig::default();
-            machine.profiles = machine_profiles.iter().map(|s| (*s).to_string()).collect();
+            let machine = MachineConfig {
+                profiles: machine_profiles.iter().map(|s| (*s).to_string()).collect(),
+                ..MachineConfig::default()
+            };
             machine.write(repo.path()).unwrap();
             Self { repo, home }
         }

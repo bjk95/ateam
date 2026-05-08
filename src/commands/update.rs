@@ -141,7 +141,7 @@ fn check_and_refetch(repo: &Path, source: &Source, entry: &SkillEntry) -> Result
             }
             let slot = install::prepare_cache_slot(repo, &entry.name)?;
             for file in &download.files {
-                let dest = slot.tmp.join(&file.path);
+                let dest = slot.tmp.join(file.relative_path()?);
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;
                 }

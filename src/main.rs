@@ -1,9 +1,9 @@
-mod harness;
 mod cli;
 mod commands;
 mod config;
 mod discover;
 mod git_sync;
+mod harness;
 mod install;
 mod instructions;
 mod lockfile;

@@ -114,8 +114,7 @@ pub fn render(template_src: &str, ctx: &Value) -> Result<String> {
 
 pub fn read_template(repo: &Path) -> Result<String> {
     let path = template_path(repo);
-    std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))
+    std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))
 }
 
 /// Walk the template's AST and return identifiers referenced as variables that
@@ -125,8 +124,7 @@ pub fn unknown_identifiers(
     template_src: &str,
     allowed: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>> {
-    let tpl = Template::compile(template_src)
-        .map_err(|e| anyhow!("parsing template: {e}"))?;
+    let tpl = Template::compile(template_src).map_err(|e| anyhow!("parsing template: {e}"))?;
     let mut found = BTreeSet::new();
     walk_template(&tpl, &mut found);
     Ok(found
@@ -195,9 +193,7 @@ fn param_top_segment(p: &Parameter) -> Option<&str> {
 
 fn top_segment(raw: &str) -> Option<&str> {
     let trimmed = raw.trim_start_matches("./");
-    let end = trimmed
-        .find(|c: char| c == '.' || c == '[' || c == '/')
-        .unwrap_or(trimmed.len());
+    let end = trimmed.find(['.', '[', '/']).unwrap_or(trimmed.len());
     if end == 0 {
         None
     } else {
@@ -291,8 +287,10 @@ mod tests {
                 "gemini".into(),
             ],
         };
-        let mut machine = MachineConfig::default();
-        machine.profiles = vec!["work".into()];
+        let machine = MachineConfig {
+            profiles: vec!["work".into()],
+            ..MachineConfig::default()
+        };
         let ctx = build_context(&repo_cfg, &machine, "host-x", Harness::CLAUDE);
         assert_eq!(ctx["work"], Value::Bool(true));
         assert_eq!(ctx["personal"], Value::Bool(false));

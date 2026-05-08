@@ -160,7 +160,7 @@ fn parse_skill_md(file: &Path) -> Result<Option<DiscoveredSkill>> {
 }
 
 fn parse_skill_file(file: &Path, content: &str) -> Result<Option<ParsedSkillFile>> {
-    let parsed = gray_matter::Matter::<gray_matter::engine::YAML>::new().parse(&content);
+    let parsed = gray_matter::Matter::<gray_matter::engine::YAML>::new().parse(content);
     if parsed.matter.is_empty() || parsed.data.is_none() {
         tracing::warn!("skipping {} (no YAML frontmatter)", file.display());
         return Ok(None);

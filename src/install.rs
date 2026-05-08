@@ -43,8 +43,9 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
             }
             std::fs::remove_file(link)
                 .with_context(|| format!("removing existing symlink {}", link.display()))?;
-            symlink(target, link)
-                .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
+            symlink(target, link).with_context(|| {
+                format!("creating symlink {} → {}", link.display(), target.display())
+            })?;
             return Ok(LinkOutcome::Replaced);
         } else {
             // Auto-heal: byte-identical copy is redundant; safe to drop.
@@ -67,10 +68,12 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
                 return Ok(LinkOutcome::Refused);
             }
             let backup = backup_path(link);
-            std::fs::rename(link, &backup)
-                .with_context(|| format!("moving aside {} → {}", link.display(), backup.display()))?;
-            symlink(target, link)
-                .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
+            std::fs::rename(link, &backup).with_context(|| {
+                format!("moving aside {} → {}", link.display(), backup.display())
+            })?;
+            symlink(target, link).with_context(|| {
+                format!("creating symlink {} → {}", link.display(), target.display())
+            })?;
             return Ok(LinkOutcome::MovedAside);
         }
     }
@@ -183,10 +186,12 @@ pub fn sweep_tmp(repo: &Path) -> Result<()> {
 /// to extract just the skill's subdir into the cache slot.
 pub fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     if !src.is_dir() {
-        bail!("copy_dir_recursive: src {} is not a directory", src.display());
+        bail!(
+            "copy_dir_recursive: src {} is not a directory",
+            src.display()
+        );
     }
-    std::fs::create_dir_all(dst)
-        .with_context(|| format!("creating {}", dst.display()))?;
+    std::fs::create_dir_all(dst).with_context(|| format!("creating {}", dst.display()))?;
     for entry in std::fs::read_dir(src)
         .with_context(|| format!("reading {}", src.display()))?
         .flatten()
@@ -275,8 +280,7 @@ pub fn install_copy(
 
 fn write_atomically(path: &Path, content: &str) -> Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("creating {}", parent.display()))?;
+    std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     let suffix: u64 = rand::random();
     let tmp = parent.join(format!(
         ".{}.tmp.{:016x}",
@@ -302,13 +306,11 @@ pub fn uninstall_copy(path: &Path) -> Result<()> {
     };
     let ft = meta.file_type();
     if ft.is_file() {
-        std::fs::remove_file(path)
-            .with_context(|| format!("removing {}", path.display()))?;
+        std::fs::remove_file(path).with_context(|| format!("removing {}", path.display()))?;
         return Ok(());
     }
     if ft.is_dir() {
-        std::fs::remove_dir_all(path)
-            .with_context(|| format!("removing {}", path.display()))?;
+        std::fs::remove_dir_all(path).with_context(|| format!("removing {}", path.display()))?;
         return Ok(());
     }
     bail!(
@@ -390,7 +392,10 @@ fn content_matches_dir(a: &Path, b: &Path) -> Result<bool> {
 
 fn backup_path(p: &Path) -> PathBuf {
     let parent = p.parent().unwrap_or_else(|| Path::new("."));
-    let name = p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = p
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let ts = crate::manifest::now_unix();
     parent.join(format!("{}.bak.{}", name, ts))
 }
@@ -412,12 +417,18 @@ mod tests {
         let first = prepare_cache_slot(repo, "demo").unwrap();
         write_marker(&first.tmp, "v1");
         let final_path = first.commit().unwrap();
-        assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v1");
+        assert_eq!(
+            std::fs::read_to_string(final_path.join("marker")).unwrap(),
+            "v1"
+        );
 
         let second = prepare_cache_slot(repo, "demo").unwrap();
         write_marker(&second.tmp, "v2");
         let final_path = second.commit().unwrap();
-        assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v2");
+        assert_eq!(
+            std::fs::read_to_string(final_path.join("marker")).unwrap(),
+            "v2"
+        );
     }
 
     #[test]
@@ -429,7 +440,10 @@ mod tests {
         write_marker(&slot.tmp, "v1");
         let final_path = slot.commit().unwrap();
         assert!(final_path.exists());
-        assert_eq!(std::fs::read_to_string(final_path.join("marker")).unwrap(), "v1");
+        assert_eq!(
+            std::fs::read_to_string(final_path.join("marker")).unwrap(),
+            "v1"
+        );
     }
 
     #[test]
@@ -456,7 +470,10 @@ mod tests {
 
         let outcome = install_copy_dir(&dst, &src, false, false).unwrap();
         assert!(matches!(outcome, CopyDirOutcome::Replaced));
-        assert!(!std::fs::symlink_metadata(&dst).unwrap().file_type().is_symlink());
+        assert!(!std::fs::symlink_metadata(&dst)
+            .unwrap()
+            .file_type()
+            .is_symlink());
         assert_eq!(std::fs::read_to_string(dst.join("marker")).unwrap(), "v1");
     }
 
@@ -472,7 +489,10 @@ mod tests {
 
         let outcome = install_copy_dir(&dst, &src, false, false).unwrap();
         assert!(matches!(outcome, CopyDirOutcome::Refused));
-        assert_eq!(std::fs::read_to_string(dst.join("user-file")).unwrap(), "untouched");
+        assert_eq!(
+            std::fs::read_to_string(dst.join("user-file")).unwrap(),
+            "untouched"
+        );
     }
 
     #[test]

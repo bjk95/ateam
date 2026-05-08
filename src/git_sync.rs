@@ -45,7 +45,7 @@ pub fn pre_pull(repo: &Path) -> Result<()> {
         return Ok(());
     }
     ui::warn("`git pull --ff-only` failed");
-    ui::detail(stderr.trim().to_string());
+    ui::detail(stderr.trim());
     Ok(())
 }
 
@@ -109,7 +109,7 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     step.finish();
     if !commit.status.success() {
         ui::warn("git commit failed");
-        ui::detail(String::from_utf8_lossy(&commit.stderr).trim().to_string());
+        ui::detail(String::from_utf8_lossy(&commit.stderr).trim());
         return Ok(false);
     }
 
@@ -140,7 +140,7 @@ fn push_with_retry(repo: &Path) -> Result<bool> {
         let rebase = run(repo, &["pull", "--rebase", "--autostash"])?;
         if !rebase.status.success() {
             step.fail("rebase failed; commit retained locally");
-            ui::detail(String::from_utf8_lossy(&rebase.stderr).trim().to_string());
+            ui::detail(String::from_utf8_lossy(&rebase.stderr).trim());
             return Ok(false);
         }
         let retry = run(repo, &["push"])?;
@@ -149,7 +149,7 @@ fn push_with_retry(repo: &Path) -> Result<bool> {
             return Ok(true);
         }
         step.fail("push still failed after rebase; commit retained locally");
-        ui::detail(String::from_utf8_lossy(&retry.stderr).trim().to_string());
+        ui::detail(String::from_utf8_lossy(&retry.stderr).trim());
         return Ok(false);
     }
     if stderr.contains("does not appear to be a git repository") {
@@ -157,7 +157,7 @@ fn push_with_retry(repo: &Path) -> Result<bool> {
         return Ok(false);
     }
     ui::warn("git push failed");
-    ui::detail(stderr.trim().to_string());
+    ui::detail(stderr.trim());
     Ok(false)
 }
 
