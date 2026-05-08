@@ -417,13 +417,14 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         updated_lock.write(&repo)?;
     }
 
-    if !args.dry_run && git_sync::enabled(no_sync) {
-        if lockfile_dirty || materialized > 0 || instructions_written > 0 {
-            let msg = git_sync::msg_apply(materialized);
-            if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
-                ui::warn(format!("auto-sync failed: {:#}", e));
-                ui::detail("local change saved; rerun a mutating command to retry");
-            }
+    if !args.dry_run
+        && git_sync::enabled(no_sync)
+        && (lockfile_dirty || materialized > 0 || instructions_written > 0)
+    {
+        let msg = git_sync::msg_apply(materialized);
+        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
         }
     }
 
