@@ -43,6 +43,12 @@ pub fn banner() -> String {
 }
 
 pub fn parse() -> Cli {
+    if std::env::args_os().nth(1).is_none() {
+        eprintln!();
+        eprintln!("{}", banner());
+        eprintln!();
+    }
+
     Cli::parse()
 }
 

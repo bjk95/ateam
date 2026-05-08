@@ -162,6 +162,21 @@ fn git_output(args: &[&str], cwd: &Path) -> Output {
 }
 
 #[test]
+fn root_command_shows_banner() {
+    let fx = Fixture::new();
+
+    let output = fx.run(&[]);
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("█████"),
+        "root command should print the banner before help\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn quiet_suppresses_remote_list_plain_output() {
     let fx = Fixture::new();
     fx.write_repo_config(&[]);
