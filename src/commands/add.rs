@@ -93,18 +93,19 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
     let mut installed: Vec<String> = Vec::new();
     let mut had_error = false;
 
+    let install_ctx = InstallContext {
+        repo: &repo,
+        source: &source,
+        args: &args,
+        package_root: &package_root,
+        install_root: &install_root,
+        harnesses: &agents,
+        prev_manifest: &prev_manifest,
+    };
+
     for skill in &selection {
         let install_step = ui::step(format!("installing {}", skill.name));
-        match install_one(
-            &repo,
-            &source,
-            &args,
-            skill,
-            &package_root,
-            &install_root,
-            &agents,
-            &prev_manifest,
-        ) {
+        match install_one(&install_ctx, skill) {
             Ok((entry, linked, manifest_entries)) => {
                 lock.upsert(entry);
                 installed.push(skill.name.clone());
@@ -554,28 +555,32 @@ fn resolve_agents(args: &AddArgs, repo_cfg: &RepoConfig) -> Vec<String> {
     }
 }
 
+struct InstallContext<'a> {
+    repo: &'a Path,
+    source: &'a Source,
+    args: &'a AddArgs,
+    package_root: &'a Path,
+    install_root: &'a InstallRoot,
+    harnesses: &'a [String],
+    prev_manifest: &'a Manifest,
+}
+
 fn install_one(
-    repo: &Path,
-    source: &Source,
-    args: &AddArgs,
+    ctx: &InstallContext<'_>,
     skill: &DiscoveredSkill,
-    package_root: &Path,
-    install_root: &InstallRoot,
-    harnesses: &[String],
-    prev_manifest: &Manifest,
 ) -> Result<(SkillEntry, Vec<PathBuf>, Vec<ManifestEntry>)> {
     // Path of the skill's directory relative to the package root, used for
     // both lockfile recording and update-detection later.
     let rel_skill_dir = skill
         .dir
-        .strip_prefix(package_root)
+        .strip_prefix(ctx.package_root)
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|_| skill.dir.clone());
 
-    let source_string = source.lockfile_string();
-    let (canonical, entry_source, upstream) = match source {
+    let source_string = ctx.source.lockfile_string();
+    let (canonical, entry_source, upstream) = match ctx.source {
         Source::Local { .. } => {
-            let repo_skill_dir = paths::local_skills_dir(repo).join(&skill.name);
+            let repo_skill_dir = paths::local_skills_dir(ctx.repo).join(&skill.name);
             if same_path(&skill.dir, &repo_skill_dir) {
                 (
                     skill.dir.clone(),
@@ -584,15 +589,17 @@ fn install_one(
                 )
             } else {
                 (
-                    snapshot_skill(repo, skill)?,
+                    snapshot_skill(ctx.repo, skill)?,
                     format!("local:skills/{}", skill.name),
                     Some(source_string.clone()),
                 )
             }
         }
-        Source::Github { .. } | Source::Git { .. } => {
-            (snapshot_skill(repo, skill)?, source_string.clone(), None)
-        }
+        Source::Github { .. } | Source::Git { .. } => (
+            snapshot_skill(ctx.repo, skill)?,
+            source_string.clone(),
+            None,
+        ),
     };
     ui::detail(format!(
         "snapshotted to {}",
@@ -600,23 +607,23 @@ fn install_one(
     ));
 
     let harness_list: Vec<String> =
-        if args.harnesses.is_empty() || args.harnesses.iter().any(|a| a == "*") {
+        if ctx.args.harnesses.is_empty() || ctx.args.harnesses.iter().any(|a| a == "*") {
             vec!["*".into()]
         } else {
-            args.harnesses.clone()
+            ctx.args.harnesses.clone()
         };
 
     // For now, install to local-machine paths only. `apply` does the same
     // walk for everything in the lockfile; `add` runs apply-equivalent for
     // the new entry so the user sees skills available immediately.
-    let install_root_path = match install_root {
+    let install_root_path = match ctx.install_root {
         InstallRoot::Global => paths::home_dir()?,
         InstallRoot::Project { path, .. } => path.clone(),
     };
 
     let mut linked: Vec<PathBuf> = Vec::new();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
-    for harness in harnesses {
+    for harness in ctx.harnesses {
         let link = paths::harness_skill_path(&install_root_path, harness, &skill.name)?;
         match install::install_symlink(&link, &canonical, false)? {
             install::LinkOutcome::Refused => {
@@ -629,7 +636,7 @@ fn install_one(
             }
             _ => {
                 linked.push(link.clone());
-                manifest_entries.push(prev_manifest.tracked_entry(
+                manifest_entries.push(ctx.prev_manifest.tracked_entry(
                     link,
                     EntryKind::Symlink,
                     skill.name.clone(),
@@ -647,9 +654,10 @@ fn install_one(
     let tree_sha = skill
         .source_hash
         .clone()
-        .or_else(|| match source {
+        .or_else(|| match ctx.source {
             Source::Github { owner, repo: r } => {
-                let git_ref = args
+                let git_ref = ctx
+                    .args
                     .r#ref
                     .clone()
                     .unwrap_or_else(|| github::default_branch(owner, r));
@@ -673,7 +681,7 @@ fn install_one(
                 }
             }
             Source::Git { url } => {
-                let git_ref = args.r#ref.clone().unwrap_or_else(|| "HEAD".into());
+                let git_ref = ctx.args.r#ref.clone().unwrap_or_else(|| "HEAD".into());
                 crate::source::git::ls_remote_sha(url, &git_ref)
                     .ok()
                     .flatten()
@@ -682,7 +690,7 @@ fn install_one(
         })
         .or_else(|| crate::source::local::content_hash(&canonical).ok());
 
-    let entry_path = match source {
+    let entry_path = match ctx.source {
         Source::Local { .. } => Some(format!("skills/{}", skill.name)),
         _ if skill.source_hash.is_some() => {
             // Registry-resolved skills (skills.sh blob): no upstream subpath.
@@ -693,7 +701,7 @@ fn install_one(
         _ => Some(rel_skill_dir.to_string_lossy().into_owned()),
     };
 
-    let project = match install_root {
+    let project = match ctx.install_root {
         InstallRoot::Project { alias, .. } => Some(alias.clone()),
         InstallRoot::Global => None,
     };
@@ -703,10 +711,10 @@ fn install_one(
             name: skill.name.clone(),
             source: entry_source,
             path: entry_path,
-            git_ref: args.r#ref.clone(),
+            git_ref: ctx.args.r#ref.clone(),
             tree_sha,
             harnesses: harness_list,
-            profiles: args.profile.clone(),
+            profiles: ctx.args.profile.clone(),
             project,
             active: true,
             upstream,
