@@ -91,7 +91,13 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     if !stage_paths.is_empty() {
         let mut args = vec!["add", "-A", "--"];
         args.extend(stage_paths);
-        let _ = run(repo, &args)?;
+        let add = run(repo, &args)?;
+        if !add.status.success() {
+            bail!(
+                "git add failed:\n{}",
+                String::from_utf8_lossy(&add.stderr).trim()
+            );
+        }
     }
 
     let diff = run(repo, &["diff", "--cached", "--quiet"])?;

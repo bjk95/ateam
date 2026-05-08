@@ -54,6 +54,10 @@ because the snapshot already has the same bytes. If the contents don't match,
 apply refuses — `--force` is the escape hatch and moves the conflicting
 directory aside to `<name>.bak.<unix-ts>` rather than deleting it.
 
+Harness targets are always symlinks. Skills point at their canonical snapshot
+under `<repo>/skills/`; instructions and subagents point at per-harness rendered
+files under the agents repo.
+
 ## `agents status`
 
 ```bash
@@ -123,9 +127,9 @@ agents skills update --project foo  # only entries tagged with project alias `fo
 ## `agents skills remove`
 
 Delete one or more skills from the lockfile and uninstall their managed harness
-targets, whether they were installed as symlinks or copies. If
-any name isn't in the lockfile (within the selected scope), nothing is removed
-and the command errors.
+symlinks. Legacy managed copies from older versions are also cleaned up. If any
+name isn't in the lockfile (within the selected scope), nothing is removed and
+the command errors.
 
 ```bash
 agents skills remove <name>...                  # one or more positional names
@@ -164,8 +168,8 @@ remove them yourself if you want them gone.
 ## `agents skills deactivate` / `agents skills activate`
 
 Soft-disable a skill without losing its lockfile entry. Deactivating immediately
-removes its managed harness targets, whether they were installed as symlinks or
-copies; activating re-materializes it.
+removes its managed harness symlinks and any legacy managed copies; activating
+re-materializes it.
 
 ```bash
 agents skills deactivate <name>

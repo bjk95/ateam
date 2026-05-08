@@ -55,6 +55,17 @@ pub fn output_path(home: &Path, harness: Harness) -> PathBuf {
     home.join(harness.output_subpath())
 }
 
+pub fn rendered_path(repo: &Path, harness: Harness) -> PathBuf {
+    let filename = Path::new(harness.output_subpath())
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "instructions.md".into());
+    repo.join(TEMPLATE_DIR)
+        .join("rendered")
+        .join(harness.id())
+        .join(filename)
+}
+
 /// Reserved identifiers always available in the render context.
 /// One ctx_flag per agent in the registry, plus `"hostname"`.
 pub fn reserved_identifiers() -> Vec<&'static str> {
