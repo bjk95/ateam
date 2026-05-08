@@ -16,7 +16,7 @@ These work on every subcommand.
 
 ### Concurrent invocations
 
-Mutating commands (`apply`, `skills add`/`update`/`remove`/`import`/`activate`/`deactivate`,
+Mutating commands (`apply`, `sync`, `skills add`/`update`/`remove`/`import`/`activate`/`deactivate`,
 `project add`/`remove`, `remote add`, `edit`, `instructions edit`) take an exclusive
 `flock` on `<repo>/.agents/lock` for the duration of the command. A second invocation
 waits for the first to finish before reading and writing `agents.lock.toml` and
@@ -64,6 +64,18 @@ cleanly swaps it back to a symlink.
 ```bash
 agents status                       # repo path, profiles, manifest health
 ```
+
+## `agents sync`
+
+Reconcile the agents-config repo with git without changing the lockfile.
+
+```bash
+agents sync                         # git pull --rebase --autostash, then git push
+```
+
+`sync` is useful when you only want to pull remote changes and push local
+commits. It does not stage or commit working-tree changes; state-changing
+`agents` commands still handle those auto-commits themselves.
 
 ## `agents skills add` (Vercel-compatible)
 

@@ -1,5 +1,5 @@
 use crate::ui;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -40,12 +40,44 @@ pub fn pre_pull(repo: &Path) -> Result<()> {
             repo.display()
         );
     }
-    if stderr.contains("There is no tracking information") || stderr.contains("no tracking information") {
+    if has_no_tracking(&stderr) {
         // No upstream configured for current branch yet — fine.
         return Ok(());
     }
     ui::warn("`git pull --ff-only` failed");
     ui::detail(stderr.trim().to_string());
+    Ok(())
+}
+
+/// Explicit git sync: reconcile with remote, then push local commits.
+pub fn sync(repo: &Path) -> Result<()> {
+    if !is_git_repo(repo) {
+        bail!("{} is not a git repository", repo.display());
+    }
+    if !has_remote(repo)? {
+        ui::warn("no git remote configured; skipping sync");
+        return Ok(());
+    }
+
+    let step = ui::step("pulling latest from remote");
+    let pull = run(repo, &["pull", "--rebase", "--autostash"])?;
+    step.finish();
+    if !pull.status.success() {
+        let stderr = String::from_utf8_lossy(&pull.stderr);
+        if is_offline(&stderr) {
+            ui::warn("remote unreachable; sync skipped");
+            return Ok(());
+        }
+        if has_no_tracking(&stderr) {
+            ui::warn("current branch has no upstream; skipping pull");
+        } else {
+            bail!("git pull --rebase --autostash failed:\n{}", stderr.trim());
+        }
+    }
+
+    if push_with_retry(repo)? {
+        ui::ok("synced with remote");
+    }
     Ok(())
 }
 
@@ -57,7 +89,13 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     }
     let _ = run(
         repo,
-        &["add", "agents.toml", "agents.lock.toml", "skills", "instructions"],
+        &[
+            "add",
+            "agents.toml",
+            "agents.lock.toml",
+            "skills",
+            "instructions",
+        ],
     )?;
 
     let diff = run(repo, &["diff", "--cached", "--quiet"])?;
@@ -75,50 +113,52 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
         return Ok(false);
     }
 
-    push_with_retry(repo)?;
+    let _ = push_with_retry(repo)?;
     Ok(true)
 }
 
-fn push_with_retry(repo: &Path) -> Result<()> {
+fn push_with_retry(repo: &Path) -> Result<bool> {
     if !has_remote(repo)? {
         ui::detail("no git remote configured; skipping push");
-        return Ok(());
+        return Ok(false);
     }
     let step = ui::step("pushing to remote");
     let attempt = run(repo, &["push"])?;
     step.finish();
     if attempt.status.success() {
-        return Ok(());
+        return Ok(true);
     }
     let stderr = String::from_utf8_lossy(&attempt.stderr);
     if is_offline(&stderr) {
         ui::warn("remote unreachable, commit retained locally");
-        return Ok(());
+        return Ok(false);
     }
-    if stderr.contains("rejected") && (stderr.contains("non-fast-forward") || stderr.contains("fetch first")) {
+    if stderr.contains("rejected")
+        && (stderr.contains("non-fast-forward") || stderr.contains("fetch first"))
+    {
         let step = ui::step("remote moved, rebasing and retrying push");
-        let rebase = run(repo, &["pull", "--rebase"])?;
+        let rebase = run(repo, &["pull", "--rebase", "--autostash"])?;
         if !rebase.status.success() {
             step.fail("rebase failed; commit retained locally");
             ui::detail(String::from_utf8_lossy(&rebase.stderr).trim().to_string());
-            return Ok(());
+            return Ok(false);
         }
         let retry = run(repo, &["push"])?;
         if retry.status.success() {
             step.ok("rebased and pushed");
-            return Ok(());
+            return Ok(true);
         }
         step.fail("push still failed after rebase; commit retained locally");
         ui::detail(String::from_utf8_lossy(&retry.stderr).trim().to_string());
-        return Ok(());
+        return Ok(false);
     }
     if stderr.contains("does not appear to be a git repository") {
         ui::detail("git remote not reachable; skipping push");
-        return Ok(());
+        return Ok(false);
     }
     ui::warn("git push failed");
     ui::detail(stderr.trim().to_string());
-    Ok(())
+    Ok(false)
 }
 
 /// Count commits on HEAD that aren't on the upstream tracking branch.
@@ -168,6 +208,12 @@ fn is_offline(stderr: &str) -> bool {
         || stderr.contains("Connection timed out")
         || stderr.contains("Operation timed out")
         || stderr.contains("ssh: Could not resolve hostname")
+}
+
+fn has_no_tracking(stderr: &str) -> bool {
+    stderr.contains("There is no tracking information")
+        || stderr.contains("no tracking information")
+        || stderr.contains("has no upstream branch")
 }
 
 // ---------------------------------------------------------------------------

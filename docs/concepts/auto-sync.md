@@ -36,6 +36,12 @@ triggers the pre-pull.
 In every soft-fail case, your local change is **not** rolled back — the next
 successful operation will sync it up.
 
+## Explicit sync
+
+Run `agents sync` when you want to reconcile the agents-config repo with git
+without changing the lockfile. It runs `git pull --rebase --autostash`, then
+`git push`. It does not stage or commit working-tree changes.
+
 ## Opt-out
 
 Either flag works:
