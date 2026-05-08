@@ -94,6 +94,9 @@ pub enum Command {
     /// Pull with rebase/autostash, then push the agents-config repo.
     Sync,
 
+    /// Adopt locally-installed skills and global instructions into the lockfile.
+    Import(ImportArgs),
+
     /// Manage skills.
     #[command(subcommand)]
     Skills(SkillsCommand),
@@ -232,11 +235,6 @@ pub enum SkillsCommand {
 
     /// List locked skills with their sources.
     List(ListArgs),
-
-    /// Adopt locally-installed skills (and global instructions) into the lockfile.
-    /// With no arguments: bulk-import every skill in ~/.claude/skills,
-    /// ~/.codex/skills, ~/.agents/skills plus the global CLAUDE.md / AGENTS.md.
-    Import(ImportArgs),
 
     /// Deactivate a skill: keep its lockfile entry but unlink it from harnesses.
     Deactivate(DeactivateArgs),
@@ -481,12 +479,12 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Apply(args) => crate::commands::apply::run(args, no_sync),
         Command::Status => crate::commands::status::run(),
         Command::Sync => crate::commands::sync::run(),
+        Command::Import(args) => crate::commands::import::run(args, no_sync),
         Command::Skills(cmd) => match cmd {
             SkillsCommand::Add(args) => crate::commands::add::run(args, no_sync),
             SkillsCommand::Update(args) => crate::commands::update::run(args, no_sync),
             SkillsCommand::Remove(args) => crate::commands::remove::run(args, no_sync),
             SkillsCommand::List(args) => crate::commands::list::run(args),
-            SkillsCommand::Import(args) => crate::commands::import::run(args, no_sync),
             SkillsCommand::Deactivate(args) => crate::commands::deactivate::run(args, no_sync),
             SkillsCommand::Activate(args) => crate::commands::activate::run(args, no_sync),
             SkillsCommand::Show(args) => crate::commands::show::run(args),
@@ -510,13 +508,11 @@ pub fn dispatch(cli: Cli) -> Result<()> {
 fn is_mutating(cmd: &Command) -> bool {
     match cmd {
         Command::Init(_) | Command::Status | Command::Upgrade | Command::Validate => false,
-        Command::Sync => true,
-        Command::Apply(_) | Command::Edit => true,
+        Command::Sync | Command::Apply(_) | Command::Edit | Command::Import(_) => true,
         Command::Skills(s) => match s {
             SkillsCommand::Add(_)
             | SkillsCommand::Update(_)
             | SkillsCommand::Remove(_)
-            | SkillsCommand::Import(_)
             | SkillsCommand::Deactivate(_)
             | SkillsCommand::Activate(_) => true,
             SkillsCommand::List(_) | SkillsCommand::Show(_) | SkillsCommand::Find(_) => false,
@@ -553,5 +549,25 @@ mod tests {
     fn parses_sync_command() {
         let cli = Cli::try_parse_from(["agents", "sync"]).unwrap();
         assert!(matches!(cli.command, Command::Sync));
+    }
+
+    #[test]
+    fn import_is_top_level_command() {
+        let cli = Cli::try_parse_from(["agents", "import", "--instructions"]).unwrap();
+
+        match cli.command {
+            Command::Import(args) => assert!(args.instructions),
+            _ => panic!("expected top-level import command"),
+        }
+    }
+
+    #[test]
+    fn import_is_not_nested_under_skills() {
+        let err = match Cli::try_parse_from(["agents", "skills", "import"]) {
+            Ok(_) => panic!("expected nested skills import to be rejected"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidSubcommand);
     }
 }

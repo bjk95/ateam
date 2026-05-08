@@ -291,7 +291,7 @@ pub(crate) fn bulk_import_skills(
     }
 
     // Backfill: re-discover upstream for any local entry that doesn't have one.
-    // Lets the user re-run `agents skills import` to pick up upstream info that
+    // Lets the user re-run `agents import` to pick up upstream info that
     // wasn't being recorded when they first imported.
     for entry in lock.skills.iter_mut() {
         if entry.upstream.is_none() && entry.source.starts_with("local:") {

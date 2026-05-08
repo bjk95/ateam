@@ -66,5 +66,5 @@ Deterministic, one commit per command:
 | `skills remove foo` | `remove :: foo` |
 | `skills deactivate foo` | `deactivate :: foo` |
 | `skills activate foo` | `activate :: foo` |
-| `skills import foo` | `import :: foo (github:owner/repo)` |
+| `import foo` | `import :: foo (github:owner/repo)` |
 | `apply` (only when tree_sha drift detected) | `apply :: 5 entries materialized` |

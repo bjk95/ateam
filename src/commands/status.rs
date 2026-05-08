@@ -69,7 +69,7 @@ pub fn run() -> Result<()> {
     if !unmanaged.is_empty() {
         let n = unmanaged.len();
         ui::plain(format!(
-            "  {} unmanaged skill{} in {} — run: agents skills import",
+            "  {} unmanaged skill{} in {} — run: agents import",
             n,
             if n == 1 { "" } else { "s" },
             summarize_unmanaged_dirs(&unmanaged),

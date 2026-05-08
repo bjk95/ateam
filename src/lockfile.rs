@@ -67,7 +67,7 @@ pub struct SkillEntry {
     pub active: bool,
 
     /// Origin repo for snapshotted (`local:`) entries — populated automatically
-    /// by `agents skills import` when discoverable. None for non-local sources
+    /// by `agents import` when discoverable. None for non-local sources
     /// (where `source` already encodes the upstream) or when discovery failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream: Option<String>,
