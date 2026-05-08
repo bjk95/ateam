@@ -54,7 +54,8 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
 
 fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Result<()> {
     let name = args.name.as_deref().unwrap();
-    let normalized = crate::lockfile::normalize_skill_name(name)?;
+    let normalized =
+        crate::discover::standard_skill_name(&crate::lockfile::normalize_skill_name(name)?);
 
     let installed = find_installed(home, &normalized).ok_or_else(|| {
         anyhow!(
@@ -83,6 +84,8 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
             );
         }
     }
+
+    validate_installed_skill(&normalized, &installed)?;
 
     let mut lock = Lockfile::load(repo)?;
     let entry = build_entry(repo, &normalized, &installed, args)?;
@@ -220,13 +223,20 @@ pub(crate) fn bulk_import_skills(
             if !ft.is_dir() && !ft.is_symlink() {
                 continue;
             }
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
+            let raw_name = entry.file_name().to_string_lossy().into_owned();
+            if raw_name.starts_with('.') {
                 continue;
             }
             if !entry.path().join("SKILL.md").is_file() {
                 continue;
             }
+            let name = match crate::lockfile::normalize_skill_name(&raw_name) {
+                Ok(name) => crate::discover::standard_skill_name(&name),
+                Err(e) => {
+                    outcome.errors.push((raw_name, format!("{e:#}")));
+                    continue;
+                }
+            };
             if !seen.insert(name.clone()) {
                 continue;
             }
@@ -240,9 +250,25 @@ pub(crate) fn bulk_import_skills(
                 outcome.skipped_managed += 1;
                 continue;
             }
-            if let Some(plugin_source) = upstream_index.get(&name) {
+            if let Some(plugin_source) = upstream_index
+                .get(&name)
+                .or_else(|| upstream_index.get(&raw_name))
+            {
                 outcome.skipped_plugin += 1;
                 println!("  · {name} (plugin-managed by {plugin_source})");
+                continue;
+            }
+            if crate::discover::parse_skill_dir(&installed)
+                .with_context(|| format!("validating {}", installed.join("SKILL.md").display()))?
+                .is_none()
+            {
+                outcome.errors.push((
+                    name.clone(),
+                    format!(
+                        "missing a valid SKILL.md at {} (Agent Skills standard requires YAML frontmatter with a non-empty `description`; add a description and retry)",
+                        installed.join("SKILL.md").display()
+                    ),
+                ));
                 continue;
             }
 
@@ -268,6 +294,27 @@ pub(crate) fn bulk_import_skills(
                     continue;
                 }
             }
+            match crate::discover::canonicalize_skill_dir(&dest, &name) {
+                Ok(Some(repair)) => {
+                    for diagnostic in repair.diagnostics {
+                        ui::warn(format!("repaired {}: {}", name, diagnostic));
+                    }
+                }
+                Ok(None) => {
+                    outcome.errors.push((
+                        name.clone(),
+                        format!(
+                            "missing a valid SKILL.md at {} (Agent Skills standard requires YAML frontmatter with a non-empty `description`; add a description and retry)",
+                            dest.join("SKILL.md").display()
+                        ),
+                    ));
+                    continue;
+                }
+                Err(e) => {
+                    outcome.errors.push((name.clone(), format!("{e:#}")));
+                    continue;
+                }
+            }
 
             lock.upsert(SkillEntry {
                 name: name.clone(),
@@ -279,7 +326,10 @@ pub(crate) fn bulk_import_skills(
                 profiles: vec![],
                 project: None,
                 active: true,
-                upstream: upstream_index.get(&name).cloned(),
+                upstream: upstream_index
+                    .get(&name)
+                    .or_else(|| upstream_index.get(&raw_name))
+                    .cloned(),
             });
             outcome.imported += 1;
             if already_snapshotted {
@@ -313,6 +363,21 @@ fn find_installed(home: &Path, normalized: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn validate_installed_skill(name: &str, installed: &Path) -> Result<()> {
+    let skill_md = installed.join("SKILL.md");
+    if crate::discover::parse_skill_dir(installed)
+        .with_context(|| format!("validating {}", skill_md.display()))?
+        .is_none()
+    {
+        bail!(
+            "installed skill `{}` is missing a valid SKILL.md at {} (Agent Skills standard requires YAML frontmatter with a non-empty `description`; add a description and retry)",
+            name,
+            skill_md.display()
+        );
+    }
+    Ok(())
 }
 
 fn is_managed_by_agents(repo: &Path, installed: &Path) -> Result<bool> {
@@ -473,6 +538,11 @@ fn build_entry(repo: &Path, name: &str, installed: &Path, args: &ImportArgs) -> 
         .with_context(|| format!("creating {}", paths::local_skills_dir(repo).display()))?;
     let src = std::fs::canonicalize(installed).unwrap_or_else(|_| installed.to_path_buf());
     crate::install::copy_dir_recursive(&src, &dest)?;
+    if let Some(repair) = crate::discover::canonicalize_skill_dir(&dest, name)? {
+        for diagnostic in repair.diagnostics {
+            ui::warn(format!("repaired {}: {}", name, diagnostic));
+        }
+    }
     Ok(SkillEntry {
         name: name.to_string(),
         source: format!("local:skills/{}", name),
@@ -525,6 +595,13 @@ mod tests {
                 .join(name);
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("SKILL.md"), body).unwrap();
+        }
+        fn write_valid_skill(&self, agent: &str, name: &str, body: &str) {
+            self.write_skill(
+                agent,
+                name,
+                &format!("---\nname: {name}\ndescription: {name} skill.\n---\n{body}"),
+            );
         }
         /// Stage a Claude marketplace plugin so `upstream::build_index` will
         /// classify `skill_name` as plugin-managed.
@@ -617,11 +694,11 @@ mod tests {
     #[test]
     fn bulk_imports_skills_from_both_dirs() {
         let fx = Fixture::new();
-        fx.write_skill("claude", "alpha", "alpha body");
-        fx.write_skill("codex", "beta", "beta body");
+        fx.write_valid_skill("claude", "alpha", "alpha body");
+        fx.write_valid_skill("codex", "beta", "beta body");
         // Same skill name in both — should dedupe (claude wins, scanned first).
-        fx.write_skill("claude", "shared", "claude version");
-        fx.write_skill("codex", "shared", "codex version");
+        fx.write_valid_skill("claude", "shared", "claude version");
+        fx.write_valid_skill("codex", "shared", "codex version");
 
         let mut lock = Lockfile::load(fx.repo.path()).unwrap();
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
@@ -638,13 +715,13 @@ mod tests {
         // Snapshot of `shared` is the claude version (first seen).
         let shared_body =
             std::fs::read_to_string(fx.repo.path().join("skills/shared/SKILL.md")).unwrap();
-        assert_eq!(shared_body, "claude version");
+        assert!(shared_body.contains("claude version"), "{shared_body}");
     }
 
     #[test]
     fn bulk_skips_already_in_lockfile() {
         let fx = Fixture::new();
-        fx.write_skill("claude", "alpha", "body");
+        fx.write_valid_skill("claude", "alpha", "body");
         let mut lock = Lockfile::load(fx.repo.path()).unwrap();
         lock.skills.push(SkillEntry {
             name: "alpha".into(),
@@ -668,10 +745,14 @@ mod tests {
         // Simulate a partial earlier import: dir exists in <repo>/skills/<name>/
         // but lockfile has no entry for it. Re-running import should adopt it.
         let fx = Fixture::new();
-        fx.write_skill("claude", "alpha", "fresh body");
+        fx.write_valid_skill("claude", "alpha", "fresh body");
         let dest = paths::local_skills_dir(fx.repo.path()).join("alpha");
         std::fs::create_dir_all(&dest).unwrap();
-        std::fs::write(dest.join("SKILL.md"), "stale orphan body").unwrap();
+        std::fs::write(
+            dest.join("SKILL.md"),
+            "---\nname: alpha\ndescription: Alpha stale skill.\n---\nstale orphan body",
+        )
+        .unwrap();
 
         let mut lock = Lockfile::load(fx.repo.path()).unwrap();
         assert!(lock.find("alpha").is_none());
@@ -682,7 +763,7 @@ mod tests {
         assert!(lock.find("alpha").is_some());
         // Adoption preserves the existing snapshot — does NOT clobber with fresh body.
         let body = std::fs::read_to_string(dest.join("SKILL.md")).unwrap();
-        assert_eq!(body, "stale orphan body");
+        assert!(body.contains("stale orphan body"), "{body}");
     }
 
     #[test]
@@ -722,7 +803,7 @@ mod tests {
     fn bulk_skips_plugin_managed_skills() {
         let fx = Fixture::new();
         // alpha is plugin-managed; agents must not snapshot it.
-        fx.write_skill("claude", "alpha", "alpha body");
+        fx.write_valid_skill("claude", "alpha", "alpha body");
         fx.write_plugin_skill(
             "frontend-design",
             "claude-plugins-official",
@@ -730,7 +811,7 @@ mod tests {
             "alpha",
         );
         // beta is a plain unmanaged skill that should still get imported.
-        fx.write_skill("claude", "beta", "beta body");
+        fx.write_valid_skill("claude", "beta", "beta body");
 
         let mut lock = Lockfile::load(fx.repo.path()).unwrap();
         let outcome = bulk_import_skills(fx.repo.path(), fx.home.path(), &mut lock).unwrap();
@@ -773,5 +854,52 @@ mod tests {
         // Lockfile untouched.
         let lock = Lockfile::load(fx.repo.path()).unwrap();
         assert!(lock.find("alpha").is_none());
+    }
+
+    #[test]
+    fn single_import_refuses_invalid_skill_md() {
+        let fx = Fixture::new();
+        fx.write_skill("claude", "alpha", "body");
+
+        let args = ImportArgs {
+            name: Some("alpha".into()),
+            instructions: false,
+            upstream: None,
+            project: None,
+        };
+        let err = run_single(fx.repo.path(), fx.home.path(), &args, true).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("missing a valid SKILL.md"), "got: {msg}");
+
+        let lock = Lockfile::load(fx.repo.path()).unwrap();
+        assert!(lock.find("alpha").is_none());
+        assert!(!paths::local_skills_dir(fx.repo.path())
+            .join("alpha")
+            .exists());
+    }
+
+    #[test]
+    fn single_import_accepts_valid_skill_md() {
+        let fx = Fixture::new();
+        fx.write_skill(
+            "claude",
+            "alpha",
+            "---\nname: alpha\ndescription: Alpha skill.\n---\nbody\n",
+        );
+
+        let args = ImportArgs {
+            name: Some("alpha".into()),
+            instructions: false,
+            upstream: None,
+            project: None,
+        };
+        run_single(fx.repo.path(), fx.home.path(), &args, true).unwrap();
+
+        let lock = Lockfile::load(fx.repo.path()).unwrap();
+        assert!(lock.find("alpha").is_some());
+        assert!(paths::local_skills_dir(fx.repo.path())
+            .join("alpha")
+            .join("SKILL.md")
+            .is_file());
     }
 }

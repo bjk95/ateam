@@ -1,12 +1,16 @@
 use anyhow::{anyhow, Context, Result};
-use serde::Deserialize;
+use serde_yaml::{Mapping, Value};
 use std::path::{Path, PathBuf};
+
+pub(crate) const MAX_NAME_CHARS: usize = 64;
+const MAX_DESCRIPTION_CHARS: usize = 1024;
+const MAX_COMPATIBILITY_CHARS: usize = 500;
 
 #[derive(Debug, Clone)]
 pub struct DiscoveredSkill {
     /// Skill name from frontmatter, normalized (Vercel rules).
     pub name: String,
-    /// Optional human description from frontmatter.
+    /// Human description from frontmatter.
     pub description: Option<String>,
     /// Filesystem path to the skill directory (containing SKILL.md).
     pub dir: PathBuf,
@@ -17,11 +21,18 @@ pub struct DiscoveredSkill {
     pub source_hash: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct Frontmatter {
+#[derive(Debug)]
+struct ParsedSkillFile {
     name: String,
-    #[serde(default)]
-    description: Option<String>,
+    description: String,
+    content: String,
+    frontmatter: Mapping,
+    defaulted_name_from_dir: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct SkillRepair {
+    pub diagnostics: Vec<String>,
 }
 
 /// Walk a package root, find every `SKILL.md` (anywhere in the tree),
@@ -30,6 +41,74 @@ pub fn walk_package(root: &Path) -> Result<Vec<DiscoveredSkill>> {
     let mut out = Vec::new();
     walk(root, &mut out)?;
     Ok(out)
+}
+
+pub(crate) fn parse_skill_dir(dir: &Path) -> Result<Option<DiscoveredSkill>> {
+    let skill_md = dir.join("SKILL.md");
+    if !skill_md.is_file() {
+        tracing::warn!("skipping {} (no SKILL.md)", dir.display());
+        return Ok(None);
+    }
+    parse_skill_md(&skill_md)
+}
+
+pub(crate) fn canonicalize_skill_dir(
+    dir: &Path,
+    canonical_name: &str,
+) -> Result<Option<SkillRepair>> {
+    let skill_md = dir.join("SKILL.md");
+    if !skill_md.is_file() {
+        tracing::warn!("skipping {} (no SKILL.md)", dir.display());
+        return Ok(None);
+    }
+
+    let raw = std::fs::read_to_string(&skill_md)
+        .with_context(|| format!("reading {}", skill_md.display()))?;
+    let Some(parsed) = parse_skill_file(&skill_md, &raw)? else {
+        return Ok(None);
+    };
+
+    let mut diagnostics = Vec::new();
+    let standard_name = standard_skill_name(canonical_name);
+    if parsed.defaulted_name_from_dir {
+        diagnostics.push(format!(
+            "Agent Skills standard requires frontmatter `name`; added `{}` from the skill directory",
+            standard_name
+        ));
+    }
+    let oversized_name = if canonical_name != standard_name {
+        Some(canonical_name)
+    } else if parsed.name.chars().count() > MAX_NAME_CHARS {
+        Some(parsed.name.as_str())
+    } else {
+        None
+    };
+    if let Some(name) = oversized_name {
+        diagnostics.push(format!(
+            "Agent Skills standard requires frontmatter `name` to be at most {} characters; rewrote `{}` to `{}`",
+            MAX_NAME_CHARS, name, standard_name
+        ));
+    }
+    if parsed.name != standard_name {
+        diagnostics.push(format!(
+            "Agent Skills standard requires frontmatter `name` to be lowercase kebab-case and match the skill directory; rewrote `{}` to `{}`",
+            parsed.name, standard_name
+        ));
+    }
+    if parsed.description != parsed.description.trim() {
+        diagnostics.push(
+            "Agent Skills standard requires a non-empty `description`; trimmed surrounding whitespace"
+                .to_string(),
+        );
+    }
+
+    let rendered = render_canonical_skill_md(&parsed, &standard_name, &mut diagnostics)?;
+    if rendered != raw {
+        std::fs::write(&skill_md, rendered)
+            .with_context(|| format!("writing {}", skill_md.display()))?;
+    }
+
+    Ok(Some(SkillRepair { diagnostics }))
 }
 
 fn walk(dir: &Path, out: &mut Vec<DiscoveredSkill>) -> Result<()> {
@@ -63,19 +142,10 @@ fn walk(dir: &Path, out: &mut Vec<DiscoveredSkill>) -> Result<()> {
 fn parse_skill_md(file: &Path) -> Result<Option<DiscoveredSkill>> {
     let content =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
-    let parsed = gray_matter::Matter::<gray_matter::engine::YAML>::new().parse(&content);
-    let frontmatter: Frontmatter = match parsed.data {
-        Some(data) => data
-            .deserialize()
-            .with_context(|| format!("parsing frontmatter in {}", file.display()))?,
-        None => {
-            // SKILL.md without frontmatter: ignore — Vercel/Claude skills require it.
-            tracing::warn!("skipping {} (no YAML frontmatter)", file.display());
-            return Ok(None);
-        }
+    let Some(parsed) = parse_skill_file(file, &content)? else {
+        return Ok(None);
     };
-
-    let name = crate::lockfile::normalize_skill_name(&frontmatter.name)?;
+    let name = standard_skill_name(&crate::lockfile::normalize_skill_name(&parsed.name)?);
     let dir = file
         .parent()
         .ok_or_else(|| anyhow!("SKILL.md has no parent: {}", file.display()))?
@@ -83,10 +153,218 @@ fn parse_skill_md(file: &Path) -> Result<Option<DiscoveredSkill>> {
 
     Ok(Some(DiscoveredSkill {
         name,
-        description: frontmatter.description,
+        description: Some(parsed.description),
         dir,
         source_hash: None,
     }))
+}
+
+fn parse_skill_file(file: &Path, content: &str) -> Result<Option<ParsedSkillFile>> {
+    let parsed = gray_matter::Matter::<gray_matter::engine::YAML>::new().parse(&content);
+    if parsed.matter.is_empty() || parsed.data.is_none() {
+        tracing::warn!("skipping {} (no YAML frontmatter)", file.display());
+        return Ok(None);
+    }
+
+    let frontmatter = match serde_yaml::from_str::<Value>(&parsed.matter) {
+        Ok(Value::Mapping(mapping)) => mapping,
+        Ok(_) => {
+            tracing::warn!("skipping {} (frontmatter is not a mapping)", file.display());
+            return Ok(None);
+        }
+        Err(e) => {
+            tracing::warn!(
+                "skipping {} (unparseable YAML frontmatter: {})",
+                file.display(),
+                e
+            );
+            return Ok(None);
+        }
+    };
+
+    let (name, defaulted_name_from_dir) = match string_field(&frontmatter, "name").map(str::trim) {
+        Some(name) if !name.is_empty() => (name.to_string(), false),
+        _ => {
+            let fallback = file
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .trim();
+            if fallback.is_empty() {
+                tracing::warn!("skipping {} (missing `name` frontmatter)", file.display());
+                return Ok(None);
+            }
+            (fallback.to_string(), true)
+        }
+    };
+
+    let Some(description) = string_field(&frontmatter, "description").map(str::to_string) else {
+        tracing::warn!(
+            "skipping {} (missing `description` frontmatter)",
+            file.display()
+        );
+        return Ok(None);
+    };
+    if description.trim().is_empty() {
+        tracing::warn!(
+            "skipping {} (empty `description` frontmatter)",
+            file.display()
+        );
+        return Ok(None);
+    }
+    if description.chars().count() > MAX_DESCRIPTION_CHARS {
+        tracing::warn!(
+            "skipping {} (`description` frontmatter exceeds {} characters)",
+            file.display(),
+            MAX_DESCRIPTION_CHARS
+        );
+        return Ok(None);
+    }
+
+    Ok(Some(ParsedSkillFile {
+        name,
+        description,
+        content: parsed.content,
+        frontmatter,
+        defaulted_name_from_dir,
+    }))
+}
+
+pub(crate) fn standard_skill_name(name: &str) -> String {
+    let mut out = name.chars().take(MAX_NAME_CHARS).collect::<String>();
+    while out.ends_with('-') {
+        out.pop();
+    }
+    out
+}
+
+fn render_canonical_skill_md(
+    parsed: &ParsedSkillFile,
+    canonical_name: &str,
+    diagnostics: &mut Vec<String>,
+) -> Result<String> {
+    let mut mapping = Mapping::new();
+    mapping.insert(
+        Value::String("name".into()),
+        Value::String(canonical_name.to_string()),
+    );
+    mapping.insert(
+        Value::String("description".into()),
+        Value::String(parsed.description.trim().to_string()),
+    );
+
+    insert_optional_string(
+        &parsed.frontmatter,
+        &mut mapping,
+        "license",
+        None,
+        diagnostics,
+    );
+    insert_optional_string(
+        &parsed.frontmatter,
+        &mut mapping,
+        "compatibility",
+        Some(MAX_COMPATIBILITY_CHARS),
+        diagnostics,
+    );
+    insert_metadata(&parsed.frontmatter, &mut mapping, diagnostics);
+    insert_optional_string(
+        &parsed.frontmatter,
+        &mut mapping,
+        "allowed-tools",
+        None,
+        diagnostics,
+    );
+
+    let yaml = serde_yaml::to_string(&Value::Mapping(mapping)).context("serializing SKILL.md")?;
+    let mut out = String::new();
+    out.push_str("---\n");
+    out.push_str(&yaml);
+    if !yaml.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("---\n");
+    if !parsed.content.is_empty() {
+        out.push('\n');
+        out.push_str(&parsed.content);
+    }
+    Ok(out)
+}
+
+fn insert_optional_string(
+    source: &Mapping,
+    dest: &mut Mapping,
+    field: &str,
+    max_chars: Option<usize>,
+    diagnostics: &mut Vec<String>,
+) {
+    let Some(value) = source.get(Value::String(field.into())) else {
+        return;
+    };
+    let Some(raw) = value.as_str() else {
+        diagnostics.push(format!(
+            "Agent Skills standard requires `{}` to be a string when present; dropped invalid value",
+            field
+        ));
+        return;
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        diagnostics.push(format!(
+            "Agent Skills standard requires `{}` to be non-empty when present; dropped empty value",
+            field
+        ));
+        return;
+    }
+    if let Some(max) = max_chars {
+        if trimmed.chars().count() > max {
+            diagnostics.push(format!(
+                "Agent Skills standard requires `{}` to be at most {} characters; dropped invalid value",
+                field, max
+            ));
+            return;
+        }
+    }
+    dest.insert(
+        Value::String(field.into()),
+        Value::String(trimmed.to_string()),
+    );
+}
+
+fn insert_metadata(source: &Mapping, dest: &mut Mapping, diagnostics: &mut Vec<String>) {
+    let Some(value) = source.get(Value::String("metadata".into())) else {
+        return;
+    };
+    let Value::Mapping(source_metadata) = value else {
+        diagnostics.push(
+            "Agent Skills standard requires `metadata` to be a string key-value mapping; dropped invalid value"
+                .to_string(),
+        );
+        return;
+    };
+
+    let mut metadata = Mapping::new();
+    for (key, value) in source_metadata {
+        let (Some(key), Some(value)) = (key.as_str(), value.as_str()) else {
+            diagnostics.push(
+                "Agent Skills standard requires `metadata` to contain only string keys and string values; dropped invalid value"
+                    .to_string(),
+            );
+            return;
+        };
+        metadata.insert(
+            Value::String(key.to_string()),
+            Value::String(value.to_string()),
+        );
+    }
+    dest.insert(Value::String("metadata".into()), Value::Mapping(metadata));
+}
+
+fn string_field<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a str> {
+    mapping
+        .get(Value::String(key.into()))
+        .and_then(Value::as_str)
 }
 
 // ============================================================================
@@ -148,6 +426,9 @@ pub fn discover_unmanaged(
             if !ft.is_dir() && !ft.is_symlink() {
                 continue;
             }
+            if !path.join("SKILL.md").is_file() {
+                continue;
+            }
             if ft.is_symlink() {
                 if let Ok(target) = std::fs::read_link(&path) {
                     if target.starts_with(&local) {
@@ -186,6 +467,113 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("SKILL.md"), "---\nname: x\n---\n").unwrap();
         dir
+    }
+
+    fn parse_temp_skill(contents: &str) -> Option<DiscoveredSkill> {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("test-skill");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("SKILL.md");
+        std::fs::write(&file, contents).unwrap();
+        parse_skill_md(&file).unwrap()
+    }
+
+    #[test]
+    fn parse_skill_md_rejects_invalid_description() {
+        let description = "a".repeat(MAX_DESCRIPTION_CHARS + 1);
+        let cases = [
+            "---\nname: missing-description\n---\nbody\n".to_string(),
+            "---\nname: blank-description\ndescription: \"   \"\n---\nbody\n".to_string(),
+            format!("---\nname: long-description\ndescription: {description}\n---\nbody\n"),
+        ];
+
+        for contents in cases {
+            assert!(parse_temp_skill(&contents).is_none());
+        }
+    }
+
+    #[test]
+    fn parse_skill_md_accepts_description() {
+        let skill = parse_temp_skill(
+            "---\nname: valid-description\ndescription: Use for validation.\n---\nbody\n",
+        )
+        .unwrap();
+        assert_eq!(skill.description.as_deref(), Some("Use for validation."));
+    }
+
+    #[test]
+    fn canonicalize_skill_dir_repairs_managed_snapshot() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("alpha");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: Alpha\ndescription: \" Alpha skill. \"\ncompatibility: \"\"\nmetadata:\n  author: tester\n---\nbody\n",
+        )
+        .unwrap();
+
+        let repair = canonicalize_skill_dir(&dir, "alpha").unwrap().unwrap();
+        assert_eq!(repair.diagnostics.len(), 3);
+
+        let repaired = std::fs::read_to_string(dir.join("SKILL.md")).unwrap();
+        assert!(repaired.contains("name: alpha"), "{repaired}");
+        assert!(repaired.contains("description: Alpha skill."), "{repaired}");
+        assert!(!repaired.contains("compatibility"), "{repaired}");
+        assert!(repaired.contains("metadata:"), "{repaired}");
+        assert!(repaired.contains("body"), "{repaired}");
+    }
+
+    #[test]
+    fn canonicalize_skill_dir_repairs_missing_and_long_names() {
+        let tmp = TempDir::new().unwrap();
+        let long_name = "a".repeat(MAX_NAME_CHARS + 10);
+        let dir = tmp.path().join(&long_name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("SKILL.md"),
+            "---\ndescription: Long skill.\n---\nbody\n",
+        )
+        .unwrap();
+
+        let repair = canonicalize_skill_dir(&dir, &long_name).unwrap().unwrap();
+        assert_eq!(repair.diagnostics.len(), 3);
+
+        let repaired = std::fs::read_to_string(dir.join("SKILL.md")).unwrap();
+        let standard_name = "a".repeat(MAX_NAME_CHARS);
+        assert!(
+            repaired.contains(&format!("name: {standard_name}")),
+            "{repaired}"
+        );
+        assert!(!repaired.contains(&long_name), "{repaired}");
+    }
+
+    #[test]
+    fn canonicalize_skill_dir_logs_long_frontmatter_name() {
+        let tmp = TempDir::new().unwrap();
+        let standard_name = "a".repeat(MAX_NAME_CHARS);
+        let long_name = format!("{standard_name}bbbbbbbbbb");
+        let dir = tmp.path().join(&standard_name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {long_name}\ndescription: Long skill.\n---\nbody\n"),
+        )
+        .unwrap();
+
+        let repair = canonicalize_skill_dir(&dir, &standard_name)
+            .unwrap()
+            .unwrap();
+        assert!(repair
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("at most 64 characters")));
+
+        let repaired = std::fs::read_to_string(dir.join("SKILL.md")).unwrap();
+        assert!(
+            repaired.contains(&format!("name: {standard_name}")),
+            "{repaired}"
+        );
+        assert!(!repaired.contains(&long_name), "{repaired}");
     }
 
     #[test]
@@ -272,6 +660,18 @@ mod tests {
         let home = tmp.path().join("home");
         std::fs::create_dir_all(&repo).unwrap();
         drop_skill_dir(&home, "claude", ".hidden");
+
+        let result = discover_unmanaged(&repo, &home, &empty_lock());
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn unmanaged_skips_dirs_without_top_level_skill_md() {
+        let tmp = TempDir::new().unwrap();
+        let repo = tmp.path().join("repo");
+        let home = tmp.path().join("home");
+        std::fs::create_dir_all(&repo).unwrap();
+        std::fs::create_dir_all(home.join(".claude").join("skills").join("container")).unwrap();
 
         let result = discover_unmanaged(&repo, &home, &empty_lock());
         assert!(result.is_empty());
