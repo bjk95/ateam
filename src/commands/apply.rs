@@ -110,32 +110,60 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                         .git_ref
                         .clone()
                         .unwrap_or_else(|| github::default_branch(&owner, &r));
-                    if let Ok(commit_sha) = github::resolve_ref(&owner, &r, &r_ref) {
-                        if let Ok(Some(latest)) = github::subtree_sha(&owner, &r, &commit_sha, path)
-                        {
-                            if Some(&latest) != entry.tree_sha.as_ref() {
-                                tracing::info!("drift detected for {} (refetching)", entry.name);
-                                if let Err(e) = refetch_github(
-                                    &repo,
-                                    &owner,
-                                    &r,
-                                    &commit_sha,
-                                    path,
-                                    &entry.name,
-                                ) {
-                                    ui::fail(format!("refetch {} — {:#}", entry.name, e));
-                                } else {
-                                    if let Some(pos) = updated_lock
-                                        .skills
-                                        .iter()
-                                        .position(|s| s.name == entry.name)
-                                    {
-                                        updated_lock.skills[pos].tree_sha = Some(latest);
-                                        lockfile_dirty = true;
+                    match github::resolve_ref(&owner, &r, &r_ref) {
+                        Ok(commit_sha) => {
+                            match github::subtree_sha(&owner, &r, &commit_sha, path) {
+                                Ok(Some(latest)) => {
+                                    if Some(&latest) != entry.tree_sha.as_ref() {
+                                        let old = entry.tree_sha.clone().unwrap_or_default();
+                                        ui::detail(format!(
+                                            "drift detected for {}; refetching",
+                                            entry.name
+                                        ));
+                                        if let Err(e) = refetch_github(
+                                            &repo,
+                                            &owner,
+                                            &r,
+                                            &commit_sha,
+                                            path,
+                                            &entry.name,
+                                        ) {
+                                            ui::fail(format!("refetch {} — {:#}", entry.name, e));
+                                        } else {
+                                            if let Some(pos) = updated_lock
+                                                .skills
+                                                .iter()
+                                                .position(|s| s.name == entry.name)
+                                            {
+                                                updated_lock.skills[pos].tree_sha =
+                                                    Some(latest.clone());
+                                                lockfile_dirty = true;
+                                                ui::detail(format!(
+                                                    "{} tree_sha {} → {}",
+                                                    entry.name,
+                                                    short(&old),
+                                                    short(&latest)
+                                                ));
+                                            }
+                                        }
                                     }
                                 }
+                                Ok(None) => ui::detail(format!(
+                                    "couldn't check drift for {}: path `{}` missing at {}",
+                                    entry.name,
+                                    path,
+                                    short(&commit_sha)
+                                )),
+                                Err(e) => ui::detail(format!(
+                                    "couldn't check drift for {}: {:#}",
+                                    entry.name, e
+                                )),
                             }
                         }
+                        Err(e) => ui::detail(format!(
+                            "couldn't resolve {}/{}@{} for {}: {:#}",
+                            owner, r, r_ref, entry.name, e
+                        )),
                     }
                 }
             }
@@ -329,9 +357,9 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         s.finish();
     }
 
-    // Instructions render-and-write pass.
     let home = paths::home_dir()?;
-    let instructions_outcome = apply_instructions::apply(
+    let instructions_step = (!args.dry_run).then(|| ui::step("checking instructions"));
+    let instructions_outcome = match apply_instructions::apply(
         &repo,
         &home,
         &repo_cfg,
@@ -341,7 +369,20 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         &mut new_manifest,
         args.dry_run,
         args.force,
-    )?;
+    ) {
+        Ok(outcome) => {
+            if let Some(step) = instructions_step {
+                step.finish();
+            }
+            outcome
+        }
+        Err(e) => {
+            if let Some(step) = instructions_step {
+                step.fail("instructions failed");
+            }
+            return Err(e);
+        }
+    };
     let instructions_written = instructions_outcome.written;
     if instructions_outcome.lockfile_dirty {
         lockfile_dirty = true;
@@ -391,7 +432,10 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     if !args.dry_run && git_sync::enabled(no_sync) {
         if lockfile_dirty {
             let msg = git_sync::msg_apply(materialized);
-            let _ = git_sync::commit_and_push(&repo, &msg);
+            if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+                ui::warn(format!("auto-sync failed: {:#}", e));
+                ui::detail("local change saved; rerun a mutating command to retry");
+            }
         }
     }
 
@@ -504,7 +548,7 @@ fn resolve_canonical(repo: &Path, entry: &SkillEntry, dry_run: bool) -> Result<P
             if snapshot.exists() || dry_run {
                 Ok(snapshot)
             } else {
-                // Cold install — refetch from upstream into the synced snapshot.
+                ui::detail(format!("snapshot missing for {}; refetching", entry.name));
                 refetch_for_entry(repo, entry).context("fetching cold snapshot")?;
                 Ok(paths::local_skills_dir(repo).join(&entry.name))
             }
@@ -540,7 +584,13 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
             // skills/<name>/ snapshot migration.
             match refetch_github(repo, &owner, &r, &commit_sha, &path, &entry.name) {
                 Ok(()) => Ok(()),
-                Err(_) => refetch_via_registry(repo, &owner, &r, &entry.name),
+                Err(e) => {
+                    ui::detail(format!(
+                        "github refetch failed for {}; trying registry: {:#}",
+                        entry.name, e
+                    ));
+                    refetch_via_registry(repo, &owner, &r, &entry.name)
+                }
             }
         }
         Source::Git { url } => {
@@ -558,6 +608,10 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
         }
         Source::Local { .. } => Ok(()),
     }
+}
+
+fn short(sha: &str) -> String {
+    sha.chars().take(7).collect()
 }
 
 fn refetch_via_registry(repo: &Path, owner: &str, repo_name: &str, skill_name: &str) -> Result<()> {

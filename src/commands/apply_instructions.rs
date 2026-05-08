@@ -74,15 +74,17 @@ pub fn apply(
     let hostname = instructions::current_hostname();
 
     for harness in tools {
+        crate::ui::detail(format!("rendering instructions for {}", harness.id()));
         let ctx = instructions::build_context(repo_cfg, machine, &hostname, harness);
         let rendered = instructions::render(&template_src, &ctx)?;
         let out = instructions::output_path(home, harness);
+        let out_display = paths::display_path(&out);
         let was_managed = prev_paths.contains(&out);
 
         if dry_run {
             crate::ui::plain(format!(
                 "would write {} ({} bytes) [{}]",
-                out.display(),
+                out_display,
                 rendered.len(),
                 harness.id()
             ));
@@ -104,7 +106,7 @@ pub fn apply(
                 if let CopyOutcome::MovedAside { backup } = &result {
                     crate::ui::warn(format!(
                         "moved aside existing {} → {}",
-                        out.display(),
+                        out_display,
                         backup.display()
                     ));
                 }
@@ -116,6 +118,7 @@ pub fn apply(
                     template_path.clone(),
                 ));
                 outcome.written += 1;
+                crate::ui::detail(format!("wrote {}", out_display));
             }
             CopyOutcome::Refused => {
                 let choice = prompt_collision(&out)?;
@@ -131,7 +134,7 @@ pub fn apply(
                     CollisionChoice::Cancel => {
                         crate::ui::warn(format!(
                             "agents: cancelled — {} left untouched. rerun with --force to overwrite, or back it up first.",
-                            out.display()
+                            out_display
                         ));
                         return Ok(outcome);
                     }
@@ -141,7 +144,7 @@ pub fn apply(
                         if let CopyOutcome::MovedAside { backup } = &forced {
                             crate::ui::warn(format!(
                                 "moved aside existing {} → {}",
-                                out.display(),
+                                out_display,
                                 backup.display()
                             ));
                         }
@@ -153,6 +156,7 @@ pub fn apply(
                             template_path.clone(),
                         ));
                         outcome.written += 1;
+                        crate::ui::detail(format!("wrote {}", out_display));
                     }
                 }
             }

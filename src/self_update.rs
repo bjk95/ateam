@@ -117,6 +117,7 @@ pub(crate) fn maybe_check() {
                 touch_cache(&cache)?;
             }
             Err(_) => {
+                ui::detail("update check skipped; network, rate-limit, or permission failure");
                 // network / rate-limit / permission — leave cache untouched
                 // so the next invocation retries.
             }
@@ -126,12 +127,18 @@ pub(crate) fn maybe_check() {
 }
 
 pub(crate) fn force_upgrade() -> Result<()> {
-    match run_update(true)? {
-        Some((from, to)) => ui::plain(format!("agents: updated {} → {}", from, to)),
-        None => ui::plain(format!(
-            "agents: already at latest ({})",
-            env!("CARGO_PKG_VERSION")
-        )),
+    let step = ui::step("checking for updates");
+    match run_update(true) {
+        Ok(Some((from, to))) => {
+            step.ok(format!("updated {} → {}", from, to));
+        }
+        Ok(None) => {
+            step.ok(format!("already at latest ({})", env!("CARGO_PKG_VERSION")));
+        }
+        Err(e) => {
+            step.fail("upgrade failed");
+            return Err(e);
+        }
     }
     if let Ok(cache) = cache_path() {
         let _ = touch_cache(&cache);

@@ -1,5 +1,6 @@
 use crate::git_sync;
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::Command;
@@ -18,7 +19,10 @@ pub fn run(no_sync: bool) -> Result<()> {
 
     if git_sync::enabled(no_sync) {
         let msg = git_sync::msg_edit("state");
-        let _ = git_sync::commit_and_push(&repo, &msg);
+        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
+        }
     }
 
     Ok(())

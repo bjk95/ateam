@@ -50,16 +50,17 @@ pub fn add(args: SubagentAddArgs, no_sync: bool) -> Result<()> {
     let mut had_error = false;
 
     for target in &targets {
+        let step = ui::step(format!("installing subagent {}", target.name));
         match install_one(&repo, &source, target, &args, &harnesses, &mut manifest) {
             Ok(entry) => {
                 lock.upsert_subagent(entry);
                 lock.write(&repo).context("writing lockfile after upsert")?;
                 installed.push(target.name.clone());
-                ui::ok(format!("installed subagent {}", target.name));
+                step.ok(format!("installed subagent {}", target.name));
             }
             Err(e) => {
                 had_error = true;
-                ui::fail(format!("install {} — {:#}", target.name, e));
+                step.fail(format!("install {} — {:#}", target.name, e));
             }
         }
     }
@@ -154,8 +155,9 @@ fn install_one(
     // are Claude-format (.md + YAML frontmatter), so that's what we accept.
     // Codex-native .toml import is a future enhancement — flagged as such
     // and left unhandled here.
-    let canonical = into_canonical_from_claude(&target.name, &raw)
-        .context("parsing imported subagent — expected Claude-format Markdown with YAML frontmatter")?;
+    let canonical = into_canonical_from_claude(&target.name, &raw).context(
+        "parsing imported subagent — expected Claude-format Markdown with YAML frontmatter",
+    )?;
 
     let canonical_text = canonical.to_canonical()?;
     let snapshot = paths::local_subagent_path(repo, &target.name);
@@ -290,16 +292,16 @@ fn fetch_file(
                 Some(r) => r.to_string(),
                 None => github::default_branch(owner, repo),
             };
-            let body = github::read_file_at_ref(owner, repo, &r, path_in_source).with_context(
-                || format!("fetching {}/{}@{}: {}", owner, repo, r, path_in_source),
-            )?;
+            let body =
+                github::read_file_at_ref(owner, repo, &r, path_in_source).with_context(|| {
+                    format!("fetching {}/{}@{}: {}", owner, repo, r, path_in_source)
+                })?;
             Ok((body, git_ref.map(|s| s.to_string())))
         }
         Source::Git { url } => {
             let suffix: u64 = rand::random();
             let tmp = std::env::temp_dir().join(format!("agents-subagent-{:016x}", suffix));
-            std::fs::create_dir_all(&tmp)
-                .with_context(|| format!("creating {}", tmp.display()))?;
+            std::fs::create_dir_all(&tmp).with_context(|| format!("creating {}", tmp.display()))?;
             let result = (|| {
                 crate::source::git::clone(url, git_ref, &tmp)?;
                 let file = tmp.join(path_in_source);
@@ -494,8 +496,7 @@ pub fn list() -> Result<()> {
 
 fn write_atomically(path: &Path, content: &str) -> Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("creating {}", parent.display()))?;
+    std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     let suffix: u64 = rand::random();
     let stem = path
         .file_name()

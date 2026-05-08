@@ -29,7 +29,10 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
         let template = import_instructions(&repo, &home)?;
         if git_sync::enabled(no_sync) {
             let msg = "import :: instructions (CLAUDE.md / AGENTS.md)".to_string();
-            let _ = git_sync::commit_and_push(&repo, &msg);
+            if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+                ui::warn(format!("auto-sync failed: {:#}", e));
+                ui::detail("local change saved; rerun a mutating command to retry");
+            }
         }
         ui::plain(format!(
             "agents: imported instructions template → {}",
@@ -95,7 +98,10 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
             .map(|e| e.source.clone())
             .unwrap_or_else(|| "unknown".into());
         let msg = git_sync::msg_import(&normalized, &last);
-        let _ = git_sync::commit_and_push(repo, &msg);
+        if let Err(e) = git_sync::commit_and_push(repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
+        }
     }
 
     ui::ok(format!(
@@ -185,7 +191,10 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
                 ""
             }
         );
-        let _ = git_sync::commit_and_push(repo, &msg);
+        if let Err(e) = git_sync::commit_and_push(repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
+        }
     }
 
     Ok(())
@@ -250,13 +259,16 @@ pub(crate) fn bulk_import_skills(
             let already_snapshotted = dest.exists();
 
             if !already_snapshotted {
+                let step = ui::step(format!("snapshotting {}", name));
                 if let Err(e) = std::fs::create_dir_all(paths::local_skills_dir(repo)) {
+                    step.fail(format!("import {} failed", name));
                     outcome.errors.push((name.clone(), format!("{e:#}")));
                     continue;
                 }
                 // Resolve symlinks before snapshotting so we copy real content.
                 let src = std::fs::canonicalize(&installed).unwrap_or_else(|_| installed.clone());
                 if !src.is_dir() {
+                    step.fail(format!("import {} failed", name));
                     outcome.errors.push((
                         name.clone(),
                         format!("{} is not a directory", src.display()),
@@ -264,9 +276,11 @@ pub(crate) fn bulk_import_skills(
                     continue;
                 }
                 if let Err(e) = crate::install::copy_dir_recursive(&src, &dest) {
+                    step.fail(format!("import {} failed", name));
                     outcome.errors.push((name.clone(), format!("{e:#}")));
                     continue;
                 }
+                step.ok(format!("snapshotted {}", name));
             }
 
             lock.upsert(SkillEntry {

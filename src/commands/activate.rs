@@ -39,7 +39,10 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
 
     if git_sync::enabled(no_sync) {
         let msg = git_sync::msg_activate(&args.name);
-        let _ = git_sync::commit_and_push(&repo, &msg);
+        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
+        }
     }
 
     ui::plain(format!("agents: activated `{}`", args.name));

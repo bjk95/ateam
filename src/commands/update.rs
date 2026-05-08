@@ -41,12 +41,13 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
 
     let n = names.len();
     {
-        let _step = ui::step(format!(
+        let step = ui::step(format!(
             "checking {} {}",
             n,
             if n == 1 { "skill" } else { "skills" }
         ));
         for name in &names {
+            step.set_msg(format!("checking {}", name));
             let entry_idx = match lock.skills.iter().position(|s| &s.name == name) {
                 Some(i) => i,
                 None => {
@@ -76,7 +77,7 @@ pub fn run(args: UpdateArgs, no_sync: bool) -> Result<()> {
                     changed.push((name.clone(), old, new_sha));
                 }
                 Ok(None) => {
-                    tracing::debug!("{} up to date", name);
+                    ui::detail(format!("{} up to date", name));
                 }
                 Err(e) => {
                     ui::warn(format!("couldn't check `{}`: {:#}", name, e));
@@ -121,11 +122,7 @@ fn matches_scope(entry: &SkillEntry, global: bool, project: Option<&str>) -> boo
     true
 }
 
-fn check_and_refetch(
-    repo: &Path,
-    source: &Source,
-    entry: &SkillEntry,
-) -> Result<Option<String>> {
+fn check_and_refetch(repo: &Path, source: &Source, entry: &SkillEntry) -> Result<Option<String>> {
     // Registry-resolved entries (path is None, source is github): refresh by
     // re-hitting skills.sh's blob endpoint and comparing hashes.
     if entry.path.is_none() {
