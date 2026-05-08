@@ -53,6 +53,13 @@ pub fn plain(msg: impl AsRef<str>) {
     println!("{}", msg.as_ref());
 }
 
+pub fn write(msg: impl AsRef<str>) {
+    if is_quiet() {
+        return;
+    }
+    print!("{}", msg.as_ref());
+}
+
 /// Vercel-skills-CLI-style step marker: cyan ◇ + message.
 pub fn diamond(msg: impl AsRef<str>) {
     if is_quiet() {
@@ -178,19 +185,28 @@ mod tests {
     #[test]
     fn fail_format_no_color() {
         init();
-        assert_eq!(format_fail("install bar — not found"), "✗  install bar — not found");
+        assert_eq!(
+            format_fail("install bar — not found"),
+            "✗  install bar — not found"
+        );
     }
 
     #[test]
     fn warn_format_no_color() {
         init();
-        assert_eq!(format_warn("unregistered project: foo"), "⚠  unregistered project: foo");
+        assert_eq!(
+            format_warn("unregistered project: foo"),
+            "⚠  unregistered project: foo"
+        );
     }
 
     #[test]
     fn detail_format_no_color() {
         init();
-        assert_eq!(format_detail("source: github:vercel-labs/agent-skills"), "·  source: github:vercel-labs/agent-skills");
+        assert_eq!(
+            format_detail("source: github:vercel-labs/agent-skills"),
+            "·  source: github:vercel-labs/agent-skills"
+        );
     }
 
     #[test]

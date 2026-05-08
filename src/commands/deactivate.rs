@@ -2,8 +2,9 @@ use crate::cli::DeactivateArgs;
 use crate::git_sync;
 use crate::install;
 use crate::lockfile::Lockfile;
-use crate::manifest::Manifest;
+use crate::manifest::{EntryKind, Manifest};
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Result};
 
 pub fn run(args: DeactivateArgs, no_sync: bool) -> Result<()> {
@@ -19,24 +20,28 @@ pub fn run(args: DeactivateArgs, no_sync: bool) -> Result<()> {
         None => bail!("no skill named `{}` in lockfile", args.name),
     };
     if !lock.skills[idx].active {
-        println!("agents: `{}` already deactivated", args.name);
+        ui::plain(format!("agents: `{}` already deactivated", args.name));
         return Ok(());
     }
     lock.skills[idx].active = false;
     lock.write(&repo)?;
 
-    // Unlink any symlinks the manifest tracked for this skill, and drop them
+    // Uninstall any paths the manifest tracked for this skill, and drop them
     // from the manifest so a future `apply` doesn't try to re-create them.
     let mut manifest = Manifest::load(&repo)?;
     let to_remove: Vec<_> = manifest
         .entries
         .iter()
         .filter(|m| m.skill == args.name)
-        .map(|m| m.path.clone())
+        .cloned()
         .collect();
-    for path in &to_remove {
-        if let Err(e) = install::uninstall_path(path) {
-            eprintln!("agents: warning — couldn't remove {}: {:#}", path.display(), e);
+    for entry in &to_remove {
+        let result = match entry.kind {
+            EntryKind::Symlink => install::uninstall_path(&entry.path),
+            EntryKind::Copy => install::uninstall_copy(&entry.path),
+        };
+        if let Err(e) = result {
+            ui::warn(format!("couldn't remove {}: {:#}", entry.path.display(), e));
         }
     }
     manifest.entries.retain(|m| m.skill != args.name);
@@ -47,6 +52,6 @@ pub fn run(args: DeactivateArgs, no_sync: bool) -> Result<()> {
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
-    println!("agents: deactivated `{}`", args.name);
+    ui::plain(format!("agents: deactivated `{}`", args.name));
     Ok(())
 }

@@ -1,6 +1,6 @@
 ---
 title: Production readiness validation
-description: One-by-one validation notes and discovered issues for the agents CLI production readiness behaviors.
+description: One-by-one validation notes and resolved issues for the agents CLI production readiness behaviors.
 ---
 
 # Production readiness validation
@@ -13,6 +13,7 @@ kept the real home/config/cache state untouched.
 
 ```bash
 cargo test
+cargo test --test production_readiness
 pnpm --dir site build
 ```
 
@@ -29,16 +30,16 @@ agents' internal canonical representation. The canonical multi-harness
 frontmatter in the lockfile docs is an internal storage/rendering format, not
 an external standard that third-party sources are expected to publish.
 
-## Discovered issues
+## Resolved issues
 
-| ID | Behaviors | Severity | Issue | Evidence | Suggested action |
+| ID | Behaviors | Severity | Issue | Resolution | Regression coverage |
 |---|---:|---|---|---|---|
-| PRI-001 | 7 | P1 | `--quiet` is not global. Several commands print directly with `println!` / `eprintln!`, bypassing `ui::quiet`. | `agents --quiet remote list` printed `origin`; direct prints exist in `validate`, `remote`, `harness list`, `instructions`, `import`, `activate`, `deactivate`, and `self_update`. | Route command output through `ui::*` or explicitly gate direct prints on `ui::is_quiet()`. |
-| PRI-002 | 17 | P1 | `apply --dry-run` is not side-effect free. | Probe showed `.agents/tmp/stale-dir` was removed during dry-run; source calls `install::sweep_tmp(&repo)` before checking `dry_run`, and auto-sync pre-pull can also mutate git state unless `--no-sync` is passed. | Skip temp sweeping and git pre-pull for dry-runs, or document and rename the behavior as a planning run with repo-maintenance side effects. |
-| PRI-003 | 18 | P2 | Repeated `apply` rewrites `.agents/manifest.toml` even when state is already correct. | Probe showed manifest content changed after a second apply because `applied_at = now_unix()` is regenerated and the manifest is always written. | Preserve existing manifest entries when unchanged, or omit volatile timestamps from idempotent entries. |
-| PRI-004 | 37, 39 | P1 | `skills deactivate` and `skills remove` do not uninstall copy-mode skill installs. | Copy-mode probe left `~/.codex/skills/alpha` as a real directory after both commands; both paths call `install::uninstall_path`, which refuses non-symlinks. | Use manifest `EntryKind` to dispatch to `uninstall_copy` for copy entries, as `apply` already does during reconciliation. |
-| PRI-005 | 44 | P2 | `skills find` output is not the documented pipe-friendly agents command form. | Probe printed `Install with npx skills add <owner/repo@skill>` and rows like `vercel-labs/agent-skills@deploy-to-vercel`, not `agents skills add <owner/repo> --skill <name>`. | Emit copy-pasteable `agents skills add <source> --skill <name>` lines, or update the behavior checklist/docs to match the Vercel-style output. |
-| PRI-006 | 33 | P3 | Registry fallback logs duplicate warnings when the registry lookup errors. | `resolve_via_registry` contains two identical `ui::warn(format!("registry lookup failed ..."))` calls in the same error branch. | Remove the duplicate warning. |
+| PRI-001 | 7 | P1 | `--quiet` was not global because several commands printed directly, bypassing `ui::quiet`. | Normal command output now routes through quiet-aware UI helpers; warnings/errors remain visible. | `quiet_suppresses_remote_list_plain_output` |
+| PRI-002 | 17 | P1 | `apply --dry-run` swept `.agents/tmp` and could pre-pull before planning. | Dry-run skips temp sweeping and auto-sync pre-pull. | `apply_dry_run_preserves_tmp_dirs` |
+| PRI-003 | 18 | P2 | Repeated `apply` changed `.agents/manifest.toml` because `applied_at` was regenerated and the file was always rewritten. | Manifest entries preserve prior timestamps when path/kind/skill/harness/target are unchanged, and manifest writes are skipped when serialized content is unchanged. | `repeated_apply_keeps_manifest_content_stable` |
+| PRI-004 | 37, 39 | P1 | `skills deactivate` and `skills remove` left copy-mode skill installs on disk. | Both paths now use manifest `EntryKind` to dispatch symlinks to `uninstall_path` and copies to `uninstall_copy`. | `deactivate_removes_copy_mode_skill_install`, `remove_removes_copy_mode_skill_install` |
+| PRI-005 | 44 | P2 | `skills find` printed Vercel-style `npx skills` output instead of agents install commands. | Non-interactive search results now emit `agents skills add <source> --skill <name>` lines. | `non_interactive_result_formats_agents_install_command` |
+| PRI-006 | 33 | P3 | Registry fallback was reported as logging duplicate warnings when registry lookup errored. | Rechecked the current source and confirmed there is a single warning path. | Source review; covered by single remaining warning path. |
 
 ## One-by-one validation
 
@@ -50,7 +51,7 @@ an external standard that third-party sources are expected to publish.
 | 4 | Machine profiles | Pass | `--profiles` is parsed as comma-delimited values and persisted to `.agents/machine.toml`; `apply` uses `profile_match` for skills, subagents, and instructions context. |
 | 5 | Existing repo detection | Pass | `status` resolves the repo, reads lockfile/manifest/machine config, reports profile and health details, and does not write state. |
 | 6 | Missing repo recovery | Pass | `paths::resolve_repo` errors with the expected pointer/default locations and `run agents init` recovery text. |
-| 7 | Global quiet mode | Fail | See PRI-001. `ui::*` output is suppressed, but direct `println!` output is not. |
+| 7 | Global quiet mode | Pass | Normal output routes through quiet-aware UI helpers; machine-readable `skills list --json` / `--names` output remains direct by design. |
 | 8 | Verbose diagnosis | Pass | `status` emits repo and manifest details through `ui::detail`, which is gated by `--verbose`; list output also adds scope/profile detail in verbose mode. |
 | 9 | Read-only safety | Pass | `is_mutating` leaves `status`, `skills list/show/find`, `validate`, `project list`, `remote list`, `instructions diff/show`, and `subagents list` unlocked. |
 | 10 | Mutating serialization | Pass | Mutating commands acquire `RepoLock`; integration test `apply_prints_wait_message_when_repo_lock_is_held` validates lock waiting. |
@@ -60,8 +61,8 @@ an external standard that third-party sources are expected to publish.
 | 14 | Manual sync | Pass | `sync` delegates to `git pull --rebase --autostash` and push; it does not stage, commit, or rewrite lockfile content itself. |
 | 15 | Offline tolerance | Pass | Auto-sync pre-pull and push detect common offline errors, warn, and keep local state. |
 | 16 | Clean apply | Pass | `apply` materializes active, profile-matching skills, subagents, and instructions across resolved harnesses. |
-| 17 | Apply dry run | Fail | See PRI-002. It previews planned writes, but still sweeps `.agents/tmp` and can pre-pull. |
-| 18 | Idempotent apply | Fail | See PRI-003. Files remain correct, but manifest content is rewritten on every run. |
+| 17 | Apply dry run | Pass | Dry-run previews planned writes without sweeping `.agents/tmp`, writing files, updating manifests, creating backups, or auto-syncing. |
+| 18 | Idempotent apply | Pass | Repeated apply keeps managed files correct and preserves manifest content when the desired state is unchanged. |
 | 19 | Harness filtering | Pass | `apply -a <harness>` builds a target harness set and skips unmatched skill/subagent outputs. |
 | 20 | Project filtering | Pass | `apply --project <alias>` only processes entries whose `project` matches that alias. |
 | 21 | Unregistered project | Pass | Missing project aliases are collected, warned, and skipped while other entries continue. |
@@ -76,18 +77,18 @@ an external standard that third-party sources are expected to publish.
 | 30 | Explicit harness install | Pass | Explicit `-a` values are preserved in the lockfile and used for install targeting. |
 | 31 | Profile-gated skill | Pass | `--profile` is stored on the lock entry and `apply` skips machines without a matching profile. |
 | 32 | Project-scoped skill | Pass | `--project` requires a registered alias, stores it in the lockfile, and installs under that project root. |
-| 33 | Unknown skill fallback | Pass with issue | Registry fallback exists and uses the skills.sh download endpoint for missing GitHub skills; see PRI-006 for duplicate error warnings. |
+| 33 | Unknown skill fallback | Pass | Registry fallback exists and uses the skills.sh download endpoint for missing GitHub skills; registry lookup failures now produce one warning. |
 | 34 | OpenClaw risk gate | Pass | `Source::parse_with` rejects `openclaw/*` sources unless the explicit risk flag is set. |
 | 35 | Skill update | Pass | `skills update` compares upstream SHAs/hashes, refetches drifted snapshots, updates `tree_sha`, and leaves unchanged entries alone. |
 | 36 | Deactivated update skip | Pass | Deactivated entries are excluded from bulk updates and explicitly skipped with a warning when named. |
-| 37 | Skill deactivate | Fail for copy mode | Symlink-mode deactivation works; copy-mode installs are left on disk. See PRI-004. |
+| 37 | Skill deactivate | Pass | Deactivation removes both symlink-mode and copy-mode installs using the manifest entry kind. |
 | 38 | Skill activate | Pass | `skills activate` flips `active = true`, writes the lockfile, and invokes apply to re-materialize eligible entries. |
-| 39 | Skill remove | Fail for copy mode | Lockfile removal and symlink uninstall work; copy-mode installs are left on disk. See PRI-004. |
+| 39 | Skill remove | Pass | Removal deletes lockfile entries, managed snapshots, and both symlink-mode and copy-mode installs. |
 | 40 | Missing skill remove | Pass | Target resolution bails before removal when a named skill is missing in the selected scope. |
 | 41 | Pipe-friendly list | Pass | `skills list` switches stdout to names-only when stdout is not a TTY; `skills remove` reads whitespace-separated names from stdin. |
 | 42 | JSON list contract | Pass | `skills list --json` suppresses the banner/UI output and emits the versioned JSON envelope with all documented fields. |
 | 43 | Skill show | Pass | `skills show` resolves the canonical skill dir and prints only `SKILL.md`, erroring if the snapshot is missing. |
-| 44 | Registry search | Fail | See PRI-005. Search works, but output does not match the desired agents-command form. |
+| 44 | Registry search | Pass | Non-interactive search emits pipe-friendly `agents skills add <source> --skill <name>` commands; the TTY picker still installs selected results interactively. |
 | 45 | Bulk import | Pass | Bulk import adopts eligible local skills, dedupes across harness dirs, skips managed/plugin skills, and can adopt orphan snapshots. |
 | 46 | Instructions import | Pass | `skills import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
 | 47 | Instructions validation | Pass | `validate` checks template identifiers against declared profiles plus reserved harness/hostname identifiers. |

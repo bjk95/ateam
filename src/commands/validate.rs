@@ -1,6 +1,7 @@
 use crate::config::RepoConfig;
 use crate::instructions;
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Result};
 use std::collections::BTreeSet;
 
@@ -10,10 +11,10 @@ pub fn run() -> Result<()> {
     let template = paths::instructions_template(&repo);
 
     if !template.exists() {
-        println!(
+        ui::plain(format!(
             "no instructions template at {} — nothing to validate",
             template.display()
-        );
+        ));
         return Ok(());
     }
 
@@ -27,20 +28,16 @@ pub fn run() -> Result<()> {
     let unknown = instructions::unknown_identifiers(&src, &allowed)?;
 
     if unknown.is_empty() {
-        println!(
+        ui::plain(format!(
             "ok: instructions template references {} identifier(s), all declared",
             allowed.len()
-        );
+        ));
         return Ok(());
     }
 
     eprintln!(
         "instructions template references undeclared identifier(s): {}",
-        unknown
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ")
+        unknown.iter().cloned().collect::<Vec<_>>().join(", ")
     );
     eprintln!(
         "declared profiles: [{}]",

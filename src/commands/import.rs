@@ -31,14 +31,14 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
             let msg = "import :: instructions (CLAUDE.md / AGENTS.md)".to_string();
             let _ = git_sync::commit_and_push(&repo, &msg);
         }
-        println!(
+        ui::plain(format!(
             "agents: imported instructions template → {}",
             template.display()
-        );
-        println!(
+        ));
+        ui::plain(format!(
             "edit the template to add Handlebars gates ({}), then `agents apply` to re-render.",
             "{{#if work}}"
-        );
+        ));
         return Ok(());
     }
 
@@ -115,14 +115,14 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
 // plus the global instructions, into the lockfile.
 
 fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
-    println!(
+    ui::plain(format!(
         "agents: scanning {}...",
         crate::discover::harness_skill_dirs(home)
             .iter()
             .map(|p| crate::paths::display_path(p))
             .collect::<Vec<_>>()
             .join(", "),
-    );
+    ));
 
     let mut lock = Lockfile::load(repo)?;
     let outcome = bulk_import_skills(repo, home, &mut lock)?;
@@ -134,24 +134,24 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     let instructions_template = match import_instructions(repo, home) {
         Ok(p) => Some(p),
         Err(e) => {
-            eprintln!("agents: instructions skipped — {e:#}");
+            ui::warn(format!("instructions skipped — {e:#}"));
             None
         }
     };
 
-    println!();
-    println!(
+    ui::plain("");
+    ui::plain(format!(
         "agents: imported {} skill(s); skipped {} already managed",
         outcome.imported, outcome.skipped_managed
-    );
+    ));
     if outcome.skipped_plugin > 0 {
-        println!(
+        ui::plain(format!(
             "  + skipped {} plugin-managed (manage via `claude plugin`)",
             outcome.skipped_plugin
-        );
+        ));
     }
     if outcome.discovered_upstream > 0 {
-        println!(
+        ui::plain(format!(
             "  + discovered upstream for {} existing entr{}",
             outcome.discovered_upstream,
             if outcome.discovered_upstream == 1 {
@@ -159,20 +159,20 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
             } else {
                 "ies"
             }
-        );
+        ));
     }
     if !outcome.errors.is_empty() {
-        println!("  errors:");
+        ui::plain("  errors:");
         for (name, err) in &outcome.errors {
-            println!("    - {name}: {err}");
+            ui::plain(format!("    - {name}: {err}"));
         }
     }
     if let Some(p) = &instructions_template {
-        println!("  instructions template → {}", p.display());
+        ui::plain(format!("  instructions template → {}", p.display()));
     }
     if outcome.imported > 0 || instructions_template.is_some() {
-        println!();
-        println!("run `agents apply` to materialize symlinks for the new entries.");
+        ui::plain("");
+        ui::plain("run `agents apply` to materialize symlinks for the new entries.");
     }
 
     if git_sync::enabled(no_sync) && (outcome.imported > 0 || instructions_template.is_some()) {
@@ -242,7 +242,7 @@ pub(crate) fn bulk_import_skills(
             }
             if let Some(plugin_source) = upstream_index.get(&name) {
                 outcome.skipped_plugin += 1;
-                println!("  · {name} (plugin-managed by {plugin_source})");
+                ui::plain(format!("  · {name} (plugin-managed by {plugin_source})"));
                 continue;
             }
 
@@ -283,9 +283,9 @@ pub(crate) fn bulk_import_skills(
             });
             outcome.imported += 1;
             if already_snapshotted {
-                println!("  + {name} (adopted existing snapshot)");
+                ui::plain(format!("  + {name} (adopted existing snapshot)"));
             } else {
-                println!("  + {name}");
+                ui::plain(format!("  + {name}"));
             }
         }
     }

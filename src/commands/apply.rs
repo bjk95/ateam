@@ -4,7 +4,7 @@ use crate::config::{MachineConfig, RepoConfig};
 use crate::git_sync;
 use crate::install;
 use crate::lockfile::{Lockfile, SkillEntry, SubagentEntry};
-use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
+use crate::manifest::{EntryKind, Manifest};
 use crate::paths;
 use crate::source::{github, Source};
 use crate::ui;
@@ -17,11 +17,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     let repo_cfg = RepoConfig::load(&repo)?;
     let mut machine = MachineConfig::load(&repo)?;
 
-    if git_sync::enabled(no_sync) {
+    if !args.dry_run && git_sync::enabled(no_sync) {
         git_sync::pre_pull(&repo)?;
     }
 
-    install::sweep_tmp(&repo).ok();
+    if !args.dry_run {
+        install::sweep_tmp(&repo).ok();
+    }
 
     let lock = Lockfile::load(&repo)?;
     let prev_manifest = Manifest::load(&repo)?;
@@ -89,7 +91,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         };
 
         let harnesses = resolve_harnesses(entry, &repo_cfg);
-        let canonical = match resolve_canonical(&repo, entry) {
+        let canonical = match resolve_canonical(&repo, entry, args.dry_run) {
             Ok(p) => p,
             Err(e) => {
                 ui::fail(format!("resolve {} — {:#}", entry.name, e));
@@ -98,31 +100,39 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         };
 
         // Detect tree_sha drift for github sources during apply.
-        if let (Ok(Source::Github { owner, repo: r }), Some(_)) = (
-            Source::from_lockfile_string(&entry.source),
-            entry.tree_sha.as_ref(),
-        ) {
-            if let Some(path) = &entry.path {
-                let r_ref = entry
-                    .git_ref
-                    .clone()
-                    .unwrap_or_else(|| github::default_branch(&owner, &r));
-                if let Ok(commit_sha) = github::resolve_ref(&owner, &r, &r_ref) {
-                    if let Ok(Some(latest)) = github::subtree_sha(&owner, &r, &commit_sha, path) {
-                        if Some(&latest) != entry.tree_sha.as_ref() {
-                            tracing::info!("drift detected for {} (refetching)", entry.name);
-                            if let Err(e) =
-                                refetch_github(&repo, &owner, &r, &commit_sha, path, &entry.name)
-                            {
-                                ui::fail(format!("refetch {} — {:#}", entry.name, e));
-                            } else {
-                                if let Some(pos) = updated_lock
-                                    .skills
-                                    .iter()
-                                    .position(|s| s.name == entry.name)
-                                {
-                                    updated_lock.skills[pos].tree_sha = Some(latest);
-                                    lockfile_dirty = true;
+        if !args.dry_run {
+            if let (Ok(Source::Github { owner, repo: r }), Some(_)) = (
+                Source::from_lockfile_string(&entry.source),
+                entry.tree_sha.as_ref(),
+            ) {
+                if let Some(path) = &entry.path {
+                    let r_ref = entry
+                        .git_ref
+                        .clone()
+                        .unwrap_or_else(|| github::default_branch(&owner, &r));
+                    if let Ok(commit_sha) = github::resolve_ref(&owner, &r, &r_ref) {
+                        if let Ok(Some(latest)) = github::subtree_sha(&owner, &r, &commit_sha, path)
+                        {
+                            if Some(&latest) != entry.tree_sha.as_ref() {
+                                tracing::info!("drift detected for {} (refetching)", entry.name);
+                                if let Err(e) = refetch_github(
+                                    &repo,
+                                    &owner,
+                                    &r,
+                                    &commit_sha,
+                                    path,
+                                    &entry.name,
+                                ) {
+                                    ui::fail(format!("refetch {} — {:#}", entry.name, e));
+                                } else {
+                                    if let Some(pos) = updated_lock
+                                        .skills
+                                        .iter()
+                                        .position(|s| s.name == entry.name)
+                                    {
+                                        updated_lock.skills[pos].tree_sha = Some(latest);
+                                        lockfile_dirty = true;
+                                    }
                                 }
                             }
                         }
@@ -166,14 +176,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                     | install::CopyDirOutcome::Replaced
                     | install::CopyDirOutcome::AlreadyCorrect
                     | install::CopyDirOutcome::MovedAside { .. } => {
-                        new_manifest.entries.push(ManifestEntry {
-                            path: link.clone(),
-                            kind: EntryKind::Copy,
-                            skill: entry.name.clone(),
-                            harness: harness.clone(),
-                            target: canonical.clone(),
-                            applied_at: manifest::now_unix(),
-                        });
+                        new_manifest.entries.push(prev_manifest.tracked_entry(
+                            link.clone(),
+                            EntryKind::Copy,
+                            entry.name.clone(),
+                            harness.clone(),
+                            canonical.clone(),
+                        ));
                         materialized += 1;
                     }
                     install::CopyDirOutcome::Refused => {
@@ -193,14 +202,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 | install::LinkOutcome::AlreadyCorrect
                 | install::LinkOutcome::MovedAside { .. }
                 | install::LinkOutcome::AutoHealed => {
-                    new_manifest.entries.push(ManifestEntry {
-                        path: link.clone(),
-                        kind: EntryKind::Symlink,
-                        skill: entry.name.clone(),
-                        harness: harness.clone(),
-                        target: canonical.clone(),
-                        applied_at: manifest::now_unix(),
-                    });
+                    new_manifest.entries.push(prev_manifest.tracked_entry(
+                        link.clone(),
+                        EntryKind::Symlink,
+                        entry.name.clone(),
+                        harness.clone(),
+                        canonical.clone(),
+                    ));
                     materialized += 1;
                 }
                 install::LinkOutcome::Refused => {
@@ -297,14 +305,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             let was_managed = prev_paths.contains(out_path.as_path());
             match install::install_copy(&out_path, &rendered, was_managed, args.force)? {
                 install::CopyOutcome::Written | install::CopyOutcome::MovedAside { .. } => {
-                    new_manifest.entries.push(ManifestEntry {
-                        path: out_path.clone(),
-                        kind: EntryKind::Copy,
-                        skill: entry.name.clone(),
-                        harness: harness.clone(),
-                        target: snapshot.clone(),
-                        applied_at: manifest::now_unix(),
-                    });
+                    new_manifest.entries.push(prev_manifest.tracked_entry(
+                        out_path.clone(),
+                        EntryKind::Copy,
+                        entry.name.clone(),
+                        harness.clone(),
+                        snapshot.clone(),
+                    ));
                     materialized += 1;
                 }
                 install::CopyOutcome::Refused => {
@@ -488,13 +495,13 @@ fn resolve_subagent_install_root(
     }
 }
 
-fn resolve_canonical(repo: &Path, entry: &SkillEntry) -> Result<PathBuf> {
+fn resolve_canonical(repo: &Path, entry: &SkillEntry, dry_run: bool) -> Result<PathBuf> {
     let source = Source::from_lockfile_string(&entry.source)?;
     match source {
         Source::Local { path } => crate::source::local::resolve(repo, &path),
         Source::Github { .. } | Source::Git { .. } => {
             let snapshot = paths::local_skills_dir(repo).join(&entry.name);
-            if snapshot.exists() {
+            if snapshot.exists() || dry_run {
                 Ok(snapshot)
             } else {
                 // Cold install — refetch from upstream into the synced snapshot.

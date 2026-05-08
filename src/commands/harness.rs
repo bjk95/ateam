@@ -1,4 +1,4 @@
-use crate::cli::{HarnessCommand, ApplyArgs};
+use crate::cli::{ApplyArgs, HarnessCommand};
 use crate::config::RepoConfig;
 use crate::git_sync;
 use crate::paths;
@@ -20,7 +20,10 @@ fn list() -> Result<()> {
 
     // Column widths sized to header+content. Held outside of styled() because
     // ANSI escape codes from console::style break width-based padding.
-    let id_w = std::cmp::max("ID".len(), crate::harness::all().map(|a| a.id.len()).max().unwrap_or(0));
+    let id_w = std::cmp::max(
+        "ID".len(),
+        crate::harness::all().map(|a| a.id.len()).max().unwrap_or(0),
+    );
     let status_w = "disabled".len();
     let skills_w = std::cmp::max(
         "SKILLS DIR".len(),
@@ -32,10 +35,15 @@ fn list() -> Result<()> {
 
     let header = format!(
         "{:<id_w$}  {:<status_w$}  {:<skills_w$}  {}",
-        "ID", "STATUS", "SKILLS DIR", "INSTRUCTIONS FILE",
-        id_w = id_w, status_w = status_w, skills_w = skills_w,
+        "ID",
+        "STATUS",
+        "SKILLS DIR",
+        "INSTRUCTIONS FILE",
+        id_w = id_w,
+        status_w = status_w,
+        skills_w = skills_w,
     );
-    println!("{}", style(header).bold());
+    ui::plain(format!("{}", style(header).bold()));
 
     for def in crate::harness::all() {
         let enabled = repo_cfg.enabled_harnesses.iter().any(|a| a == def.id);
@@ -50,13 +58,18 @@ fn list() -> Result<()> {
             .unwrap_or_else(|| "—".to_string());
         let line = format!(
             "{:<id_w$}  {:<status_w$}  {:<skills_w$}  {}",
-            def.id, status, skills, instr,
-            id_w = id_w, status_w = status_w, skills_w = skills_w,
+            def.id,
+            status,
+            skills,
+            instr,
+            id_w = id_w,
+            status_w = status_w,
+            skills_w = skills_w,
         );
         if enabled {
-            println!("{}", line);
+            ui::plain(line);
         } else {
-            println!("{}", style(line).dim());
+            ui::plain(format!("{}", style(line).dim()));
         }
     }
     Ok(())
@@ -303,7 +316,10 @@ mod tests {
     fn plan_remove_refuses_to_empty_the_list() {
         let err = plan_remove(&s(&["claude-code"]), &s(&["claude-code"])).unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("cannot remove last enabled harness"), "got: {msg}");
+        assert!(
+            msg.contains("cannot remove last enabled harness"),
+            "got: {msg}"
+        );
     }
 
     #[test]

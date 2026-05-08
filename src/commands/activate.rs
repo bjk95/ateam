@@ -2,6 +2,7 @@ use crate::cli::{ActivateArgs, ApplyArgs};
 use crate::git_sync;
 use crate::lockfile::Lockfile;
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Result};
 
 pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
@@ -17,7 +18,7 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
         None => bail!("no skill named `{}` in lockfile", args.name),
     };
     if lock.skills[idx].active {
-        println!("agents: `{}` already active", args.name);
+        ui::plain(format!("agents: `{}` already active", args.name));
         return Ok(());
     }
     lock.skills[idx].active = true;
@@ -41,6 +42,6 @@ pub fn run(args: ActivateArgs, no_sync: bool) -> Result<()> {
         let _ = git_sync::commit_and_push(&repo, &msg);
     }
 
-    println!("agents: activated `{}`", args.name);
+    ui::plain(format!("agents: activated `{}`", args.name));
     Ok(())
 }

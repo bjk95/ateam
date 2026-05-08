@@ -6,6 +6,7 @@ use crate::git_sync;
 use crate::instructions;
 use crate::lockfile::{InstructionsEntry, Lockfile};
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Result};
 use console::style;
 use similar::{ChangeTag, TextDiff};
@@ -53,11 +54,13 @@ fn diff() -> Result<()> {
 
     let template = paths::instructions_template(&repo);
     if !template.exists() {
-        println!("no instructions template");
+        ui::plain("no instructions template");
         return Ok(());
     }
     if machine.instructions_skip {
-        println!("instructions sync disabled on this machine (machine.toml: instructions_skip = true)");
+        ui::plain(
+            "instructions sync disabled on this machine (machine.toml: instructions_skip = true)",
+        );
         return Ok(());
     }
 
@@ -80,13 +83,13 @@ fn diff() -> Result<()> {
         }
         printed = true;
         let label = paths::display_path(&out);
-        println!("{}", style(format!("--- a/{}", label)).bold());
-        println!("{}", style(format!("+++ b/{}", label)).bold());
+        ui::plain(format!("{}", style(format!("--- a/{}", label)).bold()));
+        ui::plain(format!("{}", style(format!("+++ b/{}", label)).bold()));
         print_unified_diff(&current, &rendered);
-        println!();
+        ui::plain("");
     }
     if !printed {
-        println!("no changes");
+        ui::plain("no changes");
     }
     Ok(())
 }
@@ -115,15 +118,20 @@ fn show() -> Result<()> {
 
     for (i, harness) in tools.iter().enumerate() {
         if i > 0 {
-            println!();
+            ui::plain("");
         }
         let ctx = instructions::build_context(&repo_cfg, &machine, &hostname, *harness);
         let rendered = instructions::render(&template_src, &ctx)?;
-        println!(
+        ui::plain(format!(
             "{}",
-            style(format!("# {} ({})", harness.output_subpath(), harness.display())).bold()
-        );
-        print!("{}", rendered);
+            style(format!(
+                "# {} ({})",
+                harness.output_subpath(),
+                harness.display()
+            ))
+            .bold()
+        ));
+        ui::write(rendered);
     }
     Ok(())
 }
@@ -132,7 +140,7 @@ fn print_unified_diff(old: &str, new: &str) {
     let diff = TextDiff::from_lines(old, new);
     for group in diff.grouped_ops(3) {
         let (old_start, old_len, new_start, new_len) = hunk_header(&group);
-        println!(
+        ui::plain(format!(
             "{}",
             style(format!(
                 "@@ -{},{} +{},{} @@",
@@ -142,7 +150,7 @@ fn print_unified_diff(old: &str, new: &str) {
                 new_len
             ))
             .cyan()
-        );
+        ));
         for op in group {
             for change in diff.iter_changes(&op) {
                 let line = change.to_string();
@@ -151,7 +159,7 @@ fn print_unified_diff(old: &str, new: &str) {
                     ChangeTag::Insert => style(format!("+{}", line)).green().to_string(),
                     ChangeTag::Equal => style(format!(" {}", line)).dim().to_string(),
                 };
-                print!("{}", styled);
+                ui::write(styled);
             }
         }
     }
