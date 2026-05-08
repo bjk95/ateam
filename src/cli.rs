@@ -91,6 +91,9 @@ pub enum Command {
     /// Show what's locked vs installed vs drifted.
     Status,
 
+    /// Pull with rebase/autostash, then push the agents-config repo.
+    Sync,
+
     /// Manage skills.
     #[command(subcommand)]
     Skills(SkillsCommand),
@@ -477,6 +480,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Init(args) => crate::commands::init::run(args),
         Command::Apply(args) => crate::commands::apply::run(args, no_sync),
         Command::Status => crate::commands::status::run(),
+        Command::Sync => crate::commands::sync::run(),
         Command::Skills(cmd) => match cmd {
             SkillsCommand::Add(args) => crate::commands::add::run(args, no_sync),
             SkillsCommand::Update(args) => crate::commands::update::run(args, no_sync),
@@ -506,6 +510,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
 fn is_mutating(cmd: &Command) -> bool {
     match cmd {
         Command::Init(_) | Command::Status | Command::Upgrade | Command::Validate => false,
+        Command::Sync => true,
         Command::Apply(_) | Command::Edit => true,
         Command::Skills(s) => match s {
             SkillsCommand::Add(_)
@@ -536,5 +541,17 @@ fn is_mutating(cmd: &Command) -> bool {
             SubagentsCommand::Add(_) | SubagentsCommand::Remove(_) => true,
             SubagentsCommand::List => false,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn parses_sync_command() {
+        let cli = Cli::try_parse_from(["agents", "sync"]).unwrap();
+        assert!(matches!(cli.command, Command::Sync));
     }
 }

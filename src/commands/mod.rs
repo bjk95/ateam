@@ -16,5 +16,6 @@ pub mod remove;
 pub mod show;
 pub mod status;
 pub mod subagents;
+pub mod sync;
 pub mod update;
 pub mod validate;
