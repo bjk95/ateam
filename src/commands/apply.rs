@@ -545,6 +545,7 @@ fn refetch_for_entry(repo: &Path, entry: &SkillEntry) -> Result<()> {
             let src_dir = work.join(&path);
             let slot = install::prepare_cache_slot(repo, &entry.name)?;
             install::copy_dir_recursive(&src_dir, &slot.tmp)?;
+            canonicalize_snapshot(&entry.name, &slot.tmp)?;
             slot.commit()?;
             let _ = std::fs::remove_dir_all(&work);
             Ok(())
@@ -571,6 +572,7 @@ fn refetch_via_registry(repo: &Path, owner: &str, repo_name: &str, skill_name: &
         }
         std::fs::write(&dest, &file.contents)?;
     }
+    canonicalize_snapshot(skill_name, &slot.tmp)?;
     slot.commit()?;
     Ok(())
 }
@@ -601,7 +603,17 @@ fn refetch_github(
     }
     let slot = install::prepare_cache_slot(repo, skill_name)?;
     install::copy_dir_recursive(&src_dir, &slot.tmp)?;
+    canonicalize_snapshot(skill_name, &slot.tmp)?;
     slot.commit()?;
     let _ = std::fs::remove_dir_all(&work);
+    Ok(())
+}
+
+fn canonicalize_snapshot(skill_name: &str, dir: &Path) -> Result<()> {
+    if let Some(repair) = crate::discover::canonicalize_skill_dir(dir, skill_name)? {
+        for diagnostic in repair.diagnostics {
+            ui::warn(format!("repaired {}: {}", skill_name, diagnostic));
+        }
+    }
     Ok(())
 }

@@ -76,10 +76,7 @@ fn resolve_targets(args: &RemoveArgs, skills: &[SkillEntry]) -> Result<Vec<Strin
         bail!("specify skill name(s) or pass --all");
     }
 
-    let pool: Vec<&SkillEntry> = skills
-        .iter()
-        .filter(|e| matches_filters(e, args))
-        .collect();
+    let pool: Vec<&SkillEntry> = skills.iter().filter(|e| matches_filters(e, args)).collect();
 
     if args.all {
         return Ok(pool.iter().map(|e| e.name.clone()).collect());
@@ -89,6 +86,7 @@ fn resolve_targets(args: &RemoveArgs, skills: &[SkillEntry]) -> Result<Vec<Strin
     let mut missing: Vec<&str> = Vec::new();
     for raw in &args.names {
         let normalized = crate::lockfile::normalize_skill_name(raw)?;
+        let normalized = crate::discover::standard_skill_name(&normalized);
         if pool.iter().any(|e| e.name == normalized) {
             if !out.contains(&normalized) {
                 out.push(normalized);
@@ -225,7 +223,9 @@ mod tests {
     fn requires_names_or_all() {
         let skills = vec![entry("foo", &["*"], None)];
         let err = resolve_targets(&args(&[], false, &[], false), &skills).unwrap_err();
-        assert!(err.to_string().contains("specify skill name(s) or pass --all"));
+        assert!(err
+            .to_string()
+            .contains("specify skill name(s) or pass --all"));
     }
 
     #[test]
@@ -238,9 +238,26 @@ mod tests {
     #[test]
     fn names_normalized_and_deduped() {
         let skills = vec![entry("foo-bar", &["*"], None)];
-        let out = resolve_targets(&args(&["Foo Bar", "foo-bar"], false, &[], false), &skills)
-            .unwrap();
+        let out =
+            resolve_targets(&args(&["Foo Bar", "foo-bar"], false, &[], false), &skills).unwrap();
         assert_eq!(out, vec!["foo-bar"]);
+    }
+
+    #[test]
+    fn names_match_standard_length_name() {
+        let raw = "a".repeat(crate::discover::MAX_NAME_CHARS + 10);
+        let canonical = "a".repeat(crate::discover::MAX_NAME_CHARS);
+        let skills = vec![entry(&canonical, &["*"], None)];
+        let args = RemoveArgs {
+            names: vec![raw],
+            all: false,
+            yes: true,
+            harnesses: vec![],
+            global: false,
+        };
+
+        let out = resolve_targets(&args, &skills).unwrap();
+        assert_eq!(out, vec![canonical]);
     }
 
     #[test]
@@ -274,8 +291,7 @@ mod tests {
     #[test]
     fn agent_filter_with_named_skill_outside_scope_is_missing() {
         let skills = vec![entry("foo", &["codex"], None)];
-        let err =
-            resolve_targets(&args(&["foo"], false, &["claude"], false), &skills).unwrap_err();
+        let err = resolve_targets(&args(&["foo"], false, &["claude"], false), &skills).unwrap_err();
         assert!(err.to_string().contains("foo"));
     }
 
@@ -285,7 +301,10 @@ mod tests {
             parse_stdin_names("foo\nbar\nbaz\n"),
             vec!["foo", "bar", "baz"]
         );
-        assert_eq!(parse_stdin_names("  foo bar\tbaz "), vec!["foo", "bar", "baz"]);
+        assert_eq!(
+            parse_stdin_names("  foo bar\tbaz "),
+            vec!["foo", "bar", "baz"]
+        );
         assert_eq!(parse_stdin_names(""), Vec::<String>::new());
         assert_eq!(parse_stdin_names("\n\n"), Vec::<String>::new());
     }

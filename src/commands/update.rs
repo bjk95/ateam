@@ -121,11 +121,7 @@ fn matches_scope(entry: &SkillEntry, global: bool, project: Option<&str>) -> boo
     true
 }
 
-fn check_and_refetch(
-    repo: &Path,
-    source: &Source,
-    entry: &SkillEntry,
-) -> Result<Option<String>> {
+fn check_and_refetch(repo: &Path, source: &Source, entry: &SkillEntry) -> Result<Option<String>> {
     // Registry-resolved entries (path is None, source is github): refresh by
     // re-hitting skills.sh's blob endpoint and comparing hashes.
     if entry.path.is_none() {
@@ -150,6 +146,7 @@ fn check_and_refetch(
                 }
                 std::fs::write(&dest, &file.contents)?;
             }
+            canonicalize_snapshot(&entry.name, &slot.tmp)?;
             slot.commit()?;
             return Ok(Some(latest));
         }
@@ -196,6 +193,7 @@ fn check_and_refetch(
             let src_dir = work.join(&path);
             let slot = install::prepare_cache_slot(repo, &entry.name)?;
             install::copy_dir_recursive(&src_dir, &slot.tmp)?;
+            canonicalize_snapshot(&entry.name, &slot.tmp)?;
             slot.commit()?;
             let _ = std::fs::remove_dir_all(&work);
             Ok(Some(latest))
@@ -229,8 +227,18 @@ fn refetch_github(
     let src_dir = pkg_root.join(sub_path);
     let slot = install::prepare_cache_slot(repo, skill_name)?;
     install::copy_dir_recursive(&src_dir, &slot.tmp)?;
+    canonicalize_snapshot(skill_name, &slot.tmp)?;
     slot.commit()?;
     let _ = std::fs::remove_dir_all(&work);
+    Ok(())
+}
+
+fn canonicalize_snapshot(skill_name: &str, dir: &Path) -> Result<()> {
+    if let Some(repair) = crate::discover::canonicalize_skill_dir(dir, skill_name)? {
+        for diagnostic in repair.diagnostics {
+            ui::warn(format!("repaired {}: {}", skill_name, diagnostic));
+        }
+    }
     Ok(())
 }
 

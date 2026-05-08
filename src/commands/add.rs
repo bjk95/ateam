@@ -185,7 +185,8 @@ fn pick_skills<'a>(
 
     let mut wanted: HashSet<String> = HashSet::new();
     for raw in &args.skill {
-        wanted.insert(crate::lockfile::normalize_skill_name(raw)?);
+        let normalized = crate::lockfile::normalize_skill_name(raw)?;
+        wanted.insert(crate::discover::standard_skill_name(&normalized));
     }
 
     let mut out = Vec::new();
@@ -245,7 +246,7 @@ fn resolve_via_registry(
 
     for raw in &args.skill {
         let normalized = match crate::lockfile::normalize_skill_name(raw) {
-            Ok(n) => n,
+            Ok(n) => crate::discover::standard_skill_name(&n),
             Err(_) => continue,
         };
         if found_names.contains(&normalized) {
@@ -497,6 +498,13 @@ fn install_one(
             // every machine.
             let slot = install::prepare_cache_slot(repo, &skill.name)?;
             install::copy_dir_recursive(&skill.dir, &slot.tmp)?;
+            if let Some(repair) =
+                crate::discover::canonicalize_skill_dir(&slot.tmp, &skill.name)?
+            {
+                for diagnostic in repair.diagnostics {
+                    ui::warn(format!("repaired {}: {}", skill.name, diagnostic));
+                }
+            }
             slot.commit()?
         }
     };
@@ -707,6 +715,19 @@ mod tests {
             copy: false,
             dangerously_accept_openclaw_risks: false,
         }
+    }
+
+    #[test]
+    fn pick_skills_matches_standard_length_name() {
+        let raw = "a".repeat(crate::discover::MAX_NAME_CHARS + 10);
+        let canonical = "a".repeat(crate::discover::MAX_NAME_CHARS);
+        let discovered = vec![skill(&canonical)];
+        let mut args = empty_args();
+        args.skill = vec![raw];
+
+        let out = pick_skills(&discovered, &args).unwrap();
+        let names: Vec<&str> = out.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec![canonical.as_str()]);
     }
 
     #[test]
