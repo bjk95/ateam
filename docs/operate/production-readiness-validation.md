@@ -24,6 +24,11 @@ Targeted probes also covered:
 - `agents --no-sync apply --copy` followed by `skills deactivate` and `skills remove`
 - `agents --no-sync skills find deploy`
 
+Review clarification: row 49 validates import of external subagent files into
+agents' internal canonical representation. The canonical multi-harness
+frontmatter in the lockfile docs is an internal storage/rendering format, not
+an external standard that third-party sources are expected to publish.
+
 ## Discovered issues
 
 | ID | Behaviors | Severity | Issue | Evidence | Suggested action |
@@ -33,8 +38,7 @@ Targeted probes also covered:
 | PRI-003 | 18 | P2 | Repeated `apply` rewrites `.agents/manifest.toml` even when state is already correct. | Probe showed manifest content changed after a second apply because `applied_at = now_unix()` is regenerated and the manifest is always written. | Preserve existing manifest entries when unchanged, or omit volatile timestamps from idempotent entries. |
 | PRI-004 | 37, 39 | P1 | `skills deactivate` and `skills remove` do not uninstall copy-mode skill installs. | Copy-mode probe left `~/.codex/skills/alpha` as a real directory after both commands; both paths call `install::uninstall_path`, which refuses non-symlinks. | Use manifest `EntryKind` to dispatch to `uninstall_copy` for copy entries, as `apply` already does during reconciliation. |
 | PRI-005 | 44 | P2 | `skills find` output is not the documented pipe-friendly agents command form. | Probe printed `Install with npx skills add <owner/repo@skill>` and rows like `vercel-labs/agent-skills@deploy-to-vercel`, not `agents skills add <owner/repo> --skill <name>`. | Emit copy-pasteable `agents skills add <source> --skill <name>` lines, or update the behavior checklist/docs to match the Vercel-style output. |
-| PRI-006 | 49 | P1 | `subagents add` does not accept the canonical multi-harness subagent format described by the lockfile docs. | The implementation imports Claude-format YAML frontmatter and promotes `model` / `effort` strings into Claude slots; canonical `model: { claude: ... }` frontmatter is not accepted by this path. | Accept canonical agents subagent files directly, and keep Claude-format import as a compatibility path. |
-| PRI-007 | 33 | P3 | Registry fallback logs duplicate warnings when the registry lookup errors. | `resolve_via_registry` contains two identical `ui::warn(format!("registry lookup failed ..."))` calls in the same error branch. | Remove the duplicate warning. |
+| PRI-006 | 33 | P3 | Registry fallback logs duplicate warnings when the registry lookup errors. | `resolve_via_registry` contains two identical `ui::warn(format!("registry lookup failed ..."))` calls in the same error branch. | Remove the duplicate warning. |
 
 ## One-by-one validation
 
@@ -72,7 +76,7 @@ Targeted probes also covered:
 | 30 | Explicit harness install | Pass | Explicit `-a` values are preserved in the lockfile and used for install targeting. |
 | 31 | Profile-gated skill | Pass | `--profile` is stored on the lock entry and `apply` skips machines without a matching profile. |
 | 32 | Project-scoped skill | Pass | `--project` requires a registered alias, stores it in the lockfile, and installs under that project root. |
-| 33 | Unknown skill fallback | Pass with issue | Registry fallback exists and uses the skills.sh download endpoint for missing GitHub skills; see PRI-007 for duplicate error warnings. |
+| 33 | Unknown skill fallback | Pass with issue | Registry fallback exists and uses the skills.sh download endpoint for missing GitHub skills; see PRI-006 for duplicate error warnings. |
 | 34 | OpenClaw risk gate | Pass | `Source::parse_with` rejects `openclaw/*` sources unless the explicit risk flag is set. |
 | 35 | Skill update | Pass | `skills update` compares upstream SHAs/hashes, refetches drifted snapshots, updates `tree_sha`, and leaves unchanged entries alone. |
 | 36 | Deactivated update skip | Pass | Deactivated entries are excluded from bulk updates and explicitly skipped with a warning when named. |
@@ -88,5 +92,5 @@ Targeted probes also covered:
 | 46 | Instructions import | Pass | `skills import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
 | 47 | Instructions validation | Pass | `validate` checks template identifiers against declared profiles plus reserved harness/hostname identifiers. |
 | 48 | Instructions conflict | Pass | Non-interactive apply refuses foreign instruction files; interactive apply offers skip/cancel/overwrite, and `--force` backs up then writes. |
-| 49 | Subagent add | Fail for canonical input | See PRI-006. Claude-format import works and renders native outputs, but canonical multi-harness files are not accepted by `subagents add`. |
+| 49 | Subagent add | Pass | `subagents add` imports external Claude-format Markdown, converts it into agents' internal canonical Markdown, stores lockfile metadata, and renders native harness outputs. The internal canonical format is not treated as a required external import format. |
 | 50 | Self-update | Code-validated | `upgrade` calls the updater, reports updated or already-at-latest, and refreshes the update-check cache. It was not run as a probe because it can replace the local binary. |
