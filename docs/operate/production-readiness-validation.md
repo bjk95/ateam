@@ -104,7 +104,7 @@ an external standard that third-party sources are expected to publish.
 | 43 | Skill show | Pass | `skills show` resolves the canonical skill dir and prints only `SKILL.md`, erroring if the snapshot is missing. |
 | 44 | Registry search | Pass | Non-interactive search emits pipe-friendly `agents skills add <source> --skill <name>` commands; the TTY picker still installs selected results interactively. |
 | 45 | Bulk import | Pass | Bulk import adopts eligible local skills, dedupes across harness dirs, skips managed/plugin skills, and can adopt orphan snapshots. |
-| 46 | Instructions import | Pass | `skills import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
+| 46 | Instructions import | Pass | `import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
 | 47 | Instructions validation | Pass | `validate` checks template identifiers against declared profiles plus reserved harness/hostname identifiers. |
 | 48 | Instructions conflict | Pass | Non-interactive apply refuses foreign instruction files; interactive apply offers skip/cancel/overwrite, and `--force` backs up then writes. |
 | 49 | Subagent add | Pass | `subagents add` imports external Claude-format Markdown, converts it into agents' internal canonical Markdown, stores lockfile metadata, and renders native harness outputs. The internal canonical format is not treated as a required external import format. |

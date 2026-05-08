@@ -10,7 +10,7 @@ format:
 
 - Claude Code → `~/.claude/skills/`, `~/.claude/agents/`, `~/.claude/CLAUDE.md`
 - Codex → `~/.codex/skills/`, `~/.codex/agents/`, `~/.codex/AGENTS.md`
-- OpenCode → `~/.config/opencode/skills/`, `~/.config/opencode/agent/`, `~/.config/opencode/AGENTS.md`
+- OpenCode → `~/.config/opencode/skills/`, `~/.config/opencode/agents/`, `~/.config/opencode/AGENTS.md`
 - Gemini CLI → `~/.gemini/skills/`, `~/.gemini/agents/`, `~/.gemini/GEMINI.md`
 
 Subagent frontmatter is YAML for Claude, OpenCode, and Gemini; TOML for
@@ -48,7 +48,7 @@ in sync through the git remote.
 
 - **Profiles.** Tag skills and subagents `work` or `personal` so each
   machine gets the right subset.
-- **Project scope.** Install a skill into one repo's `.claude/skills`
+- **Project scope.** Install a skill into one repo's harness-local skills dirs
   without touching globals. The same project lives at different paths on
   different machines — agents handles the alias.
 - **Soft-disable.** `agents skills deactivate` unlinks from harnesses but
