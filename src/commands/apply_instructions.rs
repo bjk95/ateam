@@ -5,10 +5,10 @@ use crate::lockfile::{InstructionsEntry, Lockfile};
 use crate::manifest::{EntryKind, Manifest};
 use crate::paths;
 use anyhow::{bail, Context, Result};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ApplyOutcome {
     pub written: usize,
     pub lockfile_dirty: bool,
@@ -28,6 +28,7 @@ pub fn apply(
     machine: &mut MachineConfig,
     prev_manifest: &Manifest,
     new_manifest: &mut Manifest,
+    harness_filter: Option<&BTreeSet<String>>,
     dry_run: bool,
     force: bool,
 ) -> Result<ApplyOutcome> {
@@ -61,7 +62,10 @@ pub fn apply(
     }
 
     let entry = lock.instructions.as_ref().unwrap().clone();
-    let tools = resolve_tools(repo_cfg, &entry);
+    let mut tools = resolve_tools(repo_cfg, &entry);
+    if let Some(filter) = harness_filter {
+        tools.retain(|harness| filter.contains(harness.id()));
+    }
 
     let template_src = instructions::read_template(repo)?;
 
@@ -301,6 +305,7 @@ mod tests {
                 machine,
                 prev,
                 new,
+                None,
                 false,
                 force,
             )

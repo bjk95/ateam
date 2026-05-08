@@ -194,36 +194,6 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 }
             }
             let link = paths::harness_skill_path(&install_root, harness, &entry.name)?;
-            if args.copy {
-                let was_managed = prev_manifest
-                    .entries
-                    .iter()
-                    .any(|e| e.path == link && matches!(e.kind, EntryKind::Copy));
-                match install::install_copy_dir(&link, &canonical, was_managed, args.force)? {
-                    install::CopyDirOutcome::Created
-                    | install::CopyDirOutcome::Replaced
-                    | install::CopyDirOutcome::AlreadyCorrect
-                    | install::CopyDirOutcome::MovedAside => {
-                        new_manifest.entries.push(prev_manifest.tracked_entry(
-                            link.clone(),
-                            EntryKind::Copy,
-                            entry.name.clone(),
-                            harness.clone(),
-                            canonical.clone(),
-                        ));
-                        materialized += 1;
-                    }
-                    install::CopyDirOutcome::Refused => {
-                        ui::warn(format!(
-                            "refused to install {} for {}: real dir at {} (rerun with --force)",
-                            entry.name,
-                            harness,
-                            paths::display_path(&link)
-                        ));
-                    }
-                }
-                continue;
-            }
             match install::install_symlink(&link, &canonical, args.force)? {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced
@@ -358,30 +328,36 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     }
 
     let home = paths::home_dir()?;
-    let instructions_step = (!args.dry_run).then(|| ui::step("checking instructions"));
-    let instructions_outcome = match apply_instructions::apply(
-        &repo,
-        &home,
-        &repo_cfg,
-        &mut updated_lock,
-        &mut machine,
-        &prev_manifest,
-        &mut new_manifest,
-        args.dry_run,
-        args.force,
-    ) {
-        Ok(outcome) => {
-            if let Some(step) = instructions_step {
-                step.finish();
+    let instructions_step =
+        (!args.dry_run && args.project.is_none()).then(|| ui::step("checking instructions"));
+    let instructions_outcome = if args.project.is_none() {
+        match apply_instructions::apply(
+            &repo,
+            &home,
+            &repo_cfg,
+            &mut updated_lock,
+            &mut machine,
+            &prev_manifest,
+            &mut new_manifest,
+            target_harnesses.as_ref(),
+            args.dry_run,
+            args.force,
+        ) {
+            Ok(outcome) => {
+                if let Some(step) = instructions_step {
+                    step.finish();
+                }
+                outcome
             }
-            outcome
-        }
-        Err(e) => {
-            if let Some(step) = instructions_step {
-                step.fail("instructions failed");
+            Err(e) => {
+                if let Some(step) = instructions_step {
+                    step.fail("instructions failed");
+                }
+                return Err(e);
             }
-            return Err(e);
         }
+    } else {
+        apply_instructions::ApplyOutcome::default()
     };
     let instructions_written = instructions_outcome.written;
     if instructions_outcome.lockfile_dirty {
@@ -393,6 +369,16 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
 
     // Removal: paths in old manifest not in new plan get unlinked.
     if !args.dry_run {
+        preserve_out_of_scope_manifest_entries(
+            &prev_manifest,
+            &mut new_manifest,
+            target_harnesses.as_ref(),
+            args.project.as_deref(),
+            args.project
+                .as_deref()
+                .and_then(|alias| machine.projects.get(alias).map(PathBuf::as_path)),
+            &updated_lock,
+        );
         let new_paths: HashSet<&Path> = new_manifest
             .entries
             .iter()
@@ -459,6 +445,77 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn preserve_out_of_scope_manifest_entries(
+    prev_manifest: &Manifest,
+    new_manifest: &mut Manifest,
+    target_harnesses: Option<&BTreeSet<String>>,
+    target_project: Option<&str>,
+    target_project_root: Option<&Path>,
+    lock: &Lockfile,
+) {
+    for prev in &prev_manifest.entries {
+        if !is_out_of_scope(
+            prev,
+            target_harnesses,
+            target_project,
+            target_project_root,
+            lock,
+        ) {
+            continue;
+        }
+        if new_manifest
+            .entries
+            .iter()
+            .any(|entry| entry.path == prev.path)
+        {
+            continue;
+        }
+        new_manifest.entries.push(prev.clone());
+    }
+}
+
+fn is_out_of_scope(
+    entry: &crate::manifest::ManifestEntry,
+    target_harnesses: Option<&BTreeSet<String>>,
+    target_project: Option<&str>,
+    target_project_root: Option<&Path>,
+    lock: &Lockfile,
+) -> bool {
+    if let Some(filter) = target_harnesses {
+        if !filter.contains(&entry.harness) {
+            return true;
+        }
+    }
+    if let Some(project) = target_project {
+        return !manifest_entry_matches_project(entry, lock, project, target_project_root);
+    }
+    false
+}
+
+fn manifest_entry_matches_project(
+    entry: &crate::manifest::ManifestEntry,
+    lock: &Lockfile,
+    project: &str,
+    project_root: Option<&Path>,
+) -> bool {
+    if let Some(entry_project) = manifest_entry_project(entry, lock) {
+        return entry_project == project;
+    }
+    project_root.is_some_and(|root| entry.path.starts_with(root))
+}
+
+fn manifest_entry_project<'a>(
+    entry: &crate::manifest::ManifestEntry,
+    lock: &'a Lockfile,
+) -> Option<&'a str> {
+    lock.find(&entry.skill)
+        .and_then(|skill| skill.project.as_deref())
+        .or_else(|| {
+            lock.find_subagent(&entry.skill)
+                .and_then(|subagent| subagent.project.as_deref())
+        })
 }
 
 fn profile_match(machine: &MachineConfig, gates: &[String]) -> bool {

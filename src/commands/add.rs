@@ -4,6 +4,7 @@ use crate::discover::{walk_package, DiscoveredSkill};
 use crate::git_sync;
 use crate::install;
 use crate::lockfile::{Lockfile, SkillEntry};
+use crate::manifest::{EntryKind, Manifest, ManifestEntry};
 use crate::paths;
 use crate::source::{github, Source};
 use crate::ui;
@@ -87,6 +88,8 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
     let agents = resolve_agents(&args, &repo_cfg);
 
     let mut lock = Lockfile::load(&repo)?;
+    let prev_manifest = Manifest::load(&repo)?;
+    let mut manifest = prev_manifest.clone();
     let mut installed: Vec<String> = Vec::new();
     let mut had_error = false;
 
@@ -100,11 +103,22 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
             &package_root,
             &install_root,
             &agents,
+            &prev_manifest,
         ) {
-            Ok((entry, linked)) => {
+            Ok((entry, linked, manifest_entries)) => {
                 lock.upsert(entry);
                 installed.push(skill.name.clone());
                 lock.write(&repo).context("writing lockfile after upsert")?;
+                for manifest_entry in manifest_entries {
+                    manifest.entries.retain(|existing| {
+                        existing.path != manifest_entry.path
+                            || existing.skill != manifest_entry.skill
+                    });
+                    manifest.entries.push(manifest_entry);
+                }
+                manifest
+                    .write(&repo)
+                    .context("writing manifest after install")?;
                 install_step.ok(format!("installed {}", skill.name));
                 for link in &linked {
                     ui::detail(format!("linked {}", paths::display_path(link)));
@@ -548,7 +562,8 @@ fn install_one(
     package_root: &Path,
     install_root: &InstallRoot,
     harnesses: &[String],
-) -> Result<(SkillEntry, Vec<PathBuf>)> {
+    prev_manifest: &Manifest,
+) -> Result<(SkillEntry, Vec<PathBuf>, Vec<ManifestEntry>)> {
     // Path of the skill's directory relative to the package root, used for
     // both lockfile recording and update-detection later.
     let rel_skill_dir = skill
@@ -557,26 +572,26 @@ fn install_one(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|_| skill.dir.clone());
 
-    let canonical = match source {
+    let source_string = source.lockfile_string();
+    let (canonical, entry_source, upstream) = match source {
         Source::Local { .. } => {
-            // For local sources whose path doesn't already point under
-            // skills/<name>/, leave the symlink target at the live source dir.
-            // For local:skills/<name>/ (the canonical author-in-repo case),
-            // skill.dir already IS skills/<name>/.
-            skill.dir.clone()
+            let repo_skill_dir = paths::local_skills_dir(repo).join(&skill.name);
+            if same_path(&skill.dir, &repo_skill_dir) {
+                (
+                    skill.dir.clone(),
+                    format!("local:skills/{}", skill.name),
+                    None,
+                )
+            } else {
+                (
+                    snapshot_skill(repo, skill)?,
+                    format!("local:skills/{}", skill.name),
+                    Some(source_string.clone()),
+                )
+            }
         }
         Source::Github { .. } | Source::Git { .. } => {
-            // Snapshot into <repo>/skills/<name>/ so the content travels with
-            // the agents-config repo via git instead of being refetched on
-            // every machine.
-            let slot = install::prepare_cache_slot(repo, &skill.name)?;
-            install::copy_dir_recursive(&skill.dir, &slot.tmp)?;
-            if let Some(repair) = crate::discover::canonicalize_skill_dir(&slot.tmp, &skill.name)? {
-                for diagnostic in repair.diagnostics {
-                    ui::warn(format!("repaired {}: {}", skill.name, diagnostic));
-                }
-            }
-            slot.commit()?
+            (snapshot_skill(repo, skill)?, source_string.clone(), None)
         }
     };
     ui::detail(format!(
@@ -600,24 +615,9 @@ fn install_one(
     };
 
     let mut linked: Vec<PathBuf> = Vec::new();
+    let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
     for harness in harnesses {
         let link = paths::harness_skill_path(&install_root_path, harness, &skill.name)?;
-        if args.copy {
-            match install::install_copy_dir(&link, &canonical, false, false)? {
-                install::CopyDirOutcome::Refused => {
-                    ui::warn(format!(
-                        "refused to install {} for {}: real dir at {} (rerun with `agents apply --copy --force`)",
-                        skill.name,
-                        harness,
-                        paths::display_path(&link)
-                    ));
-                }
-                _ => {
-                    linked.push(link);
-                }
-            }
-            continue;
-        }
         match install::install_symlink(&link, &canonical, false)? {
             install::LinkOutcome::Refused => {
                 ui::warn(format!(
@@ -628,7 +628,14 @@ fn install_one(
                 ));
             }
             _ => {
-                linked.push(link);
+                linked.push(link.clone());
+                manifest_entries.push(prev_manifest.tracked_entry(
+                    link,
+                    EntryKind::Symlink,
+                    skill.name.clone(),
+                    harness.clone(),
+                    canonical.clone(),
+                ));
             }
         }
     }
@@ -676,7 +683,7 @@ fn install_one(
         .or_else(|| crate::source::local::content_hash(&canonical).ok());
 
     let entry_path = match source {
-        Source::Local { path } => Some(path.to_string_lossy().into_owned()),
+        Source::Local { .. } => Some(format!("skills/{}", skill.name)),
         _ if skill.source_hash.is_some() => {
             // Registry-resolved skills (skills.sh blob): no upstream subpath.
             // The snapshot is canonical; we don't pretend to know where in the
@@ -694,7 +701,7 @@ fn install_one(
     Ok((
         SkillEntry {
             name: skill.name.clone(),
-            source: source.lockfile_string(),
+            source: entry_source,
             path: entry_path,
             git_ref: args.r#ref.clone(),
             tree_sha,
@@ -702,10 +709,28 @@ fn install_one(
             profiles: args.profile.clone(),
             project,
             active: true,
-            upstream: None,
+            upstream,
         },
         linked,
+        manifest_entries,
     ))
+}
+
+fn snapshot_skill(repo: &Path, skill: &DiscoveredSkill) -> Result<PathBuf> {
+    let slot = install::prepare_cache_slot(repo, &skill.name)?;
+    install::copy_dir_recursive(&skill.dir, &slot.tmp)?;
+    if let Some(repair) = crate::discover::canonicalize_skill_dir(&slot.tmp, &skill.name)? {
+        for diagnostic in repair.diagnostics {
+            ui::warn(format!("repaired {}: {}", skill.name, diagnostic));
+        }
+    }
+    slot.commit()
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    let canon_a = std::fs::canonicalize(a).unwrap_or_else(|_| a.to_path_buf());
+    let canon_b = std::fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
+    canon_a == canon_b
 }
 
 // ---------------------------------------------------------------------------
@@ -755,7 +780,6 @@ mod tests {
             profile: vec![],
             project: None,
             r#ref: None,
-            copy: false,
             dangerously_accept_openclaw_risks: false,
         }
     }
@@ -793,7 +817,6 @@ mod tests {
             profile: vec![],
             project: None,
             r#ref: None,
-            copy: false,
             dangerously_accept_openclaw_risks: false,
         }
     }
