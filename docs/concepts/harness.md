@@ -18,11 +18,11 @@ All four use the same `SKILL.md` format ([agentskills.io](https://agentskills.io
 
 ## Default-enabled set
 
-By default, all four harnesses are enabled. agents's `apply` will write instructions files and install skill symlinks for each one — even if the harness itself isn't installed on this machine.
+By default, all four harnesses are enabled. agents's `apply` will render instruction files into the agents repo and install harness symlinks for each one — even if the harness itself isn't installed on this machine.
 
 ## Managing the enabled set
 
-Use the `agents harness` subcommand to toggle harnesses on and off. The commands edit `enabled_harnesses` in `agents.toml` for you, then re-render instructions and re-install skill symlinks so the filesystem matches the new state immediately.
+Use the `agents harness` subcommand to toggle harnesses on and off. The commands edit `enabled_harnesses` in `agents.toml` for you, then re-render instructions and reconcile harness symlinks so the filesystem matches the new state immediately.
 
 ```bash
 agents harness list                  # show every harness + enabled/disabled status

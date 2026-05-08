@@ -3,7 +3,6 @@ use crate::config::RepoConfig;
 use crate::git_sync;
 use crate::instructions::{self, Harness};
 use crate::lockfile::{InstructionsEntry, Lockfile, SkillEntry};
-use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
 use crate::paths;
 use crate::source::Source;
 use crate::ui;
@@ -447,25 +446,6 @@ pub(crate) fn import_instructions(repo: &Path, home: &Path) -> Result<PathBuf> {
         lock.write(repo)?;
     }
 
-    let mut mf = Manifest::load(repo)?;
-    let now = manifest::now_unix();
-    for harness in Harness::all() {
-        let path = instructions::output_path(home, harness);
-        if !path.exists() {
-            continue;
-        }
-        mf.entries.retain(|e| e.path != path);
-        mf.entries.push(ManifestEntry {
-            path,
-            kind: EntryKind::Copy,
-            skill: "_instructions".into(),
-            harness: harness.id().into(),
-            target: template.clone(),
-            applied_at: now,
-        });
-    }
-    mf.write(repo)?;
-
     Ok(template)
 }
 
@@ -663,9 +643,8 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&template).unwrap(), "hello\n");
         let lock = Lockfile::load(fx.repo.path()).unwrap();
         assert!(lock.instructions.is_some());
-        let mf = Manifest::load(fx.repo.path()).unwrap();
-        assert_eq!(mf.entries.len(), 1);
-        assert_eq!(mf.entries[0].harness, "claude-code");
+        let mf = crate::manifest::Manifest::load(fx.repo.path()).unwrap();
+        assert!(mf.entries.is_empty());
     }
 
     #[test]
@@ -674,8 +653,8 @@ mod tests {
         fx.write_claude("same\n");
         fx.write_codex("same\n");
         fx.run_instructions().unwrap();
-        let mf = Manifest::load(fx.repo.path()).unwrap();
-        assert_eq!(mf.entries.len(), 2);
+        let mf = crate::manifest::Manifest::load(fx.repo.path()).unwrap();
+        assert!(mf.entries.is_empty());
     }
 
     #[test]

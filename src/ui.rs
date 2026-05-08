@@ -1,5 +1,6 @@
 use console::{style, Term};
 use indicatif::{ProgressBar, ProgressStyle};
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -89,6 +90,7 @@ pub fn step(msg: impl Into<String>) -> Step {
         }
     } else {
         println!("{}  {}", style("→").cyan(), msg);
+        let _ = std::io::stdout().flush();
         Step {
             inner: StepImpl::Static,
         }

@@ -194,6 +194,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 }
             }
             let link = paths::harness_skill_path(&install_root, harness, &entry.name)?;
+            remove_legacy_copy(&prev_manifest, &link)?;
             match install::install_symlink(&link, &canonical, args.force)? {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced
@@ -225,9 +226,9 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         s.finish();
     }
 
-    // Subagent render-and-write pass — canonical files in `<repo>/agents/` get
-    // rendered into each harness's native format (Claude/OpenCode/Gemini get
-    // Markdown + YAML frontmatter; Codex gets a TOML file).
+    // Subagent render-and-link pass — canonical files in `<repo>/agents/` get
+    // rendered into repo-local per-harness files, then harness paths symlink
+    // to those rendered files.
     let subagent_step = (!args.dry_run).then(|| ui::step("checking subagents"));
     for entry in &lock.subagents {
         if !entry.active {
@@ -267,13 +268,6 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             }
         };
 
-        let prev_paths: HashSet<&Path> = prev_manifest
-            .entries
-            .iter()
-            .filter(|e| matches!(e.kind, EntryKind::Copy))
-            .map(|e| e.path.as_path())
-            .collect();
-
         let harnesses = resolve_subagent_harnesses(entry, &repo_cfg);
         for harness in &harnesses {
             if let Some(filter) = &target_harnesses {
@@ -289,30 +283,38 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             let Some(rendered) = crate::subagent::render_for_harness(&canonical, harness)? else {
                 continue;
             };
+            let rendered_path = crate::subagent::rendered_path(&repo, harness, &entry.name);
 
             if args.dry_run {
                 ui::detail(format!(
-                    "{} ← {}",
+                    "{} → {}",
                     paths::display_path(&out_path),
-                    paths::display_path(&snapshot)
+                    paths::display_path(&rendered_path)
                 ));
                 materialized += 1;
                 continue;
             }
 
-            let was_managed = prev_paths.contains(out_path.as_path());
-            match install::install_copy(&out_path, &rendered, was_managed, args.force)? {
-                install::CopyOutcome::Written | install::CopyOutcome::MovedAside { .. } => {
+            install::write_atomically(&rendered_path, &rendered)
+                .with_context(|| format!("writing {}", rendered_path.display()))?;
+            remove_legacy_copy(&prev_manifest, &out_path)?;
+
+            match install::install_symlink(&out_path, &rendered_path, args.force)? {
+                install::LinkOutcome::Created
+                | install::LinkOutcome::Replaced
+                | install::LinkOutcome::AlreadyCorrect
+                | install::LinkOutcome::MovedAside
+                | install::LinkOutcome::AutoHealed => {
                     new_manifest.entries.push(prev_manifest.tracked_entry(
                         out_path.clone(),
-                        EntryKind::Copy,
+                        EntryKind::Symlink,
                         entry.name.clone(),
                         harness.clone(),
-                        snapshot.clone(),
+                        rendered_path.clone(),
                     ));
                     materialized += 1;
                 }
-                install::CopyOutcome::Refused => {
+                install::LinkOutcome::Refused => {
                     ui::warn(format!(
                         "refused to install subagent {} for {}: real file at {} (rerun with --force)",
                         entry.name,
@@ -415,11 +417,13 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         updated_lock.write(&repo)?;
     }
 
-    if !args.dry_run && git_sync::enabled(no_sync) && lockfile_dirty {
-        let msg = git_sync::msg_apply(materialized);
-        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
-            ui::warn(format!("auto-sync failed: {:#}", e));
-            ui::detail("local change saved; rerun a mutating command to retry");
+    if !args.dry_run && git_sync::enabled(no_sync) {
+        if lockfile_dirty || materialized > 0 || instructions_written > 0 {
+            let msg = git_sync::msg_apply(materialized);
+            if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+                ui::warn(format!("auto-sync failed: {:#}", e));
+                ui::detail("local change saved; rerun a mutating command to retry");
+            }
         }
     }
 
@@ -516,6 +520,23 @@ fn manifest_entry_project<'a>(
             lock.find_subagent(&entry.skill)
                 .and_then(|subagent| subagent.project.as_deref())
         })
+}
+
+fn remove_legacy_copy(prev_manifest: &Manifest, path: &Path) -> Result<()> {
+    let was_copy = prev_manifest
+        .entries
+        .iter()
+        .any(|e| e.path == path && matches!(e.kind, EntryKind::Copy));
+    if was_copy {
+        if std::fs::symlink_metadata(path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        install::uninstall_copy(path)?;
+    }
+    Ok(())
 }
 
 fn profile_match(machine: &MachineConfig, gates: &[String]) -> bool {

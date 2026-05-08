@@ -2,8 +2,8 @@
 //! `<repo>/agents/<name>.md` get rendered into each harness's native format
 //! by `apply`. Codex needs `.toml`; Claude/OpenCode/Gemini take Markdown +
 //! YAML frontmatter with different field name spellings. A single symlink
-//! can't serve all four, so subagent install is render-and-write — same as
-//! the existing instructions pipeline.
+//! can't serve all four, so subagent install renders per-harness files into
+//! the agents repo and symlinks harness paths to those rendered files.
 
 use crate::cli::{SubagentAddArgs, SubagentRemoveArgs};
 use crate::config::RepoConfig;
@@ -179,23 +179,27 @@ fn install_one(
         let Some(rendered) = subagent::render_for_harness(&canonical, harness)? else {
             continue;
         };
-        let was_managed = prev
-            .entries
-            .iter()
-            .any(|e| e.path == out_path && matches!(e.kind, EntryKind::Copy));
-        match install::install_copy(&out_path, &rendered, was_managed, false)? {
-            install::CopyOutcome::Written | install::CopyOutcome::MovedAside { .. } => {
+        let rendered_path = subagent::rendered_path(repo, harness, &target.name);
+        install::write_atomically(&rendered_path, &rendered)
+            .with_context(|| format!("writing {}", rendered_path.display()))?;
+        remove_legacy_copy(&prev, &out_path)?;
+        match install::install_symlink(&out_path, &rendered_path, false)? {
+            install::LinkOutcome::Created
+            | install::LinkOutcome::Replaced
+            | install::LinkOutcome::AlreadyCorrect
+            | install::LinkOutcome::MovedAside
+            | install::LinkOutcome::AutoHealed => {
                 manifest.entries.push(ManifestEntry {
                     path: out_path.clone(),
-                    kind: EntryKind::Copy,
+                    kind: EntryKind::Symlink,
                     skill: target.name.clone(),
                     harness: harness.clone(),
-                    target: snapshot.clone(),
+                    target: rendered_path,
                     applied_at: manifest::now_unix(),
                 });
-                ui::detail(format!("wrote {}", paths::display_path(&out_path)));
+                ui::detail(format!("linked {}", paths::display_path(&out_path)));
             }
-            install::CopyOutcome::Refused => {
+            install::LinkOutcome::Refused => {
                 ui::warn(format!(
                     "refused: real file at {} (use `agents apply --force` to overwrite)",
                     paths::display_path(&out_path)
@@ -224,6 +228,23 @@ fn install_one(
         active: true,
         upstream: None,
     })
+}
+
+fn remove_legacy_copy(prev_manifest: &Manifest, path: &Path) -> Result<()> {
+    let was_copy = prev_manifest
+        .entries
+        .iter()
+        .any(|e| e.path == path && matches!(e.kind, EntryKind::Copy));
+    if was_copy {
+        if std::fs::symlink_metadata(path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        install::uninstall_copy(path)?;
+    }
+    Ok(())
 }
 
 /// Parse a Claude-format subagent file (YAML frontmatter + body) into the
@@ -412,16 +433,35 @@ pub fn remove(args: SubagentRemoveArgs, no_sync: bool) -> Result<()> {
 
 fn remove_one(repo: &Path, name: &str, manifest: &mut Manifest) -> Result<()> {
     let snapshot = paths::local_subagent_path(repo, name);
+    let rendered_root = subagent::rendered_root(repo);
 
     // Uninstall every rendered file agents wrote for this subagent.
     let to_remove: Vec<PathBuf> = manifest
         .entries
         .iter()
-        .filter(|e| e.target == snapshot && matches!(e.kind, EntryKind::Copy))
+        .filter(|e| {
+            e.skill == name && (e.target == snapshot || e.target.starts_with(&rendered_root))
+        })
         .map(|e| e.path.clone())
         .collect();
     for path in &to_remove {
-        let _ = install::uninstall_copy(path);
+        let result = match manifest
+            .entries
+            .iter()
+            .find(|e| e.path == *path)
+            .map(|e| e.kind)
+        {
+            Some(EntryKind::Copy) => install::uninstall_copy(path),
+            _ => install::uninstall_path(path),
+        };
+        let _ = result;
+    }
+    for entry in manifest
+        .entries
+        .iter()
+        .filter(|e| e.skill == name && e.target.starts_with(&rendered_root) && e.target.exists())
+    {
+        let _ = std::fs::remove_file(&entry.target);
     }
     manifest.entries.retain(|e| !to_remove.contains(&e.path));
 

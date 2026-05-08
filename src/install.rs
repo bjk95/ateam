@@ -233,52 +233,7 @@ pub fn uninstall_path(path: &Path) -> Result<()> {
     );
 }
 
-/// Outcome of trying to write a file copy.
-#[derive(Debug)]
-pub enum CopyOutcome {
-    /// File was written (either fresh or replacing a previously-managed file).
-    Written,
-    /// Existing pre-existing file was moved aside before writing.
-    MovedAside { backup: PathBuf },
-    /// Refused because a foreign file exists at the path.
-    Refused,
-}
-
-/// Atomically write `content` to `path`. If a file exists at `path` and
-/// `was_managed` is false (meaning agents didn't write it last apply), refuse
-/// unless `force` is set (in which case the existing file is moved aside).
-pub fn install_copy(
-    path: &Path,
-    content: &str,
-    was_managed: bool,
-    force: bool,
-) -> Result<CopyOutcome> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
-    }
-
-    let exists = std::fs::symlink_metadata(path).is_ok();
-    let mut moved: Option<PathBuf> = None;
-    if exists && !was_managed {
-        if !force {
-            return Ok(CopyOutcome::Refused);
-        }
-        let backup = backup_path(path);
-        std::fs::rename(path, &backup)
-            .with_context(|| format!("moving aside {} → {}", path.display(), backup.display()))?;
-        moved = Some(backup);
-    }
-
-    write_atomically(path, content)?;
-
-    Ok(match moved {
-        Some(backup) => CopyOutcome::MovedAside { backup },
-        None => CopyOutcome::Written,
-    })
-}
-
-fn write_atomically(path: &Path, content: &str) -> Result<()> {
+pub fn write_atomically(path: &Path, content: &str) -> Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     let suffix: u64 = rand::random();
@@ -295,9 +250,9 @@ fn write_atomically(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
-/// Remove a regular file or directory agents previously wrote via
-/// `install_copy`. No-op if absent. Refuses to remove symlinks (those go
-/// through `uninstall_path`) or other unexpected types.
+/// Remove a regular file or directory agents wrote before symlink-only
+/// installs. No-op if absent. Refuses to remove symlinks (those go through
+/// `uninstall_path`) or other unexpected types.
 pub fn uninstall_copy(path: &Path) -> Result<()> {
     let meta = match std::fs::symlink_metadata(path) {
         Ok(m) => m,

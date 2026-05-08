@@ -1,12 +1,12 @@
 use crate::config::{MachineConfig, RepoConfig};
-use crate::install::{self, CopyOutcome};
+use crate::install::{self, LinkOutcome};
 use crate::instructions::{self, Harness};
 use crate::lockfile::{InstructionsEntry, Lockfile};
 use crate::manifest::{EntryKind, Manifest};
 use crate::paths;
 use anyhow::{bail, Context, Result};
-use std::collections::{BTreeSet, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::BTreeSet;
+use std::path::Path;
 
 #[derive(Debug, Default)]
 pub struct ApplyOutcome {
@@ -15,7 +15,7 @@ pub struct ApplyOutcome {
     pub instructions_skip_set: bool,
 }
 
-/// Plan + execute the instructions render-and-write pass.
+/// Plan + execute the instructions render-and-link pass.
 ///
 /// Returns the count of files written and whether the lockfile or machine.toml
 /// need to be persisted by the caller.
@@ -69,13 +69,6 @@ pub fn apply(
 
     let template_src = instructions::read_template(repo)?;
 
-    let prev_paths: HashSet<PathBuf> = prev_manifest
-        .entries
-        .iter()
-        .filter(|e| matches!(e.kind, EntryKind::Copy))
-        .map(|e| e.path.clone())
-        .collect();
-
     let hostname = instructions::current_hostname();
 
     for harness in tools {
@@ -83,49 +76,51 @@ pub fn apply(
         let ctx = instructions::build_context(repo_cfg, machine, &hostname, harness);
         let rendered = instructions::render(&template_src, &ctx)?;
         let out = instructions::output_path(home, harness);
+        let rendered_path = instructions::rendered_path(repo, harness);
         let out_display = paths::display_path(&out);
-        let was_managed = prev_paths.contains(&out);
 
         if dry_run {
             crate::ui::plain(format!(
-                "would write {} ({} bytes) [{}]",
+                "would link {} ({} bytes) [{}]",
                 out_display,
                 rendered.len(),
                 harness.id()
             ));
             new_manifest.entries.push(prev_manifest.tracked_entry(
                 out,
-                EntryKind::Copy,
+                EntryKind::Symlink,
                 "_instructions".into(),
                 harness.id().into(),
-                template_path.clone(),
+                rendered_path,
             ));
             continue;
         }
 
-        let result = install::install_copy(&out, &rendered, was_managed, force)
-            .with_context(|| format!("writing {}", out.display()))?;
+        install::write_atomically(&rendered_path, &rendered)
+            .with_context(|| format!("writing {}", rendered_path.display()))?;
+
+        remove_legacy_copy(prev_manifest, &out)?;
+
+        let result = install::install_symlink(&out, &rendered_path, force)
+            .with_context(|| format!("linking {}", out.display()))?;
 
         match result {
-            CopyOutcome::Written | CopyOutcome::MovedAside { .. } => {
-                if let CopyOutcome::MovedAside { backup } = &result {
-                    crate::ui::warn(format!(
-                        "moved aside existing {} → {}",
-                        out_display,
-                        backup.display()
-                    ));
-                }
+            LinkOutcome::Created
+            | LinkOutcome::Replaced
+            | LinkOutcome::AlreadyCorrect
+            | LinkOutcome::MovedAside
+            | LinkOutcome::AutoHealed => {
                 new_manifest.entries.push(prev_manifest.tracked_entry(
                     out,
-                    EntryKind::Copy,
+                    EntryKind::Symlink,
                     "_instructions".into(),
                     harness.id().into(),
-                    template_path.clone(),
+                    rendered_path,
                 ));
                 outcome.written += 1;
-                crate::ui::detail(format!("wrote {}", out_display));
+                crate::ui::detail(format!("linked {}", out_display));
             }
-            CopyOutcome::Refused => {
+            LinkOutcome::Refused => {
                 let choice = prompt_collision(&out)?;
                 match choice {
                     CollisionChoice::Skip => {
@@ -144,24 +139,17 @@ pub fn apply(
                         return Ok(outcome);
                     }
                     CollisionChoice::Overwrite => {
-                        let forced = install::install_copy(&out, &rendered, was_managed, true)
-                            .with_context(|| format!("writing {}", out.display()))?;
-                        if let CopyOutcome::MovedAside { backup } = &forced {
-                            crate::ui::warn(format!(
-                                "moved aside existing {} → {}",
-                                out_display,
-                                backup.display()
-                            ));
-                        }
+                        install::install_symlink(&out, &rendered_path, true)
+                            .with_context(|| format!("linking {}", out.display()))?;
                         new_manifest.entries.push(prev_manifest.tracked_entry(
                             out,
-                            EntryKind::Copy,
+                            EntryKind::Symlink,
                             "_instructions".into(),
                             harness.id().into(),
-                            template_path.clone(),
+                            rendered_path,
                         ));
                         outcome.written += 1;
-                        crate::ui::detail(format!("wrote {}", out_display));
+                        crate::ui::detail(format!("linked {}", out_display));
                     }
                 }
             }
@@ -169,6 +157,23 @@ pub fn apply(
     }
 
     Ok(outcome)
+}
+
+fn remove_legacy_copy(prev_manifest: &Manifest, path: &Path) -> Result<()> {
+    let was_copy = prev_manifest
+        .entries
+        .iter()
+        .any(|e| e.path == path && matches!(e.kind, EntryKind::Copy));
+    if was_copy {
+        if std::fs::symlink_metadata(path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        install::uninstall_copy(path)?;
+    }
+    Ok(())
 }
 
 pub fn resolve_tools(repo_cfg: &RepoConfig, entry: &InstructionsEntry) -> Vec<Harness> {
@@ -350,6 +355,14 @@ mod tests {
         assert!(claude.contains("WORK"), "got: {}", claude);
         assert!(!claude.contains("HOME"));
         assert_eq!(claude, codex, "no tool branching → identical content");
+        assert!(std::fs::symlink_metadata(fx.output_path(Harness::CLAUDE))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            std::fs::read_link(fx.output_path(Harness::CLAUDE)).unwrap(),
+            instructions::rendered_path(fx.repo.path(), Harness::CLAUDE)
+        );
     }
 
     #[test]
