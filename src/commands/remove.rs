@@ -2,7 +2,7 @@ use crate::cli::RemoveArgs;
 use crate::git_sync;
 use crate::install;
 use crate::lockfile::{Lockfile, SkillEntry};
-use crate::manifest::Manifest;
+use crate::manifest::{EntryKind, Manifest};
 use crate::paths;
 use crate::ui;
 use anyhow::{bail, Result};
@@ -155,13 +155,17 @@ fn remove_one(repo: &Path, name: &str) -> Result<()> {
         .entries
         .iter()
         .filter(|m| m.skill == name)
-        .map(|m| m.path.clone())
+        .cloned()
         .collect();
-    for path in &to_remove {
-        if let Err(e) = install::uninstall_path(path) {
+    for entry in &to_remove {
+        let result = match entry.kind {
+            EntryKind::Symlink => install::uninstall_path(&entry.path),
+            EntryKind::Copy => install::uninstall_copy(&entry.path),
+        };
+        if let Err(e) = result {
             ui::warn(format!(
                 "couldn't remove {}: {:#}",
-                paths::display_path(path),
+                paths::display_path(&entry.path),
                 e
             ));
         }

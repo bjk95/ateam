@@ -44,7 +44,10 @@ pub fn run(args: FindArgs, no_sync: bool) -> Result<()> {
                 "{}",
                 style("Tip: if running in a coding agent, follow these steps:").dim()
             ));
-            ui::plain(format!("{}", style("  1) agents skills find <query>").dim()));
+            ui::plain(format!(
+                "{}",
+                style("  1) agents skills find <query>").dim()
+            ));
             ui::plain(format!(
                 "{}",
                 style("  2) agents skills add <owner/repo> --skill <name>").dim()
@@ -88,33 +91,20 @@ fn run_non_interactive(query: &str) -> Result<()> {
         return Ok(());
     }
 
-    ui::plain(format!(
-        "{} npx skills add <owner/repo@skill>",
-        style("Install with").dim()
-    ));
-    ui::plain("");
-
     for skill in skills.iter().take(6) {
-        let pkg = if skill.source.is_empty() {
-            &skill.id
-        } else {
-            &skill.source
-        };
-        let installs_str = format_installs(skill.installs);
-        let installs_part = if installs_str.is_empty() {
-            String::new()
-        } else {
-            format!(" {}", style(installs_str).cyan())
-        };
-        ui::plain(format!("{}@{}{}", pkg, skill.name, installs_part));
-        ui::plain(format!(
-            "{}",
-            style(format!("└ https://skills.sh/{}", skill.id)).dim()
-        ));
-        ui::plain("");
+        ui::plain(install_command(skill));
     }
 
     Ok(())
+}
+
+fn install_command(skill: &SearchSkill) -> String {
+    let pkg = if skill.source.is_empty() {
+        &skill.id
+    } else {
+        &skill.source
+    };
+    format!("agents skills add {} --skill {}", pkg, skill.name)
 }
 
 fn install_selected(skill: SearchSkill, no_sync: bool) -> Result<()> {
@@ -521,6 +511,34 @@ mod tests {
     #[test]
     fn format_installs_million_with_decimal() {
         assert_eq!(format_installs(1_500_000), "1.5M installs");
+    }
+
+    #[test]
+    fn non_interactive_result_formats_agents_install_command() {
+        let skill = SearchSkill {
+            id: "vercel-labs/agent-skills/deploy-to-vercel".into(),
+            name: "deploy-to-vercel".into(),
+            installs: 42,
+            source: "vercel-labs/agent-skills".into(),
+        };
+        assert_eq!(
+            install_command(&skill),
+            "agents skills add vercel-labs/agent-skills --skill deploy-to-vercel"
+        );
+    }
+
+    #[test]
+    fn install_command_falls_back_to_registry_id_when_source_missing() {
+        let skill = SearchSkill {
+            id: "owner/repo/example".into(),
+            name: "example".into(),
+            installs: 0,
+            source: String::new(),
+        };
+        assert_eq!(
+            install_command(&skill),
+            "agents skills add owner/repo/example --skill example"
+        );
     }
 
     #[test]

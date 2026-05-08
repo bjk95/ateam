@@ -1,3 +1,4 @@
+use crate::ui;
 use anyhow::{anyhow, Result};
 use axoupdater::{AxoUpdater, AxoupdateError, ReleaseSource, ReleaseSourceType, Version};
 use std::path::{Path, PathBuf};
@@ -107,13 +108,16 @@ pub(crate) fn maybe_check() {
         }
         match run_update(false) {
             Ok(Some((from, to))) => {
-                eprintln!("agents: updated {} → {}", from, to);
+                if !ui::is_quiet() {
+                    eprintln!("agents: updated {} → {}", from, to);
+                }
                 touch_cache(&cache)?;
             }
             Ok(None) => {
                 touch_cache(&cache)?;
             }
             Err(_) => {
+                ui::detail("update check skipped; network, rate-limit, or permission failure");
                 // network / rate-limit / permission — leave cache untouched
                 // so the next invocation retries.
             }
@@ -123,9 +127,18 @@ pub(crate) fn maybe_check() {
 }
 
 pub(crate) fn force_upgrade() -> Result<()> {
-    match run_update(true)? {
-        Some((from, to)) => println!("agents: updated {} → {}", from, to),
-        None => println!("agents: already at latest ({})", env!("CARGO_PKG_VERSION")),
+    let step = ui::step("checking for updates");
+    match run_update(true) {
+        Ok(Some((from, to))) => {
+            step.ok(format!("updated {} → {}", from, to));
+        }
+        Ok(None) => {
+            step.ok(format!("already at latest ({})", env!("CARGO_PKG_VERSION")));
+        }
+        Err(e) => {
+            step.fail("upgrade failed");
+            return Err(e);
+        }
     }
     if let Ok(cache) = cache_path() {
         let _ = touch_cache(&cache);

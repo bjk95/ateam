@@ -128,7 +128,8 @@ agents skills update --project foo  # only entries tagged with project alias `fo
 
 ## `agents skills remove`
 
-Delete one or more skills from the lockfile and uninstall their symlinks. If
+Delete one or more skills from the lockfile and uninstall their managed harness
+targets, whether they were installed as symlinks or copies. If
 any name isn't in the lockfile (within the selected scope), nothing is removed
 and the command errors.
 
@@ -169,8 +170,8 @@ remove them yourself if you want them gone.
 ## `agents skills deactivate` / `agents skills activate`
 
 Soft-disable a skill without losing its lockfile entry. Deactivating immediately
-unlinks the skill from `~/.claude/skills/` and `~/.codex/skills/`; activating
-re-materializes it.
+removes its managed harness targets, whether they were installed as symlinks or
+copies; activating re-materializes it.
 
 ```bash
 agents skills deactivate <name>
@@ -269,9 +270,9 @@ agents skills find deploy vercel     # non-interactive: print matches and exit
 agents skills find                   # interactive picker (TTY only)
 ```
 
-Pipe-friendly. The non-interactive form prints `owner/repo --skill <name>` lines
-you can feed straight into `agents skills add`. Run from a non-TTY shell with no
-query and agents prints a two-step hint instead of opening a picker.
+Pipe-friendly. The non-interactive form prints complete
+`agents skills add <source> --skill <name>` commands. Run from a non-TTY shell
+with no query and agents prints a two-step hint instead of opening a picker.
 
 ## `agents import`
 
@@ -313,10 +314,6 @@ agents **renders** the canonical into each harness's native format:
 `~/.claude/agents/<name>.md` (Markdown), `~/.codex/agents/<name>.toml` (TOML),
 `~/.config/opencode/agents/<name>.md`, `~/.gemini/agents/<name>.md`.
 
-See [Lockfile format → Subagents](./lockfile.md#subagents) for the canonical
-schema (universal `name`/`description` + per-harness `model.*`/`effort.*` +
-shared `skills`/`color`).
-
 ```bash
 agents subagents add <source> [--subagent <name>]... [--path <file>] [-a <harness>]... [--ref <ref>] [--profile <name>]... [-y]
 agents subagents remove <name>... [-y]
@@ -331,6 +328,9 @@ shared `skills`/`color`).
 
 `<source>` is the same set of forms as `skills add`: `owner/repo`,
 `https://...`, `git@...`, or a local path (file or directory).
+Imported subagent files use the supported external import format, currently
+Claude-compatible Markdown frontmatter. Agents then stores the subagent in its
+own canonical multi-harness format before rendering native harness outputs.
 
 | Flag | Behavior |
 |---|---|

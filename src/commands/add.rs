@@ -26,17 +26,39 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
 
     ui::diamond(format!("Source: {}", args.source));
 
-    // Fetch the package into a tmp working dir so we can discover its skills.
     let work_dir = tempdir(&repo)?;
-    let package_root = fetch_package(&source, args.r#ref.as_deref(), &work_dir.path)?;
-    ui::diamond("Repository cloned");
-    let mut discovered = walk_package(&package_root)
-        .with_context(|| format!("scanning package at {}", package_root.display()))?;
-    ui::diamond(format!(
-        "Found {} skill{}",
-        discovered.len(),
-        if discovered.len() == 1 { "" } else { "s" }
-    ));
+    let package_root = {
+        let step = ui::step(fetch_message(&source));
+        match fetch_package(&source, args.r#ref.as_deref(), &work_dir.path) {
+            Ok(path) => {
+                step.ok("source ready");
+                path
+            }
+            Err(e) => {
+                step.fail("source fetch failed");
+                return Err(e);
+            }
+        }
+    };
+    let mut discovered = {
+        let step = ui::step("scanning source for skills");
+        match walk_package(&package_root)
+            .with_context(|| format!("scanning package at {}", package_root.display()))
+        {
+            Ok(skills) => {
+                step.ok(format!(
+                    "found {} skill{}",
+                    skills.len(),
+                    if skills.len() == 1 { "" } else { "s" }
+                ));
+                skills
+            }
+            Err(e) => {
+                step.fail("skill scan failed");
+                return Err(e);
+            }
+        }
+    };
 
     if args.list {
         print_listing(&discovered);
@@ -46,7 +68,12 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
     // Registry fallback: for any --skill <name> not in the cloned tree, consult
     // skills.sh's blob endpoint. Covers skills that have been renamed or moved
     // upstream but are still served from the registry's snapshot cache.
+    let registry_step = needs_registry_lookup(&source, &args, &discovered)
+        .then(|| ui::step("checking registry fallback"));
     resolve_via_registry(&source, &args, &package_root, &mut discovered);
+    if let Some(step) = registry_step {
+        step.ok("registry fallback checked");
+    }
 
     ui::detail(format!("source: {}", source.lockfile_string()));
 
@@ -64,6 +91,7 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
     let mut had_error = false;
 
     for skill in &selection {
+        let install_step = ui::step(format!("installing {}", skill.name));
         match install_one(
             &repo,
             &source,
@@ -76,16 +104,15 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
             Ok((entry, linked)) => {
                 lock.upsert(entry);
                 installed.push(skill.name.clone());
-                lock.write(&repo)
-                    .context("writing lockfile after upsert")?;
-                ui::ok(format!("installed {}", skill.name));
+                lock.write(&repo).context("writing lockfile after upsert")?;
+                install_step.ok(format!("installed {}", skill.name));
                 for link in &linked {
                     ui::detail(format!("linked {}", paths::display_path(link)));
                 }
             }
             Err(e) => {
                 had_error = true;
-                ui::fail(format!("install {} — {:#}", skill.name, e));
+                install_step.fail(format!("install {} — {:#}", skill.name, e));
             }
         }
     }
@@ -106,6 +133,14 @@ pub fn run(mut args: AddArgs, no_sync: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn fetch_message(source: &Source) -> String {
+    match source {
+        Source::Github { owner, repo } => format!("fetching {}/{}", owner, repo),
+        Source::Git { url } => format!("cloning {}", url),
+        Source::Local { path } => format!("reading {}", paths::display_path(path)),
+    }
 }
 
 fn fetch_package(source: &Source, git_ref: Option<&str>, dest: &Path) -> Result<PathBuf> {
@@ -138,6 +173,21 @@ fn fetch_package(source: &Source, git_ref: Option<&str>, dest: &Path) -> Result<
             Ok(abs)
         }
     }
+}
+
+fn needs_registry_lookup(source: &Source, args: &AddArgs, discovered: &[DiscoveredSkill]) -> bool {
+    if !matches!(source, Source::Github { .. }) {
+        return false;
+    }
+    if args.all || args.skill.is_empty() || args.skill.iter().any(|s| s == "*") {
+        return false;
+    }
+    let found_names: HashSet<&str> = discovered.iter().map(|s| s.name.as_str()).collect();
+    args.skill.iter().any(|raw| {
+        crate::lockfile::normalize_skill_name(raw)
+            .map(|name| !found_names.contains(name.as_str()))
+            .unwrap_or(false)
+    })
 }
 
 // Vercel parity: --all is a triple-flag override (skill='*', agent='*', -y).
@@ -173,8 +223,7 @@ fn pick_skills<'a>(
     discovered: &'a [DiscoveredSkill],
     args: &AddArgs,
 ) -> Result<Vec<&'a DiscoveredSkill>> {
-    let want_all = args.all
-        || args.skill.iter().any(|s| s == "*");
+    let want_all = args.all || args.skill.iter().any(|s| s == "*");
     if want_all {
         return Ok(discovered.iter().collect());
     }
@@ -197,7 +246,10 @@ fn pick_skills<'a>(
     }
 
     let found_names: HashSet<&str> = out.iter().map(|s| s.name.as_str()).collect();
-    let missing: Vec<&String> = wanted.iter().filter(|w| !found_names.contains(w.as_str())).collect();
+    let missing: Vec<&String> = wanted
+        .iter()
+        .filter(|w| !found_names.contains(w.as_str()))
+        .collect();
     if !missing.is_empty() {
         let available: Vec<&str> = discovered.iter().map(|s| s.name.as_str()).collect();
         for name in &missing {
@@ -258,14 +310,20 @@ fn resolve_via_registry(
             Ok(Some(d)) => d,
             Ok(None) => continue,
             Err(e) => {
-                ui::warn(format!("registry lookup failed for `{}`: {:#}", normalized, e));
+                ui::warn(format!(
+                    "registry lookup failed for `{}`: {:#}",
+                    normalized, e
+                ));
                 continue;
             }
         };
 
         let skill_dir = package_root.join(&normalized);
         if let Err(e) = std::fs::create_dir_all(&skill_dir) {
-            ui::warn(format!("registry write failed for `{}`: {:#}", normalized, e));
+            ui::warn(format!(
+                "registry write failed for `{}`: {:#}",
+                normalized, e
+            ));
             continue;
         }
         let mut wrote_skill_md = false;
@@ -287,7 +345,10 @@ fn resolve_via_registry(
             }
         }
         if let Some(e) = write_err {
-            ui::warn(format!("registry write failed for `{}`: {:#}", normalized, e));
+            ui::warn(format!(
+                "registry write failed for `{}`: {:#}",
+                normalized, e
+            ));
             continue;
         }
         if !wrote_skill_md {
@@ -363,10 +424,12 @@ fn resolve_install_root(
     repo: &Path,
 ) -> Result<InstallRoot> {
     if let Some(alias) = &args.project {
-        let path = machine
-            .projects
-            .get(alias)
-            .ok_or_else(|| anyhow!("project alias `{}` not registered (run `agents project register`)", alias))?;
+        let path = machine.projects.get(alias).ok_or_else(|| {
+            anyhow!(
+                "project alias `{}` not registered (run `agents project register`)",
+                alias
+            )
+        })?;
         return Ok(InstallRoot::Project {
             alias: alias.clone(),
             path: path.clone(),
@@ -508,13 +571,17 @@ fn install_one(
             slot.commit()?
         }
     };
-    ui::detail(format!("snapshotted to {}", paths::display_path(&canonical)));
+    ui::detail(format!(
+        "snapshotted to {}",
+        paths::display_path(&canonical)
+    ));
 
-    let harness_list: Vec<String> = if args.harnesses.is_empty() || args.harnesses.iter().any(|a| a == "*") {
-        vec!["*".into()]
-    } else {
-        args.harnesses.clone()
-    };
+    let harness_list: Vec<String> =
+        if args.harnesses.is_empty() || args.harnesses.iter().any(|a| a == "*") {
+            vec!["*".into()]
+        } else {
+            args.harnesses.clone()
+        };
 
     // For now, install to local-machine paths only. `apply` does the same
     // walk for everything in the lockfile; `add` runs apply-equivalent for
@@ -572,7 +639,13 @@ fn install_one(
                     .clone()
                     .unwrap_or_else(|| github::default_branch(owner, r));
                 let commit_sha = github::resolve_ref(owner, r, &git_ref).unwrap_or_else(|e| {
-                    tracing::warn!("could not resolve ref for {}/{}@{}: {}", owner, r, git_ref, e);
+                    tracing::warn!(
+                        "could not resolve ref for {}/{}@{}: {}",
+                        owner,
+                        r,
+                        git_ref,
+                        e
+                    );
                     String::new()
                 });
                 if commit_sha.is_empty() {
@@ -586,7 +659,9 @@ fn install_one(
             }
             Source::Git { url } => {
                 let git_ref = args.r#ref.clone().unwrap_or_else(|| "HEAD".into());
-                crate::source::git::ls_remote_sha(url, &git_ref).ok().flatten()
+                crate::source::git::ls_remote_sha(url, &git_ref)
+                    .ok()
+                    .flatten()
             }
             Source::Local { .. } => None,
         })
@@ -640,12 +715,10 @@ impl Drop for TempDir {
 
 fn tempdir(repo: &Path) -> Result<TempDir> {
     let root = paths::tmp_dir(repo);
-    std::fs::create_dir_all(&root)
-        .with_context(|| format!("creating {}", root.display()))?;
+    std::fs::create_dir_all(&root).with_context(|| format!("creating {}", root.display()))?;
     let suffix: u64 = rand::random();
     let p = root.join(format!("fetch-{:016x}", suffix));
-    std::fs::create_dir_all(&p)
-        .with_context(|| format!("creating {}", p.display()))?;
+    std::fs::create_dir_all(&p).with_context(|| format!("creating {}", p.display()))?;
     Ok(TempDir { path: p })
 }
 

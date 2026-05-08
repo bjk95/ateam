@@ -42,17 +42,54 @@ impl Manifest {
 
     pub fn write(&self, repo: &Path) -> Result<()> {
         let path = crate::paths::manifest_file(repo);
+        let body = self.to_toml()?;
+        if std::fs::read_to_string(&path).ok().as_deref() == Some(body.as_str()) {
+            return Ok(());
+        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("creating {}", parent.display()))?;
         }
-        let body = if self.entries.is_empty() {
-            "# agents manifest — managed by `agents apply`\n".to_string()
-        } else {
-            toml::to_string_pretty(self).context("serializing manifest")?
-        };
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
+    }
+
+    fn to_toml(&self) -> Result<String> {
+        if self.entries.is_empty() {
+            Ok("# agents manifest — managed by `agents apply`\n".to_string())
+        } else {
+            toml::to_string_pretty(self).context("serializing manifest")
+        }
+    }
+
+    pub fn tracked_entry(
+        &self,
+        path: PathBuf,
+        kind: EntryKind,
+        skill: String,
+        harness: String,
+        target: PathBuf,
+    ) -> ManifestEntry {
+        let applied_at = self
+            .entries
+            .iter()
+            .find(|entry| {
+                entry.path == path
+                    && entry.kind == kind
+                    && entry.skill == skill
+                    && entry.harness == harness
+                    && entry.target == target
+            })
+            .map(|entry| entry.applied_at)
+            .unwrap_or_else(now_unix);
+        ManifestEntry {
+            path,
+            kind,
+            skill,
+            harness,
+            target,
+            applied_at,
+        }
     }
 }
 

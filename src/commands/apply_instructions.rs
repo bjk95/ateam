@@ -2,7 +2,7 @@ use crate::config::{MachineConfig, RepoConfig};
 use crate::install::{self, CopyOutcome};
 use crate::instructions::{self, Harness};
 use crate::lockfile::{InstructionsEntry, Lockfile};
-use crate::manifest::{self, EntryKind, Manifest, ManifestEntry};
+use crate::manifest::{EntryKind, Manifest};
 use crate::paths;
 use anyhow::{bail, Context, Result};
 use std::collections::HashSet;
@@ -74,26 +74,27 @@ pub fn apply(
     let hostname = instructions::current_hostname();
 
     for harness in tools {
+        crate::ui::detail(format!("rendering instructions for {}", harness.id()));
         let ctx = instructions::build_context(repo_cfg, machine, &hostname, harness);
         let rendered = instructions::render(&template_src, &ctx)?;
         let out = instructions::output_path(home, harness);
+        let out_display = paths::display_path(&out);
         let was_managed = prev_paths.contains(&out);
 
         if dry_run {
-            println!(
+            crate::ui::plain(format!(
                 "would write {} ({} bytes) [{}]",
-                out.display(),
+                out_display,
                 rendered.len(),
                 harness.id()
-            );
-            new_manifest.entries.push(ManifestEntry {
-                path: out,
-                kind: EntryKind::Copy,
-                skill: "_instructions".into(),
-                harness: harness.id().into(),
-                target: template_path.clone(),
-                applied_at: manifest::now_unix(),
-            });
+            ));
+            new_manifest.entries.push(prev_manifest.tracked_entry(
+                out,
+                EntryKind::Copy,
+                "_instructions".into(),
+                harness.id().into(),
+                template_path.clone(),
+            ));
             continue;
         }
 
@@ -103,21 +104,21 @@ pub fn apply(
         match result {
             CopyOutcome::Written | CopyOutcome::MovedAside { .. } => {
                 if let CopyOutcome::MovedAside { backup } = &result {
-                    eprintln!(
-                        "agents: moved aside existing {} → {}",
-                        out.display(),
+                    crate::ui::warn(format!(
+                        "moved aside existing {} → {}",
+                        out_display,
                         backup.display()
-                    );
+                    ));
                 }
-                new_manifest.entries.push(ManifestEntry {
-                    path: out,
-                    kind: EntryKind::Copy,
-                    skill: "_instructions".into(),
-                    harness: harness.id().into(),
-                    target: template_path.clone(),
-                    applied_at: manifest::now_unix(),
-                });
+                new_manifest.entries.push(prev_manifest.tracked_entry(
+                    out,
+                    EntryKind::Copy,
+                    "_instructions".into(),
+                    harness.id().into(),
+                    template_path.clone(),
+                ));
                 outcome.written += 1;
+                crate::ui::detail(format!("wrote {}", out_display));
             }
             CopyOutcome::Refused => {
                 let choice = prompt_collision(&out)?;
@@ -125,37 +126,37 @@ pub fn apply(
                     CollisionChoice::Skip => {
                         machine.instructions_skip = true;
                         outcome.instructions_skip_set = true;
-                        eprintln!(
+                        crate::ui::warn(
                             "agents: instructions sync disabled on this machine (recorded in machine.toml). re-enable by clearing `instructions_skip` and re-running."
                         );
                         return Ok(outcome);
                     }
                     CollisionChoice::Cancel => {
-                        eprintln!(
+                        crate::ui::warn(format!(
                             "agents: cancelled — {} left untouched. rerun with --force to overwrite, or back it up first.",
-                            out.display()
-                        );
+                            out_display
+                        ));
                         return Ok(outcome);
                     }
                     CollisionChoice::Overwrite => {
                         let forced = install::install_copy(&out, &rendered, was_managed, true)
                             .with_context(|| format!("writing {}", out.display()))?;
                         if let CopyOutcome::MovedAside { backup } = &forced {
-                            eprintln!(
-                                "agents: moved aside existing {} → {}",
-                                out.display(),
+                            crate::ui::warn(format!(
+                                "moved aside existing {} → {}",
+                                out_display,
                                 backup.display()
-                            );
+                            ));
                         }
-                        new_manifest.entries.push(ManifestEntry {
-                            path: out,
-                            kind: EntryKind::Copy,
-                            skill: "_instructions".into(),
-                            harness: harness.id().into(),
-                            target: template_path.clone(),
-                            applied_at: manifest::now_unix(),
-                        });
+                        new_manifest.entries.push(prev_manifest.tracked_entry(
+                            out,
+                            EntryKind::Copy,
+                            "_instructions".into(),
+                            harness.id().into(),
+                            template_path.clone(),
+                        ));
                         outcome.written += 1;
+                        crate::ui::detail(format!("wrote {}", out_display));
                     }
                 }
             }
@@ -193,10 +194,10 @@ fn prompt_collision(path: &Path) -> Result<CollisionChoice> {
     use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() {
         // Non-interactive: default to cancel so we don't accidentally skip forever.
-        eprintln!(
+        crate::ui::warn(format!(
             "agents: refusing to overwrite existing {} (non-interactive). rerun with --force or set `instructions_skip = true` in machine.toml to skip on this machine.",
             path.display()
-        );
+        ));
         return Ok(CollisionChoice::Cancel);
     }
     let prompt = format!(
@@ -310,7 +311,9 @@ mod tests {
         let mut machine = MachineConfig::load(fx.repo.path()).unwrap();
         let prev = Manifest::default();
         let mut new = Manifest::default();
-        let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
+        let outcome = fx
+            .run(&mut lock, &mut machine, &prev, &mut new, false)
+            .unwrap();
         assert_eq!(outcome.written, 0);
         assert!(!outcome.lockfile_dirty);
         assert!(lock.instructions.is_none());
@@ -324,9 +327,14 @@ mod tests {
         let mut machine = MachineConfig::load(fx.repo.path()).unwrap();
         let prev = Manifest::default();
         let mut new = Manifest::default();
-        let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
+        let outcome = fx
+            .run(&mut lock, &mut machine, &prev, &mut new, false)
+            .unwrap();
         assert_eq!(outcome.written, 2);
-        assert!(outcome.lockfile_dirty, "should mark lockfile dirty when auto-adding entry");
+        assert!(
+            outcome.lockfile_dirty,
+            "should mark lockfile dirty when auto-adding entry"
+        );
         assert!(lock.instructions.is_some());
 
         let claude = fx.read_output(Harness::CLAUDE).unwrap();
@@ -344,7 +352,8 @@ mod tests {
         let mut machine = MachineConfig::load(fx.repo.path()).unwrap();
         let prev = Manifest::default();
         let mut new = Manifest::default();
-        fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
+        fx.run(&mut lock, &mut machine, &prev, &mut new, false)
+            .unwrap();
         assert_eq!(fx.read_output(Harness::CLAUDE).unwrap().trim(), "CLAUDE");
         assert_eq!(fx.read_output(Harness::CODEX).unwrap().trim(), "CODEX");
     }
@@ -358,7 +367,9 @@ mod tests {
         machine.instructions_skip = true;
         let prev = Manifest::default();
         let mut new = Manifest::default();
-        let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
+        let outcome = fx
+            .run(&mut lock, &mut machine, &prev, &mut new, false)
+            .unwrap();
         assert_eq!(outcome.written, 0);
         assert!(fx.read_output(Harness::CLAUDE).is_none());
         assert!(fx.read_output(Harness::CODEX).is_none());
@@ -378,7 +389,8 @@ mod tests {
         let prev = Manifest::default();
         let mut new = Manifest::default();
         // Non-interactive (cargo test) → CollisionChoice::Cancel
-        fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
+        fx.run(&mut lock, &mut machine, &prev, &mut new, false)
+            .unwrap();
 
         // Original content untouched.
         let after = std::fs::read_to_string(&claude_out).unwrap();
@@ -397,7 +409,9 @@ mod tests {
         let mut machine = MachineConfig::load(fx.repo.path()).unwrap();
         let prev = Manifest::default();
         let mut new = Manifest::default();
-        let outcome = fx.run(&mut lock, &mut machine, &prev, &mut new, true).unwrap();
+        let outcome = fx
+            .run(&mut lock, &mut machine, &prev, &mut new, true)
+            .unwrap();
         assert!(outcome.written >= 1);
         assert_eq!(fx.read_output(Harness::CLAUDE).unwrap(), "template body\n");
 
@@ -424,14 +438,16 @@ mod tests {
         let mut prev = Manifest::default();
         let mut new = Manifest::default();
         // First apply
-        fx.run(&mut lock, &mut machine, &prev, &mut new, false).unwrap();
+        fx.run(&mut lock, &mut machine, &prev, &mut new, false)
+            .unwrap();
         assert_eq!(fx.read_output(Harness::CLAUDE).unwrap(), "v1\n");
 
         // Carry forward: prev = previous new.
         prev = new;
         fx.write_template("v2\n");
         let mut new2 = Manifest::default();
-        fx.run(&mut lock, &mut machine, &prev, &mut new2, false).unwrap();
+        fx.run(&mut lock, &mut machine, &prev, &mut new2, false)
+            .unwrap();
         assert_eq!(fx.read_output(Harness::CLAUDE).unwrap(), "v2\n");
     }
 
@@ -449,4 +465,3 @@ mod tests {
         assert!(msg.contains("template missing"), "got: {msg}");
     }
 }
-

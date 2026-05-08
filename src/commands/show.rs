@@ -1,6 +1,7 @@
 use crate::cli::ShowArgs;
 use crate::lockfile::Lockfile;
 use crate::paths;
+use crate::ui;
 use anyhow::{anyhow, bail, Context, Result};
 use std::path::PathBuf;
 
@@ -29,6 +30,6 @@ pub fn run(args: ShowArgs) -> Result<()> {
 
     let content = std::fs::read_to_string(&skill_md)
         .with_context(|| format!("reading {}", skill_md.display()))?;
-    print!("{}", content);
+    ui::write(content);
     Ok(())
 }

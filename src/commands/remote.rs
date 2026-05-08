@@ -1,5 +1,6 @@
 use crate::cli::RemoteCommand;
 use crate::paths;
+use crate::ui;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::{Command, Output};
@@ -34,9 +35,10 @@ fn add(repo: &Path, url: &str) -> Result<()> {
     }
 
     let branch = current_branch(repo)?;
-    println!("agents: pushing {} to origin ({})...", branch, url);
+    let step = ui::step(format!("pushing {} to origin", branch));
     let push = git(repo, &["push", "-u", "origin", &branch])?;
     if !push.status.success() {
+        step.fail("push failed; rolling back origin");
         // Roll back the remote so the user isn't left with a half-configured state.
         let _ = git(repo, &["remote", "remove", "origin"]);
         bail!(
@@ -45,7 +47,8 @@ fn add(repo: &Path, url: &str) -> Result<()> {
             String::from_utf8_lossy(&push.stderr).trim()
         );
     }
-    println!("agents: remote configured. mutating commands now auto-pull/commit/push.");
+    step.ok("remote configured");
+    ui::detail(format!("origin: {}", url));
     Ok(())
 }
 
@@ -60,9 +63,9 @@ fn list(repo: &Path) -> Result<()> {
     let s = String::from_utf8_lossy(&out.stdout);
     let trimmed = s.trim();
     if trimmed.is_empty() {
-        println!("(no remotes configured — run `agents remote add <url>`)");
+        ui::plain("(no remotes configured — run `agents remote add <url>`)");
     } else {
-        println!("{}", trimmed);
+        ui::plain(trimmed);
     }
     Ok(())
 }
