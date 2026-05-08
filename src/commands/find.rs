@@ -164,7 +164,7 @@ fn search_blocking(query: &str) -> Result<Vec<SearchSkill>> {
         .json()
         .context("parsing skills.sh search response")?;
     let mut skills = resp.skills;
-    skills.sort_by(|a, b| b.installs.cmp(&a.installs));
+    skills.sort_by_key(|skill| std::cmp::Reverse(skill.installs));
     Ok(skills)
 }
 
@@ -253,7 +253,10 @@ fn picker_loop(
         // service debounce expiry and incoming search results.
         if event::poll(Duration::from_millis(40))? {
             match event::read()? {
-                Event::Key(KeyEvent { kind, .. }) if kind == KeyEventKind::Release => {
+                Event::Key(KeyEvent {
+                    kind: KeyEventKind::Release,
+                    ..
+                }) => {
                     // crossterm on Windows emits Release events; we only act on Press/Repeat.
                 }
                 Event::Key(KeyEvent {
@@ -289,12 +292,10 @@ fn picker_loop(
                 Event::Key(KeyEvent {
                     code: KeyCode::Backspace,
                     ..
-                }) => {
-                    if !state.query.is_empty() {
-                        state.query.pop();
-                        state.pending_at = Some(Instant::now());
-                        render(out, &mut state)?;
-                    }
+                }) if !state.query.is_empty() => {
+                    state.query.pop();
+                    state.pending_at = Some(Instant::now());
+                    render(out, &mut state)?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char(c),

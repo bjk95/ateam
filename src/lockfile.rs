@@ -271,12 +271,11 @@ pub fn normalize_skill_name(input: &str) -> Result<String> {
             _ => None,
         };
         match mapped {
-            Some('-') => {
-                if !prev_dash && !out.is_empty() {
-                    out.push('-');
-                    prev_dash = true;
-                }
+            Some('-') if !prev_dash && !out.is_empty() => {
+                out.push('-');
+                prev_dash = true;
             }
+            Some('-') => {}
             Some(c) => {
                 out.push(c);
                 prev_dash = false;

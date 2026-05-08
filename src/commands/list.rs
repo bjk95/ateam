@@ -196,8 +196,16 @@ mod tests {
         let v = serde_json::to_value(&view).unwrap();
         // Required fields always present (no skip_serializing_if), nulls explicit.
         for key in [
-            "name", "source", "ref", "tree_sha", "path", "harnesses", "profiles", "project",
-            "active", "upstream",
+            "name",
+            "source",
+            "ref",
+            "tree_sha",
+            "path",
+            "harnesses",
+            "profiles",
+            "project",
+            "active",
+            "upstream",
         ] {
             assert!(v.get(key).is_some(), "missing key: {}", key);
         }

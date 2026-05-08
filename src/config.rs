@@ -34,8 +34,7 @@ impl RepoConfig {
 
     pub fn write(&self, repo: &Path) -> Result<()> {
         let path = crate::paths::repo_config(repo);
-        let body = toml::to_string_pretty(self)
-            .context("serializing repo config")?;
+        let body = toml::to_string_pretty(self).context("serializing repo config")?;
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
@@ -74,8 +73,7 @@ impl MachineConfig {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("creating {}", parent.display()))?;
         }
-        let body = toml::to_string_pretty(self)
-            .context("serializing machine config")?;
+        let body = toml::to_string_pretty(self).context("serializing machine config")?;
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }

@@ -329,7 +329,17 @@ fn resolve_via_registry(
         let mut wrote_skill_md = false;
         let mut write_err = None;
         for file in &download.files {
-            let dest = skill_dir.join(&file.path);
+            let rel_path = match file.relative_path() {
+                Ok(path) => path,
+                Err(e) => {
+                    write_err = Some(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        e.to_string(),
+                    ));
+                    break;
+                }
+            };
+            let dest = skill_dir.join(rel_path);
             if let Some(parent) = dest.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
                     write_err = Some(e);
@@ -340,7 +350,7 @@ fn resolve_via_registry(
                 write_err = Some(e);
                 break;
             }
-            if file.path == "SKILL.md" {
+            if rel_path == Path::new("SKILL.md") {
                 wrote_skill_md = true;
             }
         }
@@ -561,9 +571,7 @@ fn install_one(
             // every machine.
             let slot = install::prepare_cache_slot(repo, &skill.name)?;
             install::copy_dir_recursive(&skill.dir, &slot.tmp)?;
-            if let Some(repair) =
-                crate::discover::canonicalize_skill_dir(&slot.tmp, &skill.name)?
-            {
+            if let Some(repair) = crate::discover::canonicalize_skill_dir(&slot.tmp, &skill.name)? {
                 for diagnostic in repair.diagnostics {
                     ui::warn(format!("repaired {}: {}", skill.name, diagnostic));
                 }

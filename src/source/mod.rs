@@ -52,8 +52,9 @@ impl Source {
     fn is_openclaw(&self) -> bool {
         match self {
             Source::Github { owner, .. } => owner.eq_ignore_ascii_case("openclaw"),
-            Source::Git { url } => url.contains("github.com/openclaw/")
-                || url.contains("github.com:openclaw/"),
+            Source::Git { url } => {
+                url.contains("github.com/openclaw/") || url.contains("github.com:openclaw/")
+            }
             Source::Local { .. } => false,
         }
     }
@@ -80,15 +81,21 @@ fn parse_inner(s: &str) -> Result<Source> {
         return parse_github_owner_repo(rest);
     }
     if let Some(rest) = s.strip_prefix("git:") {
-        return Ok(Source::Git { url: rest.to_string() });
+        return Ok(Source::Git {
+            url: rest.to_string(),
+        });
     }
     if let Some(rest) = s.strip_prefix("local:") {
-        return Ok(Source::Local { path: PathBuf::from(rest) });
+        return Ok(Source::Local {
+            path: PathBuf::from(rest),
+        });
     }
 
     // Local path detection.
     if s.starts_with("./") || s.starts_with("../") || s.starts_with('/') || s.starts_with("~/") {
-        return Ok(Source::Local { path: PathBuf::from(s) });
+        return Ok(Source::Local {
+            path: PathBuf::from(s),
+        });
     }
 
     // GitHub HTTPS / SSH detection — normalize to (owner, repo).
@@ -97,8 +104,11 @@ fn parse_inner(s: &str) -> Result<Source> {
     }
 
     // Bare git URL → generic git.
-    if s.starts_with("https://") || s.starts_with("http://") || s.starts_with("ssh://")
-        || s.starts_with("git@") || s.ends_with(".git")
+    if s.starts_with("https://")
+        || s.starts_with("http://")
+        || s.starts_with("ssh://")
+        || s.starts_with("git@")
+        || s.ends_with(".git")
     {
         return Ok(Source::Git { url: s.to_string() });
     }
@@ -149,8 +159,17 @@ fn parse_github_owner_repo(s: &str) -> Result<Source> {
 
 fn strip_github_url(s: &str) -> Option<(String, String)> {
     // https://github.com/owner/repo[.git][/...]
-    if let Some(rest) = s.strip_prefix("https://github.com/").or_else(|| s.strip_prefix("http://github.com/")) {
-        let cleaned = rest.split('#').next().unwrap_or("").split('?').next().unwrap_or("");
+    if let Some(rest) = s
+        .strip_prefix("https://github.com/")
+        .or_else(|| s.strip_prefix("http://github.com/"))
+    {
+        let cleaned = rest
+            .split('#')
+            .next()
+            .unwrap_or("")
+            .split('?')
+            .next()
+            .unwrap_or("");
         let parts: Vec<&str> = cleaned.split('/').collect();
         if parts.len() >= 2 {
             let owner = parts[0].to_string();
@@ -180,7 +199,10 @@ mod tests {
     fn parses_owner_repo_shorthand() {
         assert_eq!(
             Source::parse("vercel-labs/agent-skills").unwrap(),
-            Source::Github { owner: "vercel-labs".into(), repo: "agent-skills".into() }
+            Source::Github {
+                owner: "vercel-labs".into(),
+                repo: "agent-skills".into()
+            }
         );
     }
 
@@ -188,7 +210,10 @@ mod tests {
     fn parses_explicit_github_prefix() {
         assert_eq!(
             Source::parse("github:foo/bar").unwrap(),
-            Source::Github { owner: "foo".into(), repo: "bar".into() }
+            Source::Github {
+                owner: "foo".into(),
+                repo: "bar".into()
+            }
         );
     }
 
@@ -196,11 +221,17 @@ mod tests {
     fn parses_https_github_url() {
         assert_eq!(
             Source::parse("https://github.com/foo/bar").unwrap(),
-            Source::Github { owner: "foo".into(), repo: "bar".into() }
+            Source::Github {
+                owner: "foo".into(),
+                repo: "bar".into()
+            }
         );
         assert_eq!(
             Source::parse("https://github.com/foo/bar.git").unwrap(),
-            Source::Github { owner: "foo".into(), repo: "bar".into() }
+            Source::Github {
+                owner: "foo".into(),
+                repo: "bar".into()
+            }
         );
     }
 
@@ -223,7 +254,9 @@ mod tests {
     #[test]
     fn rejects_openclaw_owner_shorthand() {
         let err = Source::parse("openclaw/exfil").unwrap_err();
-        assert!(err.to_string().contains("--dangerously-accept-openclaw-risks"));
+        assert!(err
+            .to_string()
+            .contains("--dangerously-accept-openclaw-risks"));
     }
 
     #[test]
@@ -234,14 +267,26 @@ mod tests {
     #[test]
     fn accepts_openclaw_when_gated() {
         let s = Source::parse_with("openclaw/x", true).unwrap();
-        assert_eq!(s, Source::Github { owner: "openclaw".into(), repo: "x".into() });
+        assert_eq!(
+            s,
+            Source::Github {
+                owner: "openclaw".into(),
+                repo: "x".into()
+            }
+        );
     }
 
     #[test]
     fn lockfile_load_bypasses_openclaw_block() {
         // Lockfile entries were blessed at add-time; reload must not fail.
         let s = Source::from_lockfile_string("github:openclaw/x").unwrap();
-        assert_eq!(s, Source::Github { owner: "openclaw".into(), repo: "x".into() });
+        assert_eq!(
+            s,
+            Source::Github {
+                owner: "openclaw".into(),
+                repo: "x".into()
+            }
+        );
     }
 
     #[test]

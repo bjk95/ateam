@@ -35,7 +35,12 @@ pub fn get_tree(owner: &str, repo: &str, commit_sha: &str) -> Result<serde_json:
 
 /// Find the tree SHA of a sub-path within a repo at a given ref.
 /// Returns `None` if the path doesn't exist in the tree.
-pub fn subtree_sha(owner: &str, repo: &str, commit_sha: &str, sub_path: &str) -> Result<Option<String>> {
+pub fn subtree_sha(
+    owner: &str,
+    repo: &str,
+    commit_sha: &str,
+    sub_path: &str,
+) -> Result<Option<String>> {
     let tree = get_tree(owner, repo, commit_sha)?;
     let entries = tree
         .get("tree")
@@ -68,7 +73,8 @@ pub fn fetch_tarball(owner: &str, repo: &str, git_ref: &str, dest: &Path) -> Res
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::AUTHORIZATION,
-            format!("Bearer {}", token).parse()
+            format!("Bearer {}", token)
+                .parse()
                 .map_err(|_| anyhow!("invalid GITHUB_TOKEN value"))?,
         );
         client_builder = client_builder.default_headers(headers);
@@ -81,7 +87,9 @@ pub fn fetch_tarball(owner: &str, repo: &str, git_ref: &str, dest: &Path) -> Res
     if !resp.status().is_success() {
         bail!("GET {} returned {}", url, resp.status());
     }
-    let bytes = resp.bytes().with_context(|| format!("downloading {}", url))?;
+    let bytes = resp
+        .bytes()
+        .with_context(|| format!("downloading {}", url))?;
     let cursor = std::io::Cursor::new(bytes);
     let gz = flate2::read::GzDecoder::new(cursor);
     let mut archive = tar::Archive::new(gz);
@@ -106,13 +114,16 @@ fn github_get_json(url: &str) -> Result<serde_json::Value> {
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         req = req.bearer_auth(token);
     }
-    let resp = req
-        .send()
-        .with_context(|| format!("requesting {}", url))?;
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
     let status = resp.status();
     let body_text = resp.text().unwrap_or_default();
     if !status.is_success() {
-        bail!("GET {} returned {}: {}", url, status, truncate(&body_text, 200));
+        bail!(
+            "GET {} returned {}: {}",
+            url,
+            status,
+            truncate(&body_text, 200)
+        );
     }
     serde_json::from_str(&body_text).with_context(|| format!("parsing JSON from {}", url))
 }
@@ -131,7 +142,12 @@ fn truncate(s: &str, n: usize) -> String {
 /// repeated callers within a single command don't burn API budget. On API
 /// failure, emits a loud warning and falls back to `"main"`.
 pub fn default_branch(owner: &str, repo: &str) -> String {
-    default_branch_with(owner, repo, default_branch_cache(), &fetch_default_branch_via_api)
+    default_branch_with(
+        owner,
+        repo,
+        default_branch_cache(),
+        &fetch_default_branch_via_api,
+    )
 }
 
 fn default_branch_cache() -> &'static Mutex<HashMap<(String, String), String>> {

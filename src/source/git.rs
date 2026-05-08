@@ -45,7 +45,11 @@ pub fn ls_remote_sha(url: &str, git_ref: &str) -> Result<Option<String>> {
     if first_line.is_empty() {
         return Ok(None);
     }
-    let sha = first_line.split_whitespace().next().unwrap_or("").to_string();
+    let sha = first_line
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_string();
     if sha.is_empty() {
         Ok(None)
     } else {

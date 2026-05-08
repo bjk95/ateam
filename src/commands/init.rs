@@ -111,10 +111,7 @@ fn scaffold(target: &Path) -> Result<()> {
 
 fn clone(url: &str, target: &Path) -> Result<()> {
     if target.exists() && !is_empty(target)? {
-        bail!(
-            "refusing to clone into non-empty {}",
-            target.display()
-        );
+        bail!("refusing to clone into non-empty {}", target.display());
     }
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)
@@ -147,7 +144,10 @@ fn ensure_gitignore(target: &Path) -> Result<()> {
     let path = target.join(".gitignore");
     let needed = ".agents/\n";
     let current = std::fs::read_to_string(&path).unwrap_or_default();
-    if current.lines().any(|l| l.trim() == ".agents/" || l.trim() == ".agents") {
+    if current
+        .lines()
+        .any(|l| l.trim() == ".agents/" || l.trim() == ".agents")
+    {
         return Ok(());
     }
     let mut new = current;

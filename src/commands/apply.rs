@@ -203,7 +203,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                     install::CopyDirOutcome::Created
                     | install::CopyDirOutcome::Replaced
                     | install::CopyDirOutcome::AlreadyCorrect
-                    | install::CopyDirOutcome::MovedAside { .. } => {
+                    | install::CopyDirOutcome::MovedAside => {
                         new_manifest.entries.push(prev_manifest.tracked_entry(
                             link.clone(),
                             EntryKind::Copy,
@@ -228,7 +228,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced
                 | install::LinkOutcome::AlreadyCorrect
-                | install::LinkOutcome::MovedAside { .. }
+                | install::LinkOutcome::MovedAside
                 | install::LinkOutcome::AutoHealed => {
                     new_manifest.entries.push(prev_manifest.tracked_entry(
                         link.clone(),
@@ -429,13 +429,11 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         updated_lock.write(&repo)?;
     }
 
-    if !args.dry_run && git_sync::enabled(no_sync) {
-        if lockfile_dirty {
-            let msg = git_sync::msg_apply(materialized);
-            if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
-                ui::warn(format!("auto-sync failed: {:#}", e));
-                ui::detail("local change saved; rerun a mutating command to retry");
-            }
+    if !args.dry_run && git_sync::enabled(no_sync) && lockfile_dirty {
+        let msg = git_sync::msg_apply(materialized);
+        if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+            ui::warn(format!("auto-sync failed: {:#}", e));
+            ui::detail("local change saved; rerun a mutating command to retry");
         }
     }
 
@@ -627,7 +625,7 @@ fn refetch_via_registry(repo: &Path, owner: &str, repo_name: &str, skill_name: &
     })?;
     let slot = install::prepare_cache_slot(repo, skill_name)?;
     for file in &download.files {
-        let dest = slot.tmp.join(&file.path);
+        let dest = slot.tmp.join(file.relative_path()?);
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
         }

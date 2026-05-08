@@ -5,6 +5,15 @@ edition = "2021"
 description = "Multi-machine AI skills sync via a single git repo."
 repository = "https://github.com/bjk95/agents"
 license = "MIT"
+exclude = [
+    ".beads/**",
+    ".claude/**",
+    ".github/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/_superpowers/**",
+    "site/**",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

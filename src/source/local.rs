@@ -26,8 +26,7 @@ pub fn content_hash(dir: &Path) -> Result<String> {
     for (rel, abs) in &files {
         hasher.update(rel.to_string_lossy().as_bytes());
         hasher.update([0u8]);
-        let bytes = std::fs::read(abs)
-            .with_context(|| format!("reading {}", abs.display()))?;
+        let bytes = std::fs::read(abs).with_context(|| format!("reading {}", abs.display()))?;
         hasher.update(&bytes);
         hasher.update([0u8]);
     }
@@ -35,8 +34,7 @@ pub fn content_hash(dir: &Path) -> Result<String> {
 }
 
 fn collect_files(root: &Path, dir: &Path, out: &mut Vec<(PathBuf, PathBuf)>) -> Result<()> {
-    let entries = std::fs::read_dir(dir)
-        .with_context(|| format!("reading {}", dir.display()))?;
+    let entries = std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))?;
     for entry in entries.flatten() {
         let path = entry.path();
         if let Some(name) = path.file_name().and_then(|s| s.to_str()) {

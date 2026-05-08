@@ -12,8 +12,12 @@ kept the real home/config/cache state untouched.
 ## Validation commands
 
 ```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo test
 cargo test --test production_readiness
+cargo build --release
+pnpm --dir site install --frozen-lockfile
 pnpm --dir site build
 ```
 
@@ -40,6 +44,15 @@ an external standard that third-party sources are expected to publish.
 | PRI-004 | 37, 39 | P1 | `skills deactivate` and `skills remove` left copy-mode skill installs on disk. | Both paths now use manifest `EntryKind` to dispatch symlinks to `uninstall_path` and copies to `uninstall_copy`. | `deactivate_removes_copy_mode_skill_install`, `remove_removes_copy_mode_skill_install` |
 | PRI-005 | 44 | P2 | `skills find` printed Vercel-style `npx skills` output instead of agents install commands. | Non-interactive search results now emit `agents skills add <source> --skill <name>` lines. | `non_interactive_result_formats_agents_install_command` |
 | PRI-006 | 33 | P3 | Registry fallback was reported as logging duplicate warnings when registry lookup errored. | Rechecked the current source and confirmed there is a single warning path. | Source review; covered by single remaining warning path. |
+
+## Dependency decisions
+
+- `serde_yaml = "0.9"` is retained for the current release line. The parser is
+  limited to local/cached Markdown frontmatter parsing and native harness
+  frontmatter rendering, and changing it would risk subtle YAML formatting
+  differences across skill and subagent files. Treat the deprecated crate as an
+  accepted short-term release risk until a maintained parser migration can be
+  tested against the existing import/render fixtures.
 
 ## One-by-one validation
 

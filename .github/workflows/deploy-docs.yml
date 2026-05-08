@@ -30,7 +30,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.33.4
           run_install: false
 
       - name: Setup Node
@@ -42,7 +42,7 @@ jobs:
 
       - name: Install deps
         working-directory: site
-        run: pnpm install --frozen-lockfile || pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Resolve repo base for Pages
         id: base
@@ -58,7 +58,7 @@ jobs:
         env:
           AGENTS_BASE: ${{ env.AGENTS_BASE }}
           AGENTS_SITE_URL: ${{ env.AGENTS_SITE_URL }}
-        run: pnpm exec astro build
+        run: pnpm build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

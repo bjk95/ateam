@@ -88,9 +88,9 @@ impl Subagent {
         let data = parsed
             .data
             .ok_or_else(|| anyhow!("missing YAML frontmatter (--- ... --- block)"))?;
-        let frontmatter: SubagentFrontmatter = data
-            .deserialize()
-            .context("parsing canonical frontmatter — expected name/description/model/effort/skills/color")?;
+        let frontmatter: SubagentFrontmatter = data.deserialize().context(
+            "parsing canonical frontmatter — expected name/description/model/effort/skills/color",
+        )?;
         if frontmatter.name.is_empty() {
             bail!("`name` is required");
         }
@@ -107,8 +107,8 @@ impl Subagent {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let raw = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let raw =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         Self::parse(&raw).with_context(|| format!("parsing {}", path.display()))
     }
 
@@ -116,8 +116,7 @@ impl Subagent {
     /// initial file from user input, and (later) by `sync` to write back after
     /// backfilling from harness edits.
     pub fn to_canonical(&self) -> Result<String> {
-        let yaml =
-            serde_yaml::to_string(&self.frontmatter).context("serializing frontmatter")?;
+        let yaml = serde_yaml::to_string(&self.frontmatter).context("serializing frontmatter")?;
         let mut out = String::with_capacity(yaml.len() + self.body.len() + 16);
         out.push_str("---\n");
         out.push_str(&yaml);
@@ -137,7 +136,10 @@ impl Subagent {
 pub fn render_claude(s: &Subagent) -> Result<String> {
     let mut fm = serde_yaml::Mapping::new();
     fm.insert("name".into(), s.frontmatter.name.clone().into());
-    fm.insert("description".into(), s.frontmatter.description.clone().into());
+    fm.insert(
+        "description".into(),
+        s.frontmatter.description.clone().into(),
+    );
     if let Some(m) = &s.frontmatter.model.claude {
         fm.insert("model".into(), m.clone().into());
     }
@@ -177,7 +179,10 @@ pub fn render_claude(s: &Subagent) -> Result<String> {
 /// `model_reasoning_effort`).
 pub fn render_codex(s: &Subagent) -> Result<String> {
     let mut t = toml::value::Table::new();
-    t.insert("name".into(), toml::Value::String(s.frontmatter.name.clone()));
+    t.insert(
+        "name".into(),
+        toml::Value::String(s.frontmatter.name.clone()),
+    );
     t.insert(
         "description".into(),
         toml::Value::String(s.frontmatter.description.clone()),
@@ -217,7 +222,10 @@ pub fn render_codex(s: &Subagent) -> Result<String> {
 /// plus markdown body.
 pub fn render_opencode(s: &Subagent) -> Result<String> {
     let mut fm = serde_yaml::Mapping::new();
-    fm.insert("description".into(), s.frontmatter.description.clone().into());
+    fm.insert(
+        "description".into(),
+        s.frontmatter.description.clone().into(),
+    );
     if let Some(m) = &s.frontmatter.model.opencode {
         fm.insert("model".into(), m.clone().into());
     }
@@ -242,7 +250,10 @@ pub fn render_opencode(s: &Subagent) -> Result<String> {
 pub fn render_gemini(s: &Subagent) -> Result<String> {
     let mut fm = serde_yaml::Mapping::new();
     fm.insert("name".into(), s.frontmatter.name.clone().into());
-    fm.insert("description".into(), s.frontmatter.description.clone().into());
+    fm.insert(
+        "description".into(),
+        s.frontmatter.description.clone().into(),
+    );
     if let Some(m) = &s.frontmatter.model.gemini {
         fm.insert("model".into(), m.clone().into());
     }
