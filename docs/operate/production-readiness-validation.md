@@ -26,7 +26,6 @@ Targeted probes also covered:
 - `agents --quiet remote list`
 - `agents --no-sync apply --dry-run`
 - repeated `agents --no-sync apply`
-- `agents --no-sync apply --copy` followed by `skills deactivate` and `skills remove`
 - `agents --no-sync skills find deploy`
 
 Review clarification: row 49 validates import of external subagent files into
@@ -41,7 +40,7 @@ an external standard that third-party sources are expected to publish.
 | PRI-001 | 7 | P1 | `--quiet` was not global because several commands printed directly, bypassing `ui::quiet`. | Normal command output now routes through quiet-aware UI helpers; warnings/errors remain visible. | `quiet_suppresses_remote_list_plain_output` |
 | PRI-002 | 17 | P1 | `apply --dry-run` swept `.agents/tmp` and could pre-pull before planning. | Dry-run skips temp sweeping and auto-sync pre-pull. | `apply_dry_run_preserves_tmp_dirs` |
 | PRI-003 | 18 | P2 | Repeated `apply` changed `.agents/manifest.toml` because `applied_at` was regenerated and the file was always rewritten. | Manifest entries preserve prior timestamps when path/kind/skill/harness/target are unchanged, and manifest writes are skipped when serialized content is unchanged. | `repeated_apply_keeps_manifest_content_stable` |
-| PRI-004 | 37, 39 | P1 | `skills deactivate` and `skills remove` left copy-mode skill installs on disk. | Both paths now use manifest `EntryKind` to dispatch symlinks to `uninstall_path` and copies to `uninstall_copy`. | `deactivate_removes_copy_mode_skill_install`, `remove_removes_copy_mode_skill_install` |
+| PRI-004 | 37, 39 | P1 | Immediate `skills add` installs were not recorded in the manifest, so a following `skills deactivate` or `skills remove` could leave symlinks on disk. | `skills add` now records installed symlinks in the manifest as soon as it writes them. | `immediate_add_then_remove_uninstalls_skill_target` |
 | PRI-005 | 44 | P2 | `skills find` printed Vercel-style `npx skills` output instead of agents install commands. | Non-interactive search results now emit `agents skills add <source> --skill <name>` lines. | `non_interactive_result_formats_agents_install_command` |
 | PRI-006 | 33 | P3 | Registry fallback was reported as logging duplicate warnings when registry lookup errored. | Rechecked the current source and confirmed there is a single warning path. | Source review; covered by single remaining warning path. |
 
@@ -80,10 +79,8 @@ an external standard that third-party sources are expected to publish.
 | 20 | Project filtering | Pass | `apply --project <alias>` only processes entries whose `project` matches that alias. |
 | 21 | Unregistered project | Pass | Missing project aliases are collected, warned, and skipped while other entries continue. |
 | 22 | Matching directory auto-heal | Pass | `install_symlink` hashes existing real dirs/files against the canonical target and auto-heals matching content. |
-| 23 | Conflicting directory refusal | Pass | `install_symlink` and `install_copy_dir` return `Refused` for foreign real paths when `force` is false. |
+| 23 | Conflicting directory refusal | Pass | `install_symlink` returns `Refused` for foreign real paths when `force` is false. |
 | 24 | Forced conflict recovery | Pass | `--force` moves foreign paths to `<name>.bak.<unix-ts>` before installing managed output. |
-| 25 | Copy install mode | Pass | `apply --copy` installs directories through `install_copy_dir` and records manifest entries as `kind = "copy"`. |
-| 26 | Copy-to-symlink transition | Pass | A later symlink-mode apply auto-heals byte-identical copied dirs into symlinks and records symlink manifest entries. |
 | 27 | Skill add happy path | Pass | `skills add` fetches, snapshots remote sources, upserts the lockfile, installs into harnesses, and auto-commits when sync is enabled. |
 | 28 | Skill add list mode | Pass with caveat | `--list` avoids lockfile/snapshot/manifest/harness changes, but still acquires the mutating command lock and may pre-pull/fetch into temp state. |
 | 29 | Vercel compatibility | Pass | `normalize_all_flag` makes `--all` imply wildcard skill selection, wildcard harnesses, and `-y`. |
@@ -94,9 +91,9 @@ an external standard that third-party sources are expected to publish.
 | 34 | OpenClaw risk gate | Pass | `Source::parse_with` rejects `openclaw/*` sources unless the explicit risk flag is set. |
 | 35 | Skill update | Pass | `skills update` compares upstream SHAs/hashes, refetches drifted snapshots, updates `tree_sha`, and leaves unchanged entries alone. |
 | 36 | Deactivated update skip | Pass | Deactivated entries are excluded from bulk updates and explicitly skipped with a warning when named. |
-| 37 | Skill deactivate | Pass | Deactivation removes both symlink-mode and copy-mode installs using the manifest entry kind. |
+| 37 | Skill deactivate | Pass | Deactivation removes managed skill symlinks using the manifest entry kind. |
 | 38 | Skill activate | Pass | `skills activate` flips `active = true`, writes the lockfile, and invokes apply to re-materialize eligible entries. |
-| 39 | Skill remove | Pass | Removal deletes lockfile entries, managed snapshots, and both symlink-mode and copy-mode installs. |
+| 39 | Skill remove | Pass | Removal deletes lockfile entries, managed snapshots, and managed skill symlinks. |
 | 40 | Missing skill remove | Pass | Target resolution bails before removal when a named skill is missing in the selected scope. |
 | 41 | Pipe-friendly list | Pass | `skills list` switches stdout to names-only when stdout is not a TTY; `skills remove` reads whitespace-separated names from stdin. |
 | 42 | JSON list contract | Pass | `skills list --json` suppresses the banner/UI output and emits the versioned JSON envelope with all documented fields. |

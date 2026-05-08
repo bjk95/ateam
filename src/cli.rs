@@ -308,11 +308,6 @@ pub struct AddArgs {
     #[arg(long)]
     pub r#ref: Option<String>,
 
-    /// Install via recursive copy instead of symlink. For filesystems that
-    /// don't handle symlinks reliably (network mounts, some Docker volumes).
-    #[arg(long)]
-    pub copy: bool,
-
     /// Permit `openclaw/*` sources, which can shell out at runtime.
     #[arg(long = "dangerously-accept-openclaw-risks")]
     pub dangerously_accept_openclaw_risks: bool,
@@ -335,11 +330,6 @@ pub struct ApplyArgs {
     /// Move existing real dirs aside instead of refusing.
     #[arg(long)]
     pub force: bool,
-
-    /// Install via recursive copy instead of symlink. For filesystems that
-    /// don't handle symlinks reliably (network mounts, some Docker volumes).
-    #[arg(long)]
-    pub copy: bool,
 }
 
 #[derive(Parser)]

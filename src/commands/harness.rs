@@ -109,7 +109,6 @@ fn add(ids: Vec<String>, no_sync: bool) -> Result<()> {
             harnesses: Vec::new(),
             project: None,
             force: false,
-            copy: false,
         },
         true,
     )?;
@@ -159,7 +158,6 @@ fn remove(ids: Vec<String>, no_sync: bool) -> Result<()> {
             harnesses: Vec::new(),
             project: None,
             force: false,
-            copy: false,
         },
         true,
     )?;

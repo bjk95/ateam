@@ -87,16 +87,12 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
     if !is_git_repo(repo) {
         return Ok(false);
     }
-    let _ = run(
-        repo,
-        &[
-            "add",
-            "agents.toml",
-            "agents.lock.toml",
-            "skills",
-            "instructions",
-        ],
-    )?;
+    let stage_paths = stageable_paths(repo)?;
+    if !stage_paths.is_empty() {
+        let mut args = vec!["add", "-A", "--"];
+        args.extend(stage_paths);
+        let _ = run(repo, &args)?;
+    }
 
     let diff = run(repo, &["diff", "--cached", "--quiet"])?;
     if diff.status.success() {
@@ -115,6 +111,28 @@ pub fn commit_and_push(repo: &Path, message: &str) -> Result<bool> {
 
     let _ = push_with_retry(repo)?;
     Ok(true)
+}
+
+fn stageable_paths(repo: &Path) -> Result<Vec<&'static str>> {
+    let candidates = [
+        "agents.toml",
+        "agents.lock.toml",
+        "skills",
+        "instructions",
+        "agents",
+    ];
+    let mut paths = Vec::new();
+    for path in candidates {
+        if repo.join(path).exists() || is_tracked_path(repo, path)? {
+            paths.push(path);
+        }
+    }
+    Ok(paths)
+}
+
+fn is_tracked_path(repo: &Path, path: &str) -> Result<bool> {
+    let out = run(repo, &["ls-files", "--error-unmatch", path])?;
+    Ok(out.status.success())
 }
 
 fn push_with_retry(repo: &Path) -> Result<bool> {
