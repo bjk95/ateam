@@ -285,10 +285,11 @@ agents import <name> --project canva            # tag with project alias
 agents import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
 ```
 
-Bulk mode (no name) walks `~/.claude/skills`, `~/.codex/skills`, and
-`~/.agents/skills`, plus the global `CLAUDE.md` / `AGENTS.md`. When the two
-instruction files differ, agents shows an interactive picker so you choose which
-becomes the canonical template. Orphan snapshot directories (already in
+Bulk mode (no name) walks every registered harness's skills directory, plus
+the cross-tool `~/.agents/skills` alias. It also imports global instructions
+from `CLAUDE.md` / `AGENTS.md`. When the two instruction files differ, agents
+shows an interactive picker so you choose which becomes the canonical template.
+Orphan snapshot directories (already in
 `<repo>/skills/` but missing from the lockfile) are adopted instead of erroring.
 
 Plugin-managed skills (those installed via `claude plugin add` from a
@@ -308,7 +309,8 @@ source automatically. Pass `--upstream` to override.
 
 Manage subagents — one canonical Markdown file per subagent at
 `<repo>/agents/<name>.md` with multi-harness frontmatter. On every `apply`
-agents **renders** the canonical into each harness's native format:
+agents renders the canonical into repo-local per-harness files, then symlinks
+each harness path to its native format:
 `~/.claude/agents/<name>.md` (Markdown), `~/.codex/agents/<name>.toml` (TOML),
 `~/.config/opencode/agents/<name>.md`, `~/.gemini/agents/<name>.md`.
 
@@ -399,7 +401,7 @@ the initial push fails (so you don't end up half-configured).
 Lint the instructions template at `<repo>/instructions/instructions.md.hbs`.
 Checks that every Handlebars identifier referenced in the template is either a
 declared profile or one of the reserved identifiers (`claude`, `codex`,
-`hostname`).
+`opencode`, `gemini`, `hostname`).
 
 ```bash
 agents validate

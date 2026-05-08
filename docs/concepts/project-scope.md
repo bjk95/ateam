@@ -5,8 +5,10 @@ description: Install a skill into a specific project's native harness dirs, by a
 
 A skill can be tagged with a `project` alias in the lockfile. When `agents apply`
 encounters a project-tagged entry, it installs into that project's native harness
-discovery paths (`<project>/.claude/skills/<name>` and
-`<project>/.codex/skills/<name>`) instead of `~/.claude/skills/<name>`.
+discovery paths, such as `<project>/.claude/skills/<name>`,
+`<project>/.codex/skills/<name>`,
+`<project>/.config/opencode/skills/<name>`, and
+`<project>/.gemini/skills/<name>`, instead of user-global harness paths.
 
 Aliases — not paths — because the same project lives at different filesystem
 locations across machines.
