@@ -458,6 +458,7 @@ mod tests {
         Lockfile {
             skills: vec![],
             subagents: vec![],
+            mcps: vec![],
             instructions: None,
         }
     }

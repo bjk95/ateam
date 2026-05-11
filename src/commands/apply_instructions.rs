@@ -272,6 +272,7 @@ mod tests {
             Lockfile {
                 skills: Vec::new(),
                 subagents: Vec::new(),
+                mcps: Vec::new(),
                 instructions: Some(InstructionsEntry::default()),
             }
         }
@@ -280,6 +281,7 @@ mod tests {
             Lockfile {
                 skills: Vec::new(),
                 subagents: Vec::new(),
+                mcps: Vec::new(),
                 instructions: None,
             }
         }

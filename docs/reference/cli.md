@@ -17,13 +17,13 @@ These work on every subcommand.
 ### Concurrent invocations
 
 Mutating commands (`apply`, `sync`, `skills add`/`update`/`remove`/`import`/`activate`/`deactivate`,
-`project add`/`remove`, `remote add`, `edit`, `instructions edit`) take an exclusive
+`mcp add`/`remove`/`activate`/`deactivate`, `project add`/`remove`, `remote add`, `edit`, `instructions edit`) take an exclusive
 `flock` on `<repo>/.agents/lock` for the duration of the command. A second invocation
 waits for the first to finish before reading and writing `agents.lock.toml` and
 `.agents/manifest.toml`, so concurrent runs cannot clobber each other's edits.
 
 Pass `--no-wait` to fail fast instead of blocking. Read-only commands (`status`,
-`skills list`/`show`/`find`, `instructions diff`/`show`, `validate`, `project list`,
+`skills list`/`show`/`find`, `mcp list`, `instructions diff`/`show`, `validate`, `project list`,
 `remote list`) take no lock.
 
 ## `agents init`
@@ -57,6 +57,10 @@ directory aside to `<name>.bak.<unix-ts>` rather than deleting it.
 Harness targets are always symlinks. Skills point at their canonical snapshot
 under `<repo>/skills/`; instructions and subagents point at per-harness rendered
 files under the agents repo.
+
+MCP servers are reconciled into supported harness config files instead of
+symlinked. Today agents manages Codex `~/.codex/config.toml` and Claude Code
+`~/.claude.json`.
 
 ## `agents status`
 
@@ -274,15 +278,15 @@ with no query and agents prints a two-step hint instead of opening a picker.
 
 ## `agents import`
 
-Adopt an installed-locally skill (or your global `CLAUDE.md` / `AGENTS.md`) into
-the synced lockfile.
+Adopt local harness state into the synced lockfile.
 
 ```bash
-agents import                                   # bulk: every skill on disk + instructions
+agents import                                   # bulk: skills + instructions + MCP servers
 agents import <name>                            # snapshot a single skill into <repo>/skills/
 agents import <name> --upstream github:foo/bar  # track upstream instead of snapshotting
 agents import <name> --project canva            # tag with project alias
 agents import --instructions                    # only adopt CLAUDE.md / AGENTS.md as the template
+agents import --mcp                             # only adopt supported MCP config entries
 ```
 
 Bulk mode (no name) walks every registered harness's skills directory, plus
@@ -291,6 +295,10 @@ from `CLAUDE.md` / `AGENTS.md`. When the two instruction files differ, agents
 shows an interactive picker so you choose which becomes the canonical template.
 Orphan snapshot directories (already in
 `<repo>/skills/` but missing from the lockfile) are adopted instead of erroring.
+Bulk mode also adopts MCP servers from supported harness configs: Codex
+`~/.codex/config.toml` and Claude Code `~/.claude.json`. Existing lockfile MCP
+entries are skipped, and same-name entries from multiple harnesses are merged
+only when their server config matches.
 
 Plugin-managed skills (those installed via `claude plugin add` from a
 marketplace) are detected through `~/.claude/plugins/installed_plugins.json`
@@ -354,6 +362,37 @@ and uninstalls the rendered files from each harness's agents dir.
 
 Prints every locked subagent with its source. `●` marks active entries,
 `○` marks deactivated.
+
+## `agents mcp`
+
+Manage MCP server definitions in the shared lockfile and materialize them into
+supported harness config files.
+
+```bash
+agents mcp add <name> [-a <harness>]... [--profile <name>]... [--env KEY=VALUE]... -- <command> [args...]
+agents mcp add <name> --url <url> [--bearer-token-env-var <env>] [-a <harness>]... [--profile <name>]...
+agents mcp remove <name>...
+agents mcp deactivate <name>...
+agents mcp activate <name>...
+agents mcp list
+```
+
+Examples:
+
+```bash
+agents mcp add otter --harness codex --profile canva -- otter mcp serve
+agents mcp add docs --url https://example.com/mcp --bearer-token-env-var DOCS_TOKEN
+```
+
+`--profile` and `--harness` use the same semantics as skills and subagents:
+profiles choose which machines get the server, and harnesses choose which
+enabled harness configs are written. `*` means every enabled harness with MCP
+support. Unsupported MCP harness renderers are rejected at add time.
+
+Deactivation keeps the lockfile entry with `active = false` and removes the
+managed server from harness config files. Removal deletes the lockfile entry
+and also removes the managed server from harness config files. Unmanaged MCP
+servers in those files are preserved.
 
 ## `agents upgrade`
 

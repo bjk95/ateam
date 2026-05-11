@@ -146,6 +146,13 @@ pub fn harness_skill_path(install_root: &Path, agent: &str, skill_name: &str) ->
     Ok(install_root.join(subdir).join(skill_name))
 }
 
+pub fn harness_mcp_config_path(install_root: &Path, agent: &str) -> Result<Option<PathBuf>> {
+    let def = crate::harness::lookup(agent).ok_or_else(|| anyhow!("unknown agent `{}`", agent))?;
+    Ok(def
+        .mcp_config_file
+        .map(|subpath| install_root.join(subpath)))
+}
+
 pub fn home_dir() -> Result<PathBuf> {
     let dirs =
         directories::BaseDirs::new().ok_or_else(|| anyhow!("could not determine home dir"))?;

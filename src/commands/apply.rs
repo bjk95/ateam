@@ -32,6 +32,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
     let mut unregistered_aliases: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut materialized = 0usize;
     let mut lockfile_dirty = false;
+    let mut mcp_changed = false;
 
     let target_harnesses: Option<BTreeSet<String>> = if args.harnesses.is_empty() {
         None
@@ -329,6 +330,34 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         s.finish();
     }
 
+    let mcp_step = (!args.dry_run && args.project.is_none()).then(|| ui::step("checking MCPs"));
+    if args.project.is_none() {
+        match crate::mcp::apply(
+            &repo,
+            &paths::home_dir()?,
+            &repo_cfg,
+            &lock.mcps,
+            &machine,
+            target_harnesses.as_ref(),
+            args.dry_run,
+            true,
+        ) {
+            Ok(outcome) => {
+                materialized += outcome.materialized;
+                mcp_changed = outcome.changed;
+                if let Some(step) = mcp_step {
+                    step.finish();
+                }
+            }
+            Err(e) => {
+                if let Some(step) = mcp_step {
+                    step.fail("MCPs failed");
+                }
+                return Err(e);
+            }
+        }
+    }
+
     let home = paths::home_dir()?;
     let instructions_step =
         (!args.dry_run && args.project.is_none()).then(|| ui::step("checking instructions"));
@@ -419,7 +448,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
 
     if !args.dry_run
         && git_sync::enabled(no_sync)
-        && (lockfile_dirty || materialized > 0 || instructions_written > 0)
+        && (lockfile_dirty || materialized > 0 || instructions_written > 0 || mcp_changed)
     {
         let msg = git_sync::msg_apply(materialized);
         if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
@@ -428,12 +457,12 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         }
     }
 
-    let skill_word = |n: usize| if n == 1 { "skill" } else { "skills" };
+    let entry_word = |n: usize| if n == 1 { "entry" } else { "entries" };
     if args.dry_run {
         ui::ok(format!(
             "dry run: would apply {} {}",
             materialized,
-            skill_word(materialized)
+            entry_word(materialized)
         ));
     } else {
         let suffix = if instructions_written > 0 {
@@ -444,7 +473,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
         ui::ok(format!(
             "applied {} {}{}",
             materialized,
-            skill_word(materialized),
+            entry_word(materialized),
             suffix
         ));
     }

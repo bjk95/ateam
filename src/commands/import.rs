@@ -1,5 +1,5 @@
 use crate::cli::ImportArgs;
-use crate::config::RepoConfig;
+use crate::config::{MachineConfig, RepoConfig};
 use crate::git_sync;
 use crate::instructions::{self, Harness};
 use crate::lockfile::{InstructionsEntry, Lockfile, SkillEntry};
@@ -12,10 +12,13 @@ use std::path::{Path, PathBuf};
 
 pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
     let repo = paths::resolve_repo()?;
-    let _repo_cfg = RepoConfig::load(&repo)?;
+    let repo_cfg = RepoConfig::load(&repo)?;
 
-    if args.instructions && args.name.is_some() {
-        bail!("`--instructions` is mutually exclusive with a skill name");
+    if args.name.is_some() && (args.instructions || args.mcp) {
+        bail!("`--instructions` and `--mcp` are mutually exclusive with a skill name");
+    }
+    if args.instructions && args.mcp {
+        bail!("`--instructions` and `--mcp` are mutually exclusive");
     }
 
     if git_sync::enabled(no_sync) {
@@ -44,8 +47,21 @@ pub fn run(args: ImportArgs, no_sync: bool) -> Result<()> {
         return Ok(());
     }
 
+    if args.mcp {
+        let outcome = import_mcps(&repo, &home, &repo_cfg)?;
+        print_mcp_import_outcome(&outcome);
+        if git_sync::enabled(no_sync) && outcome.changed() {
+            let msg = format!("import :: {} MCP server(s)", outcome.imported);
+            if let Err(e) = git_sync::commit_and_push(&repo, &msg) {
+                ui::warn(format!("auto-sync failed: {:#}", e));
+                ui::detail("local change saved; rerun a mutating command to retry");
+            }
+        }
+        return Ok(());
+    }
+
     if args.name.is_none() {
-        return run_bulk(&repo, &home, no_sync);
+        return run_bulk(&repo, &home, &repo_cfg, no_sync);
     }
 
     run_single(&repo, &home, &args, no_sync)
@@ -119,10 +135,10 @@ fn run_single(repo: &Path, home: &Path, args: &ImportArgs, no_sync: bool) -> Res
 }
 
 // ---------------------------------------------------------------------------
-// Bulk import: scoop everything in ~/.claude/skills, ~/.codex/skills, ~/.agents/skills,
-// plus the global instructions, into the lockfile.
+// Bulk import: scoop skills, global instructions, and supported MCP config
+// entries into the lockfile.
 
-fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
+fn run_bulk(repo: &Path, home: &Path, repo_cfg: &RepoConfig, no_sync: bool) -> Result<()> {
     ui::plain(format!(
         "agents: scanning {}...",
         crate::discover::harness_skill_dirs(home)
@@ -146,6 +162,7 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
             None
         }
     };
+    let mcp_outcome = import_mcps(repo, home, repo_cfg)?;
 
     ui::plain("");
     ui::plain(format!(
@@ -178,20 +195,24 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     if let Some(p) = &instructions_template {
         ui::plain(format!("  instructions template → {}", p.display()));
     }
-    if outcome.imported > 0 || instructions_template.is_some() {
+    print_mcp_import_outcome(&mcp_outcome);
+    if outcome.imported > 0 || instructions_template.is_some() || mcp_outcome.changed() {
         ui::plain("");
         ui::plain("run `agents apply` to materialize symlinks for the new entries.");
     }
 
-    if git_sync::enabled(no_sync) && (outcome.imported > 0 || instructions_template.is_some()) {
+    if git_sync::enabled(no_sync)
+        && (outcome.imported > 0 || instructions_template.is_some() || mcp_outcome.changed())
+    {
         let msg = format!(
-            "import :: bulk ({} skill(s){})",
+            "import :: bulk ({} skill(s){}{})",
             outcome.imported,
             if instructions_template.is_some() {
                 " + instructions"
             } else {
                 ""
-            }
+            },
+            if mcp_outcome.changed() { " + MCPs" } else { "" },
         );
         if let Err(e) = git_sync::commit_and_push(repo, &msg) {
             ui::warn(format!("auto-sync failed: {:#}", e));
@@ -200,6 +221,36 @@ fn run_bulk(repo: &Path, home: &Path, no_sync: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn import_mcps(
+    repo: &Path,
+    home: &Path,
+    repo_cfg: &RepoConfig,
+) -> Result<crate::mcp::ImportOutcome> {
+    let mut lock = Lockfile::load(repo)?;
+    let outcome = crate::mcp::import_from_existing(home, repo_cfg, &mut lock)?;
+    if outcome.changed() {
+        lock.write(repo)?;
+        let machine = MachineConfig::load(repo)?;
+        crate::mcp::apply(
+            repo, home, repo_cfg, &lock.mcps, &machine, None, false, true,
+        )?;
+    }
+    Ok(outcome)
+}
+
+fn print_mcp_import_outcome(outcome: &crate::mcp::ImportOutcome) {
+    ui::plain(format!(
+        "  MCP servers → imported {}; skipped {} already managed",
+        outcome.imported, outcome.skipped_managed
+    ));
+    if !outcome.errors.is_empty() {
+        ui::plain("  MCP errors:");
+        for (name, err) in &outcome.errors {
+            ui::plain(format!("    - {name}: {err}"));
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -833,6 +884,7 @@ mod tests {
         let args = ImportArgs {
             name: Some("alpha".into()),
             instructions: false,
+            mcp: false,
             upstream: None,
             project: None,
         };
@@ -857,6 +909,7 @@ mod tests {
         let args = ImportArgs {
             name: Some("alpha".into()),
             instructions: false,
+            mcp: false,
             upstream: None,
             project: None,
         };
@@ -883,6 +936,7 @@ mod tests {
         let args = ImportArgs {
             name: Some("alpha".into()),
             instructions: false,
+            mcp: false,
             upstream: None,
             project: None,
         };

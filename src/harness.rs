@@ -37,6 +37,9 @@ pub struct HarnessDef {
     pub subagents_subdir: Option<&'static str>,
     /// Global instructions file under the install root, or `None`.
     pub instructions_file: Option<&'static str>,
+    /// MCP configuration file under the install root, or `None` if this
+    /// harness has no supported global MCP config renderer yet.
+    pub mcp_config_file: Option<&'static str>,
     /// Handlebars context flag (e.g., `{{#if claude}}`).
     pub ctx_flag: &'static str,
     /// Optional upstream-source indexer. The indexer populates a
@@ -51,6 +54,7 @@ pub const CLAUDE_CODE: HarnessDef = HarnessDef {
     skills_subdir: Some(".claude/skills"),
     subagents_subdir: Some(".claude/agents"),
     instructions_file: Some(".claude/CLAUDE.md"),
+    mcp_config_file: Some(".claude.json"),
     ctx_flag: "claude",
     upstream_indexer: Some(crate::upstream::index_claude_marketplaces),
 };
@@ -61,6 +65,7 @@ pub const CODEX: HarnessDef = HarnessDef {
     skills_subdir: Some(".codex/skills"),
     subagents_subdir: Some(".codex/agents"),
     instructions_file: Some(".codex/AGENTS.md"),
+    mcp_config_file: Some(".codex/config.toml"),
     ctx_flag: "codex",
     upstream_indexer: None,
 };
@@ -71,6 +76,7 @@ pub const OPENCODE: HarnessDef = HarnessDef {
     skills_subdir: Some(".config/opencode/skills"),
     subagents_subdir: Some(".config/opencode/agents"),
     instructions_file: Some(".config/opencode/AGENTS.md"),
+    mcp_config_file: None,
     ctx_flag: "opencode",
     upstream_indexer: None,
 };
@@ -81,6 +87,7 @@ pub const GEMINI: HarnessDef = HarnessDef {
     skills_subdir: Some(".gemini/skills"),
     subagents_subdir: Some(".gemini/agents"),
     instructions_file: Some(".gemini/GEMINI.md"),
+    mcp_config_file: None,
     ctx_flag: "gemini",
     upstream_indexer: None,
 };

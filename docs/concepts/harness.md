@@ -7,12 +7,12 @@ agents syncs skills and instructions across these **harnesses** — the term we 
 
 Each harness has a stable id used in `agents.toml`'s `enabled_harnesses` list and in lockfile entries' `harnesses` field.
 
-| id | tool | skills directory | global instructions file |
-|---|---|---|---|
-| `claude-code` | [Claude Code](https://claude.com/claude-code) | `~/.claude/skills/<name>/SKILL.md` | `~/.claude/CLAUDE.md` |
-| `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) | `~/.codex/skills/<name>/SKILL.md` | `~/.codex/AGENTS.md` |
-| `opencode` | [OpenCode](https://opencode.ai) | `~/.config/opencode/skills/<name>/SKILL.md` | `~/.config/opencode/AGENTS.md` |
-| `gemini` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `~/.gemini/skills/<name>/SKILL.md` | `~/.gemini/GEMINI.md` |
+| id | tool | skills directory | global instructions file | MCP config |
+|---|---|---|---|---|
+| `claude-code` | [Claude Code](https://claude.com/claude-code) | `~/.claude/skills/<name>/SKILL.md` | `~/.claude/CLAUDE.md` | `~/.claude.json` |
+| `codex` | [OpenAI Codex CLI](https://github.com/openai/codex) | `~/.codex/skills/<name>/SKILL.md` | `~/.codex/AGENTS.md` | `~/.codex/config.toml` |
+| `opencode` | [OpenCode](https://opencode.ai) | `~/.config/opencode/skills/<name>/SKILL.md` | `~/.config/opencode/AGENTS.md` | not managed |
+| `gemini` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `~/.gemini/skills/<name>/SKILL.md` | `~/.gemini/GEMINI.md` | not managed |
 
 All four use the same `SKILL.md` format ([agentskills.io](https://agentskills.io) open standard): a directory containing a `SKILL.md` file with YAML frontmatter (`name`, `description`) and optional bundled `scripts/`, `references/`, `assets/`. agents's symlink-from-cache install logic works identically for every harness — only the destination path differs.
 
@@ -41,6 +41,9 @@ The lockfile's `harnesses` field on each skill entry restricts which harnesses t
 name = "my-skill"
 harnesses = ["claude-code", "codex"]   # skip opencode + gemini for this skill
 ```
+
+MCP entries use the same `harnesses` field, but only harnesses with managed MCP
+config support can be targeted.
 
 ## Adding support for another harness
 

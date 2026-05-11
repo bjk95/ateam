@@ -1,10 +1,10 @@
 ---
 title: Profiles
-description: Gate skills by machine — work, personal, devbox.
+description: Gate synced entries by machine — work, personal, devbox.
 ---
 
-Profiles let you keep one shared lockfile while allowing different skills to
-land on different machines.
+Profiles let you keep one shared lockfile while allowing different skills,
+subagents, and MCP servers to land on different machines.
 
 Each machine declares its profile set at `init`:
 
@@ -25,6 +25,13 @@ agents skills add canva/agent-skills --skill internal --profile work -y
 The lockfile entry gets `profiles = ["work"]`. `agents apply` only installs the
 entry on machines whose profile set intersects `["work"]`. A `personal`-only
 machine skips it.
+
+The same flag works for subagents and MCP servers:
+
+```bash
+agents subagents add ./agents/reviewer.md --profile work -y
+agents mcp add otter --profile work -- otter mcp serve
+```
 
 ## When to skip profiles entirely
 

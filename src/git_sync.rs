@@ -294,6 +294,22 @@ pub fn msg_harness_remove(ids: &[String]) -> String {
     format!("harness remove :: {}", ids.join(", "))
 }
 
+pub fn msg_mcp_add(name: &str) -> String {
+    format!("mcp add :: {}", name)
+}
+
+pub fn msg_mcp_remove(names: &[String]) -> String {
+    format!("mcp remove :: {}", names.join(", "))
+}
+
+pub fn msg_mcp_activate(names: &[String]) -> String {
+    format!("mcp activate :: {}", names.join(", "))
+}
+
+pub fn msg_mcp_deactivate(names: &[String]) -> String {
+    format!("mcp deactivate :: {}", names.join(", "))
+}
+
 fn short(sha: &str) -> String {
     sha.chars().take(7).collect()
 }

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -10,6 +10,9 @@ pub struct Lockfile {
 
     #[serde(default, rename = "subagent", skip_serializing_if = "Vec::is_empty")]
     pub subagents: Vec<SubagentEntry>,
+
+    #[serde(default, rename = "mcp", skip_serializing_if = "Vec::is_empty")]
+    pub mcps: Vec<McpEntry>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<InstructionsEntry>,
@@ -110,6 +113,45 @@ pub struct SubagentEntry {
     pub upstream: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpEntry {
+    pub name: String,
+
+    #[serde(default = "default_mcp_transport")]
+    pub transport: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bearer_token_env_var: Option<String>,
+
+    #[serde(
+        default = "default_harnesses",
+        skip_serializing_if = "is_default_harnesses"
+    )]
+    pub harnesses: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profiles: Vec<String>,
+
+    #[serde(default = "default_active", skip_serializing_if = "is_active")]
+    pub active: bool,
+}
+
+fn default_mcp_transport() -> String {
+    "stdio".into()
+}
+
 fn default_harnesses() -> Vec<String> {
     vec!["*".into()]
 }
@@ -133,6 +175,7 @@ impl Lockfile {
             return Ok(Self {
                 skills: Vec::new(),
                 subagents: Vec::new(),
+                mcps: Vec::new(),
                 instructions: None,
             });
         }
@@ -147,6 +190,7 @@ impl Lockfile {
             .with_context(|| format!("in {}", path.display()))?;
         validate_subagent_subpaths(&lock.subagents)
             .with_context(|| format!("in {}", path.display()))?;
+        validate_no_duplicate_mcps(&lock.mcps).with_context(|| format!("in {}", path.display()))?;
         Ok(lock)
     }
 
@@ -155,13 +199,18 @@ impl Lockfile {
             .context("refusing to write lockfile with duplicate skill names")?;
         validate_no_duplicate_subagents(&self.subagents)
             .context("refusing to write lockfile with duplicate subagent names")?;
+        validate_no_duplicate_mcps(&self.mcps)
+            .context("refusing to write lockfile with duplicate mcp names")?;
         let path = crate::paths::lockfile(repo);
-        let body =
-            if self.skills.is_empty() && self.subagents.is_empty() && self.instructions.is_none() {
-                "# agents lockfile — managed by `agents`\n".to_string()
-            } else {
-                toml::to_string_pretty(self).context("serializing lockfile")?
-            };
+        let body = if self.skills.is_empty()
+            && self.subagents.is_empty()
+            && self.mcps.is_empty()
+            && self.instructions.is_none()
+        {
+            "# agents lockfile — managed by `agents`\n".to_string()
+        } else {
+            toml::to_string_pretty(self).context("serializing lockfile")?
+        };
         std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
@@ -209,6 +258,23 @@ impl Lockfile {
     pub fn find_subagent(&self, name: &str) -> Option<&SubagentEntry> {
         self.subagents.iter().find(|s| s.name == name)
     }
+
+    pub fn upsert_mcp(&mut self, entry: McpEntry) -> bool {
+        if let Some(pos) = self.mcps.iter().position(|s| s.name == entry.name) {
+            self.mcps[pos] = entry;
+            true
+        } else {
+            self.mcps.push(entry);
+            false
+        }
+    }
+
+    pub fn remove_mcp(&mut self, name: &str) -> Option<McpEntry> {
+        self.mcps
+            .iter()
+            .position(|s| s.name == name)
+            .map(|pos| self.mcps.remove(pos))
+    }
 }
 
 fn validate_no_duplicate_names(skills: &[SkillEntry]) -> Result<()> {
@@ -255,6 +321,16 @@ fn validate_subagent_subpaths(subagents: &[SubagentEntry]) -> Result<()> {
         }
         crate::source::sanitize_subpath(p)
             .with_context(|| format!("invalid `path` for subagent `{}`", s.name))?;
+    }
+    Ok(())
+}
+
+fn validate_no_duplicate_mcps(mcps: &[McpEntry]) -> Result<()> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for mcp in mcps {
+        if !seen.insert(mcp.name.as_str()) {
+            bail!("duplicate mcp name `{}` in lockfile", mcp.name);
+        }
     }
     Ok(())
 }
@@ -339,6 +415,7 @@ mod tests {
                 },
             ],
             subagents: Vec::new(),
+            mcps: Vec::new(),
             instructions: None,
         };
         assert!(validate_no_duplicate_names(&lock.skills).is_err());
@@ -349,6 +426,7 @@ mod tests {
         let lock = Lockfile {
             skills: Vec::new(),
             subagents: Vec::new(),
+            mcps: Vec::new(),
             instructions: Some(InstructionsEntry::default()),
         };
         let s = toml::to_string_pretty(&lock).unwrap();
@@ -373,6 +451,7 @@ mod tests {
                 upstream: None,
             }],
             subagents: Vec::new(),
+            mcps: Vec::new(),
             instructions: None,
         };
         let serialized = toml::to_string(&lock).unwrap();
@@ -404,6 +483,7 @@ mod tests {
                 upstream: None,
             }],
             subagents: Vec::new(),
+            mcps: Vec::new(),
             instructions: None,
         };
         let serialized = toml::to_string(&lock).unwrap();
@@ -465,6 +545,7 @@ source = "local:skills/a"
                 active: true,
                 upstream: None,
             }],
+            mcps: Vec::new(),
             instructions: None,
         };
         let serialized = toml::to_string_pretty(&lock).unwrap();
@@ -515,6 +596,7 @@ source = "local:skills/a"
         let lock = Lockfile {
             skills: Vec::new(),
             subagents: Vec::new(),
+            mcps: Vec::new(),
             instructions: None,
         };
         let serialized = toml::to_string(&lock).unwrap();

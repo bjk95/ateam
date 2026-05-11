@@ -1,9 +1,9 @@
 ---
 title: Quickstart
-description: First 5 minutes — bootstrap, install a skill, sync to another machine.
+description: First 5 minutes — bootstrap, install shared entries, sync to another machine.
 ---
 
-This walks through the five minutes from a fresh shell to having a synced skill
+This walks through the five minutes from a fresh shell to having synced entries
 visible in every enabled harness.
 
 ## 1. Bootstrap a fresh repo
@@ -39,6 +39,12 @@ agents remote add git@github.com:you/agents-config.git
 From now on every `agents skills add` / `update` / `remove` pulls, commits, and
 pushes without you ever typing `git`.
 
+MCP servers use the same sync path:
+
+```bash
+agents mcp add context7 --profile work -- npx -y @upstash/context7-mcp
+```
+
 ## 4. On a second machine
 
 ```bash
@@ -47,13 +53,13 @@ agents apply
 ```
 
 `init` clones the config repo. `apply` reads the lockfile, refetches every
-remote skill into a cold cache, and creates the same symlinks. Every enabled
-harness now sees the same skill.
+remote skill into a cold cache, creates the same symlinks, and writes matching
+MCP config. Every enabled harness now sees the same matching setup.
 
 ## Next
 
 - [Project-scoped skills](/concepts/project-scope/) — install a skill into a
   specific project's harness-local skills dirs instead of user-global.
-- [Profiles](/concepts/profiles/) — gate skills by machine (work / personal /
-  devbox).
+- [Profiles](/concepts/profiles/) — gate skills, subagents, and MCP servers by
+  machine (work / personal / devbox).
 - [`agents` CLI reference](/reference/cli/) — every flag.

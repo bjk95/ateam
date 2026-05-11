@@ -8,6 +8,7 @@ mod install;
 mod instructions;
 mod lockfile;
 mod manifest;
+mod mcp;
 mod paths;
 mod repo_lock;
 mod self_update;
