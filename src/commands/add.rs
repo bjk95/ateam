@@ -620,12 +620,13 @@ fn install_one(
         InstallRoot::Global => paths::home_dir()?,
         InstallRoot::Project { path, .. } => path.clone(),
     };
+    install::remove_cross_tool_skill_copies(&install_root_path, &skill.name)?;
 
     let mut linked: Vec<PathBuf> = Vec::new();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
     for harness in ctx.harnesses {
         let link = paths::harness_skill_path(&install_root_path, harness, &skill.name)?;
-        match install::install_symlink(&link, &canonical, false)? {
+        match install::install_skill_symlink(&link, &canonical, false)? {
             install::LinkOutcome::Refused => {
                 ui::warn(format!(
                     "refused to install {} for {}: real dir at {} (rerun with `agents apply --force`)",

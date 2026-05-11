@@ -301,6 +301,132 @@ fn immediate_add_then_remove_uninstalls_skill_target() {
 }
 
 #[test]
+fn add_replaces_existing_harness_skill_copy_with_symlink() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    let source = fx.write_local_skill_source("alpha");
+    let source_parent = source.parent().unwrap().to_str().unwrap();
+    let existing = fx.codex_skill_path("alpha");
+    std::fs::create_dir_all(&existing).unwrap();
+    std::fs::write(existing.join("SKILL.md"), "stale harness copy\n").unwrap();
+
+    fx.assert_success(&[
+        "--quiet",
+        "--no-sync",
+        "skills",
+        "add",
+        source_parent,
+        "--skill",
+        "alpha",
+        "--global",
+        "--harness",
+        "codex",
+        "-y",
+    ]);
+
+    assert!(
+        std::fs::symlink_metadata(&existing)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "skill installs should replace existing harness copies with symlinks"
+    );
+    assert_eq!(
+        std::fs::read_link(&existing).unwrap(),
+        fx.repo.join("skills/alpha")
+    );
+}
+
+#[test]
+fn apply_replaces_existing_harness_skill_copy_with_symlink() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    fx.write_local_skill_lockfile("alpha");
+    let existing = fx.codex_skill_path("alpha");
+    std::fs::create_dir_all(&existing).unwrap();
+    std::fs::write(existing.join("SKILL.md"), "stale harness copy\n").unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+
+    assert!(
+        std::fs::symlink_metadata(&existing)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "apply should replace existing harness copies with symlinks"
+    );
+    assert_eq!(
+        std::fs::read_link(&existing).unwrap(),
+        fx.repo.join("skills/alpha")
+    );
+}
+
+#[test]
+fn add_removes_existing_cross_tool_skill_namespace_symlink() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    let source = fx.write_local_skill_source("alpha");
+    let source_parent = source.parent().unwrap().to_str().unwrap();
+    let namespace_target = fx.home.join("legacy/superpowers/skills");
+    let namespace_link = fx.home.join(".agents/skills/superpowers");
+    std::fs::create_dir_all(namespace_target.join("alpha")).unwrap();
+    std::fs::write(
+        namespace_target.join("alpha/SKILL.md"),
+        "legacy namespace copy\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(namespace_link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&namespace_target, &namespace_link).unwrap();
+
+    fx.assert_success(&[
+        "--quiet",
+        "--no-sync",
+        "skills",
+        "add",
+        source_parent,
+        "--skill",
+        "alpha",
+        "--global",
+        "--harness",
+        "codex",
+        "-y",
+    ]);
+
+    assert!(
+        std::fs::symlink_metadata(&namespace_link).is_err(),
+        "namespaced cross-tool skill links should be removed"
+    );
+    assert!(
+        namespace_target.join("alpha/SKILL.md").exists(),
+        "removing the namespace symlink should not delete its target checkout"
+    );
+}
+
+#[test]
+fn apply_harness_filter_preserves_cross_tool_alias_for_untargeted_skill() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    fx.write_local_skill_lockfile("alpha");
+    let namespace_target = fx.home.join("legacy/superpowers/skills");
+    let namespace_link = fx.home.join(".agents/skills/superpowers");
+    std::fs::create_dir_all(namespace_target.join("alpha")).unwrap();
+    std::fs::write(
+        namespace_target.join("alpha/SKILL.md"),
+        "legacy namespace copy\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(namespace_link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&namespace_target, &namespace_link).unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply", "--harness", "claude-code"]);
+
+    assert!(
+        std::fs::symlink_metadata(&namespace_link).is_ok(),
+        "harness-filtered apply should not clean aliases for untargeted skills"
+    );
+}
+
+#[test]
 fn deactivate_removes_legacy_copy_install() {
     let fx = Fixture::new();
     fx.write_repo_config(&["codex"]);

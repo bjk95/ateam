@@ -37,18 +37,13 @@ agents project add canva ~/work/canva
 agents apply
 ```
 
-## Real directory at a target install path
+## Real skill directory at a target install path
 
-`agents apply` first checks whether the existing directory matches the snapshot
-at `<repo>/skills/<name>/` byte-for-byte. If it does, agents auto-heals: removes
-the dir and replaces it with a symlink. No flag needed — the data is already
-in the snapshot, so nothing is lost.
-
-If the contents differ, apply refuses. Two ways to recover:
-
-1. Delete or move the existing directory yourself and re-run `agents apply`.
-2. Run `agents apply --force` — agents moves the conflicting directory aside
-   to `<name>.bak.<unix-ts>` rather than deleting it.
+For managed skills, the agents repo is canonical. If a real directory already
+exists at a harness skill path, `agents apply` deletes that harness-local copy
+and replaces it with a symlink to `<repo>/skills/<name>/`. The same happens
+during `agents skills add`. agents also removes stale cross-tool aliases under
+`.agents/skills` for that managed skill.
 
 ## Pre-existing instructions file (`CLAUDE.md`, `AGENTS.md`, …)
 

@@ -80,9 +80,9 @@ an external standard that third-party sources are expected to publish.
 | 19 | Harness filtering | Pass | `apply -a <harness>` builds a target harness set and skips unmatched skill/subagent outputs. |
 | 20 | Project filtering | Pass | `apply --project <alias>` only processes entries whose `project` matches that alias. |
 | 21 | Unregistered project | Pass | Missing project aliases are collected, warned, and skipped while other entries continue. |
-| 22 | Matching directory auto-heal | Pass | `install_symlink` hashes existing real dirs/files against the canonical target and auto-heals matching content. |
-| 23 | Conflicting directory refusal | Pass | `install_symlink` returns `Refused` for foreign real paths when `force` is false. |
-| 24 | Forced conflict recovery | Pass | `--force` moves foreign paths to `<name>.bak.<unix-ts>` before installing managed output. |
+| 22 | Matching skill copy cleanup | Pass | `install_skill_symlink` hashes existing real dirs/files against the canonical target and auto-heals matching content. |
+| 23 | Conflicting skill copy cleanup | Pass | `install_skill_symlink` deletes existing harness-local skill copies, and `remove_cross_tool_skill_copies` removes stale `.agents/skills` aliases. |
+| 24 | Forced non-skill conflict recovery | Pass | `--force` moves foreign instructions or subagent paths to `<name>.bak.<unix-ts>` before installing managed output. |
 | 25 | Symlink-only installs | Pass | `apply` installs skills, rendered instructions, and rendered subagents into harness paths as symlinks. |
 | 26 | Legacy copy cleanup | Pass | Legacy managed copy entries are removed during apply/deactivate/remove and future installs are symlinks. |
 | 27 | Skill add happy path | Pass | `skills add` fetches, snapshots remote sources, upserts the lockfile, installs into harnesses, and auto-commits when sync is enabled. |

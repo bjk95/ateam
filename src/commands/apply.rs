@@ -129,22 +129,20 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
                                             &entry.name,
                                         ) {
                                             ui::fail(format!("refetch {} — {:#}", entry.name, e));
-                                        } else {
-                                            if let Some(pos) = updated_lock
-                                                .skills
-                                                .iter()
-                                                .position(|s| s.name == entry.name)
-                                            {
-                                                updated_lock.skills[pos].tree_sha =
-                                                    Some(latest.clone());
-                                                lockfile_dirty = true;
-                                                ui::detail(format!(
-                                                    "{} tree_sha {} → {}",
-                                                    entry.name,
-                                                    short(&old),
-                                                    short(&latest)
-                                                ));
-                                            }
+                                        } else if let Some(pos) = updated_lock
+                                            .skills
+                                            .iter()
+                                            .position(|s| s.name == entry.name)
+                                        {
+                                            updated_lock.skills[pos].tree_sha =
+                                                Some(latest.clone());
+                                            lockfile_dirty = true;
+                                            ui::detail(format!(
+                                                "{} tree_sha {} → {}",
+                                                entry.name,
+                                                short(&old),
+                                                short(&latest)
+                                            ));
                                         }
                                     }
                                 }
@@ -169,6 +167,15 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             }
         }
 
+        let applies_to_target_harness = harnesses.iter().any(|harness| {
+            target_harnesses
+                .as_ref()
+                .is_none_or(|filter| filter.contains(harness))
+        });
+        if !applies_to_target_harness {
+            continue;
+        }
+
         if args.dry_run {
             for harness in &harnesses {
                 if let Some(filter) = &target_harnesses {
@@ -187,6 +194,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             continue;
         }
 
+        install::remove_cross_tool_skill_copies(&install_root, &entry.name)?;
         for harness in &harnesses {
             if let Some(filter) = &target_harnesses {
                 if !filter.contains(harness) {
@@ -195,7 +203,7 @@ pub fn run(args: ApplyArgs, no_sync: bool) -> Result<()> {
             }
             let link = paths::harness_skill_path(&install_root, harness, &entry.name)?;
             remove_legacy_copy(&prev_manifest, &link)?;
-            match install::install_symlink(&link, &canonical, args.force)? {
+            match install::install_skill_symlink(&link, &canonical, args.force)? {
                 install::LinkOutcome::Created
                 | install::LinkOutcome::Replaced
                 | install::LinkOutcome::AlreadyCorrect
