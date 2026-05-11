@@ -1,6 +1,7 @@
 /target
 
 .claude/
+.codex/
 
 # Astro / Starlight site
 site/node_modules
