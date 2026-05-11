@@ -46,13 +46,13 @@ Materialize the lockfile (active entries only).
 agents apply [--dry-run] [-a <harness>...] [--project <alias>] [--force]
 ```
 
-If a real directory already sits at a target path (e.g. a skill installed by
-hand or by `npx skills`), apply auto-heals it: if its contents match the
-snapshot at `<repo>/skills/<name>/` byte-for-byte, agents removes the dir and
-replaces it with a symlink. No `--force` needed and no data loss is possible
-because the snapshot already has the same bytes. If the contents don't match,
-apply refuses — `--force` is the escape hatch and moves the conflicting
-directory aside to `<name>.bak.<unix-ts>` rather than deleting it.
+If a real directory already sits at a target skill path (e.g. a skill installed
+by hand or by `npx skills`), apply deletes that harness-local copy and replaces
+it with a symlink to the canonical snapshot at `<repo>/skills/<name>/`. Stale
+cross-tool aliases under `.agents/skills` are also removed for managed skills.
+Instructions and subagents keep the older conflict behavior: foreign real paths
+are refused unless `--force` is passed, in which case they are moved aside to
+`<name>.bak.<unix-ts>`.
 
 Harness targets are always symlinks. Skills point at their canonical snapshot
 under `<repo>/skills/`; instructions and subagents point at per-harness rendered

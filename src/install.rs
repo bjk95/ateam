@@ -9,7 +9,7 @@ pub enum LinkOutcome {
     Created,
     /// Existing symlink already pointed at the right target.
     AlreadyCorrect,
-    /// Replaced an existing symlink that pointed elsewhere.
+    /// Replaced an existing path that pointed elsewhere or was superseded.
     Replaced,
     /// Existing real file/dir was moved aside (only with `force`).
     MovedAside,
@@ -28,6 +28,71 @@ pub enum LinkOutcome {
 /// "skill installed pre-agents, then imported" case where both copies still
 /// exist on disk).
 pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOutcome> {
+    install_symlink_with_policy(link, target, force, RealPathPolicy::RefuseUnlessForce)
+}
+
+/// Create a managed skill symlink, deleting any existing real harness-local
+/// copy at the link path. For skills, the agents repo is the canonical copy.
+pub fn install_skill_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOutcome> {
+    install_symlink_with_policy(link, target, force, RealPathPolicy::Replace)
+}
+
+/// Remove skill copies from the cross-tool `.agents/skills` discovery alias.
+/// If a namespace entry is itself a symlink, remove the namespace link instead
+/// of deleting files through it.
+pub fn remove_cross_tool_skill_copies(install_root: &Path, skill_name: &str) -> Result<()> {
+    let skills_dir = install_root.join(".agents").join("skills");
+    if !skills_dir.exists() {
+        return Ok(());
+    }
+
+    let direct = skills_dir.join(skill_name);
+    remove_skill_copy_path(&direct)?;
+
+    for entry in std::fs::read_dir(&skills_dir)
+        .with_context(|| format!("reading {}", skills_dir.display()))?
+        .flatten()
+    {
+        let namespace = entry.path();
+        if namespace.file_name().is_some_and(|name| name == skill_name) {
+            continue;
+        }
+
+        let nested = namespace.join(skill_name);
+        let nested_exists = match std::fs::symlink_metadata(&nested) {
+            Ok(_) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => return Err(anyhow!("stat {}: {}", nested.display(), e)),
+        };
+        if !nested_exists {
+            continue;
+        }
+
+        let namespace_meta = std::fs::symlink_metadata(&namespace)
+            .with_context(|| format!("stat {}", namespace.display()))?;
+        if namespace_meta.file_type().is_symlink() {
+            std::fs::remove_file(&namespace)
+                .with_context(|| format!("removing namespace {}", namespace.display()))?;
+        } else if namespace_meta.is_dir() {
+            remove_skill_copy_path(&nested)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RealPathPolicy {
+    RefuseUnlessForce,
+    Replace,
+}
+
+fn install_symlink_with_policy(
+    link: &Path,
+    target: &Path,
+    force: bool,
+    real_path_policy: RealPathPolicy,
+) -> Result<LinkOutcome> {
     if let Some(parent) = link.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
@@ -50,19 +115,18 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
         } else {
             // Auto-heal: byte-identical copy is redundant; safe to drop.
             if content_matches(link, target).unwrap_or(false) {
-                if meta.is_dir() {
-                    std::fs::remove_dir_all(link).with_context(|| {
-                        format!("removing redundant copy at {}", link.display())
-                    })?;
-                } else {
-                    std::fs::remove_file(link).with_context(|| {
-                        format!("removing redundant copy at {}", link.display())
-                    })?;
-                }
+                remove_real_path(link, &meta)?;
                 symlink(target, link).with_context(|| {
                     format!("creating symlink {} → {}", link.display(), target.display())
                 })?;
                 return Ok(LinkOutcome::AutoHealed);
+            }
+            if real_path_policy == RealPathPolicy::Replace {
+                remove_real_path(link, &meta)?;
+                symlink(target, link).with_context(|| {
+                    format!("creating symlink {} → {}", link.display(), target.display())
+                })?;
+                return Ok(LinkOutcome::Replaced);
             }
             if !force {
                 return Ok(LinkOutcome::Refused);
@@ -81,6 +145,32 @@ pub fn install_symlink(link: &Path, target: &Path, force: bool) -> Result<LinkOu
     symlink(target, link)
         .with_context(|| format!("creating symlink {} → {}", link.display(), target.display()))?;
     Ok(LinkOutcome::Created)
+}
+
+fn remove_real_path(path: &Path, meta: &std::fs::Metadata) -> Result<()> {
+    if meta.is_dir() {
+        std::fs::remove_dir_all(path)
+            .with_context(|| format!("removing existing copy at {}", path.display()))?;
+    } else {
+        std::fs::remove_file(path)
+            .with_context(|| format!("removing existing copy at {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_skill_copy_path(path: &Path) -> Result<()> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(anyhow!("stat {}: {}", path.display(), e)),
+    };
+    if meta.file_type().is_symlink() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("removing existing copy at {}", path.display()))?;
+    } else {
+        remove_real_path(path, &meta)?;
+    }
+    Ok(())
 }
 
 fn content_matches(a: &Path, b: &Path) -> Result<bool> {
