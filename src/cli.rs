@@ -100,12 +100,16 @@ pub enum Command {
     /// Pull with rebase/autostash, then push the agents-config repo.
     Sync,
 
-    /// Adopt locally-installed skills and global instructions into the lockfile.
+    /// Adopt local skills, global instructions, and MCP servers into the lockfile.
     Import(ImportArgs),
 
     /// Manage skills.
     #[command(subcommand)]
     Skills(SkillsCommand),
+
+    /// Manage MCP servers.
+    #[command(subcommand)]
+    Mcp(McpCommand),
 
     /// Manage per-machine project alias map.
     #[command(subcommand)]
@@ -179,6 +183,61 @@ pub enum SubagentsCommand {
 
     /// List locked subagents with their sources.
     List,
+}
+
+#[derive(Subcommand)]
+pub enum McpCommand {
+    /// Add or update an MCP server.
+    Add(McpAddArgs),
+
+    /// Remove one or more MCP servers from the lockfile and harness configs.
+    Remove(McpNameArgs),
+
+    /// List locked MCP servers.
+    List,
+
+    /// Reactivate a previously-deactivated MCP server.
+    Activate(McpNameArgs),
+
+    /// Deactivate an MCP server without removing its lockfile entry.
+    Deactivate(McpNameArgs),
+}
+
+#[derive(Parser)]
+pub struct McpAddArgs {
+    /// MCP server name.
+    pub name: String,
+
+    /// URL for a streamable HTTP MCP server.
+    #[arg(long)]
+    pub url: Option<String>,
+
+    /// Optional environment variable that stores a bearer token. HTTP only.
+    #[arg(long)]
+    pub bearer_token_env_var: Option<String>,
+
+    /// Environment variable for stdio MCP servers. Repeatable KEY=VALUE.
+    #[arg(long = "env", value_name = "KEY=VALUE")]
+    pub env: Vec<String>,
+
+    /// Target harnesses. Repeatable. `*` = all enabled harnesses with MCP support.
+    #[arg(short = 'a', long = "harness", value_name = "NAME")]
+    pub harnesses: Vec<String>,
+
+    /// Annotate lockfile entry with profile gates.
+    #[arg(long, value_name = "NAME")]
+    pub profile: Vec<String>,
+
+    /// Command to launch a stdio MCP server. Place after `--`.
+    #[arg(last = true, allow_hyphen_values = true, value_name = "COMMAND")]
+    pub command: Vec<String>,
+}
+
+#[derive(Parser)]
+pub struct McpNameArgs {
+    /// MCP server names. Repeatable.
+    #[arg(value_name = "NAME", required = true)]
+    pub names: Vec<String>,
 }
 
 #[derive(Parser)]
@@ -418,13 +477,17 @@ pub struct ListArgs {
 
 #[derive(Parser)]
 pub struct ImportArgs {
-    /// Skill name to adopt. Omit for bulk import (every skill on disk + instructions).
+    /// Skill name to adopt. Omit for bulk import (skills, instructions, and MCPs).
     pub name: Option<String>,
 
     /// Only import the global ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md as the
     /// instructions template — skip skills.
     #[arg(long, conflicts_with_all = ["upstream", "project"])]
     pub instructions: bool,
+
+    /// Only import MCP servers from supported harness config files — skip skills and instructions.
+    #[arg(long, conflicts_with_all = ["upstream", "project"])]
+    pub mcp: bool,
 
     /// Override detected upstream source. Single-skill mode only.
     #[arg(long, value_name = "SOURCE")]
@@ -486,6 +549,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             SkillsCommand::Show(args) => crate::commands::show::run(args),
             SkillsCommand::Find(args) => crate::commands::find::run(args, no_sync),
         },
+        Command::Mcp(cmd) => crate::commands::mcp::run(cmd, no_sync),
         Command::Project(cmd) => crate::commands::project::run(cmd),
         Command::Upgrade => crate::self_update::force_upgrade(),
         Command::Remote(cmd) => crate::commands::remote::run(cmd),
@@ -512,6 +576,13 @@ fn is_mutating(cmd: &Command) -> bool {
             | SkillsCommand::Deactivate(_)
             | SkillsCommand::Activate(_) => true,
             SkillsCommand::List(_) | SkillsCommand::Show(_) | SkillsCommand::Find(_) => false,
+        },
+        Command::Mcp(m) => match m {
+            McpCommand::Add(_)
+            | McpCommand::Remove(_)
+            | McpCommand::Activate(_)
+            | McpCommand::Deactivate(_) => true,
+            McpCommand::List => false,
         },
         Command::Project(p) => match p {
             ProjectCommand::Add { .. } | ProjectCommand::Remove { .. } => true,

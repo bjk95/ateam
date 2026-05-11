@@ -131,6 +131,14 @@ impl Fixture {
         self.home.join(".codex/AGENTS.md")
     }
 
+    fn codex_config_path(&self) -> PathBuf {
+        self.home.join(".codex/config.toml")
+    }
+
+    fn claude_config_path(&self) -> PathBuf {
+        self.home.join(".claude.json")
+    }
+
     fn claude_instructions_path(&self) -> PathBuf {
         self.home.join(".claude/CLAUDE.md")
     }
@@ -537,6 +545,372 @@ fn apply_project_filter_preserves_global_instructions() {
     assert_eq!(
         std::fs::read_to_string(fx.codex_instructions_path()).unwrap(),
         "GLOBAL\n"
+    );
+}
+
+#[test]
+fn mcp_add_records_lockfile_and_writes_codex_config() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::write(fx.repo.join("agents.lock.toml"), "").unwrap();
+
+    fx.assert_success(&[
+        "--quiet",
+        "--no-sync",
+        "mcp",
+        "add",
+        "otter",
+        "--harness",
+        "codex",
+        "--profile",
+        "canva",
+        "--",
+        "otter",
+        "mcp",
+        "serve",
+    ]);
+
+    let lock = std::fs::read_to_string(fx.repo.join("agents.lock.toml")).unwrap();
+    assert!(lock.contains("[[mcp]]"), "{lock}");
+    assert!(lock.contains("name = \"otter\""), "{lock}");
+    assert!(lock.contains("profiles = [\"canva\"]"), "{lock}");
+    let codex_config = std::fs::read_to_string(fx.codex_config_path()).unwrap();
+    assert!(
+        codex_config.contains("[mcp_servers.otter]"),
+        "{codex_config}"
+    );
+    let parsed = codex_config.parse::<toml::Value>().unwrap();
+    let otter = &parsed["mcp_servers"]["otter"];
+    assert_eq!(otter["command"].as_str(), Some("otter"));
+    assert_eq!(
+        otter["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|arg| arg.as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["mcp", "serve"]
+    );
+}
+
+#[test]
+fn mcp_add_preserves_existing_managed_codex_servers() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::write(
+        fx.repo.join("agents.lock.toml"),
+        r#"
+[[mcp]]
+name = "context7"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+harnesses = ["codex"]
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+    fx.assert_success(&[
+        "--quiet",
+        "--no-sync",
+        "mcp",
+        "add",
+        "otter",
+        "--harness",
+        "codex",
+        "--",
+        "otter",
+        "mcp",
+        "serve",
+    ]);
+
+    let codex_config = std::fs::read_to_string(fx.codex_config_path()).unwrap();
+    assert!(
+        codex_config.contains("[mcp_servers.context7]"),
+        "{codex_config}"
+    );
+    assert!(
+        codex_config.contains("[mcp_servers.otter]"),
+        "{codex_config}"
+    );
+}
+
+#[test]
+fn apply_profile_filters_managed_codex_mcps_and_preserves_unmanaged_config() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::write(
+        fx.repo.join(".agents/machine.toml"),
+        "profiles = [\"personal\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fx.repo.join("agents.lock.toml"),
+        r#"
+[[mcp]]
+name = "otter"
+transport = "stdio"
+command = "otter"
+args = ["mcp", "serve"]
+harnesses = ["codex"]
+profiles = ["canva"]
+
+[[mcp]]
+name = "supabase"
+transport = "http"
+url = "https://mcp.supabase.com/mcp"
+harnesses = ["codex"]
+profiles = ["personal"]
+"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(fx.codex_config_path().parent().unwrap()).unwrap();
+    std::fs::write(
+        fx.codex_config_path(),
+        r#"
+model = "gpt-5.3-codex"
+
+[mcp_servers.unmanaged]
+command = "keep"
+
+[mcp_servers.otter]
+command = "stale"
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+
+    let codex_config = std::fs::read_to_string(fx.codex_config_path()).unwrap();
+    assert!(
+        codex_config.contains("model = \"gpt-5.3-codex\""),
+        "{codex_config}"
+    );
+    assert!(
+        codex_config.contains("[mcp_servers.unmanaged]"),
+        "{codex_config}"
+    );
+    assert!(
+        !codex_config.contains("[mcp_servers.otter]"),
+        "{codex_config}"
+    );
+    assert!(
+        codex_config.contains("[mcp_servers.supabase]"),
+        "{codex_config}"
+    );
+    assert!(
+        codex_config.contains("url = \"https://mcp.supabase.com/mcp\""),
+        "{codex_config}"
+    );
+}
+
+#[test]
+fn apply_writes_global_claude_mcp_config_and_preserves_unmanaged_entries() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["claude-code"]);
+    std::fs::write(
+        fx.repo.join(".agents/machine.toml"),
+        "profiles = [\"work\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fx.repo.join("agents.lock.toml"),
+        r#"
+[[mcp]]
+name = "otter"
+transport = "stdio"
+command = "otter"
+args = ["mcp", "serve"]
+harnesses = ["claude-code"]
+profiles = ["work"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        fx.claude_config_path(),
+        r#"{
+  "theme": "dark",
+  "mcpServers": {
+    "unmanaged": {
+      "type": "stdio",
+      "command": "keep"
+    },
+    "otter": {
+      "type": "stdio",
+      "command": "stale"
+    }
+  }
+}
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+
+    let claude_config = std::fs::read_to_string(fx.claude_config_path()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&claude_config).unwrap();
+    assert_eq!(parsed["theme"].as_str(), Some("dark"));
+    assert_eq!(
+        parsed["mcpServers"]["unmanaged"]["command"].as_str(),
+        Some("keep")
+    );
+    assert_eq!(
+        parsed["mcpServers"]["otter"]["type"].as_str(),
+        Some("stdio")
+    );
+    assert_eq!(
+        parsed["mcpServers"]["otter"]["command"].as_str(),
+        Some("otter")
+    );
+    assert_eq!(
+        parsed["mcpServers"]["otter"]["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|arg| arg.as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["mcp", "serve"]
+    );
+}
+
+#[test]
+fn mcp_deactivate_removes_managed_codex_config() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::write(
+        fx.repo.join("agents.lock.toml"),
+        r#"
+[[mcp]]
+name = "context7"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+harnesses = ["codex"]
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+    assert!(std::fs::read_to_string(fx.codex_config_path())
+        .unwrap()
+        .contains("[mcp_servers.context7]"));
+
+    fx.assert_success(&["--quiet", "--no-sync", "mcp", "deactivate", "context7"]);
+
+    let codex_config = std::fs::read_to_string(fx.codex_config_path()).unwrap();
+    assert!(
+        !codex_config.contains("[mcp_servers.context7]"),
+        "{codex_config}"
+    );
+    let lock = std::fs::read_to_string(fx.repo.join("agents.lock.toml")).unwrap();
+    assert!(lock.contains("active = false"), "{lock}");
+}
+
+#[test]
+fn apply_removes_codex_mcp_missing_from_lockfile_using_local_state() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::write(
+        fx.repo.join("agents.lock.toml"),
+        r#"
+[[mcp]]
+name = "context7"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+harnesses = ["codex"]
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+    assert!(std::fs::read_to_string(fx.codex_config_path())
+        .unwrap()
+        .contains("[mcp_servers.context7]"));
+
+    std::fs::write(fx.repo.join("agents.lock.toml"), "").unwrap();
+    fx.assert_success(&["--quiet", "--no-sync", "apply"]);
+
+    let codex_config = std::fs::read_to_string(fx.codex_config_path()).unwrap();
+    assert!(
+        !codex_config.contains("[mcp_servers.context7]"),
+        "{codex_config}"
+    );
+}
+
+#[test]
+fn import_default_adopts_existing_mcp_configs() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex", "claude-code"]);
+    std::fs::create_dir_all(fx.codex_config_path().parent().unwrap()).unwrap();
+    std::fs::write(
+        fx.codex_config_path(),
+        r#"
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        fx.claude_config_path(),
+        r#"{
+  "mcpServers": {
+    "otter": {
+      "type": "stdio",
+      "command": "otter",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "import"]);
+
+    let lock = std::fs::read_to_string(fx.repo.join("agents.lock.toml")).unwrap();
+    assert!(lock.contains("[[mcp]]"), "{lock}");
+    assert!(lock.contains("name = \"context7\""), "{lock}");
+    assert!(lock.contains("name = \"otter\""), "{lock}");
+    let manifest = std::fs::read_to_string(fx.repo.join(".agents/mcp-manifest.toml")).unwrap();
+    assert!(manifest.contains("context7"), "{manifest}");
+    assert!(manifest.contains("otter"), "{manifest}");
+}
+
+#[test]
+fn import_mcp_only_skips_skills_and_instructions() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    fx.write_instructions_template("template should not be replaced\n");
+    let skill_dir = fx.home.join(".codex/skills/alpha");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: alpha\ndescription: Alpha skill.\n---\nbody\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(fx.codex_config_path().parent().unwrap()).unwrap();
+    std::fs::write(
+        fx.codex_config_path(),
+        r#"
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+"#,
+    )
+    .unwrap();
+
+    fx.assert_success(&["--quiet", "--no-sync", "import", "--mcp"]);
+
+    let lock = std::fs::read_to_string(fx.repo.join("agents.lock.toml")).unwrap();
+    assert!(lock.contains("[[mcp]]"), "{lock}");
+    assert!(lock.contains("name = \"context7\""), "{lock}");
+    assert!(!lock.contains("[[skill]]"), "{lock}");
+    assert_eq!(
+        std::fs::read_to_string(fx.repo.join("instructions/instructions.md.hbs")).unwrap(),
+        "template should not be replaced\n"
     );
 }
 

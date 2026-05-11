@@ -1,11 +1,12 @@
 ---
 title: Lockfile format
-description: The one TOML file that records every skill agents manages.
+description: The one TOML file that records every synced artifact agents manages.
 ---
 
-`<repo>/agents.lock.toml` is the single source of truth for which skills should
-be installed on a given machine. It's committed to git; every machine reads the
-same file and reconciles its symlinks against it.
+`<repo>/agents.lock.toml` is the single source of truth for which skills,
+subagents, and MCP servers should be installed or configured on a given machine.
+It's committed to git; every machine reads the same file and reconciles local
+harness state against it.
 
 ## Schema
 
@@ -26,14 +27,15 @@ active = false                        # optional; absent or true = install; fals
 
 ## The `active` flag
 
-Every entry has an implicit `active = true`. `agents skills deactivate <name>`
-sets it to `false`, which causes `apply` and `update` to skip that entry and
-unlinks it from every enabled harness's skills directory (e.g.,
+Every skill, subagent, and MCP entry has an implicit `active = true`. Deactivate
+commands set it to `false`, which causes `apply` to skip that entry and remove
+its managed harness state. For skills, this unlinks from every enabled harness's
+skills directory (e.g.,
 `~/.claude/skills/`, `~/.codex/skills/`, `~/.config/opencode/skills/`,
 `~/.gemini/skills/`). The lockfile entry
-(and the cached source content) stays put so `agents skills activate <name>`
-re-materializes it without refetching. The flag rides with the skill across
-the team — deactivating in one machine syncs everywhere.
+(and any cached source content) stays put so `activate` re-materializes it
+without refetching. The flag rides with the entry across the team —
+deactivating in one machine syncs everywhere.
 
 ## Subagents
 
@@ -105,6 +107,49 @@ Same `active`, profile, and project semantics as `[[skill]]`. Harnesses
 without a subagent install path are silently skipped (today every harness has
 one — claude-code, codex, opencode, gemini).
 
+## MCP servers
+
+MCP servers are lockfile entries too. They do not have source snapshots because
+agents is managing a harness config stanza, not executable code.
+
+```toml
+[[mcp]]
+name = "otter"
+transport = "stdio"                  # default when omitted
+command = "otter"
+args = ["mcp", "serve"]
+env = { OTTER_HOST = "https://example.internal" }
+harnesses = ["codex", "claude-code"] # "*" = every enabled harness with MCP support
+profiles = ["work"]                  # optional
+active = true                        # absent or true = configure
+```
+
+HTTP servers use `url` instead of `command`:
+
+```toml
+[[mcp]]
+name = "docs"
+transport = "http"
+url = "https://example.com/mcp"
+bearer_token_env_var = "DOCS_TOKEN"  # optional
+harnesses = ["*"]
+```
+
+Same `active`, profile, and harness semantics as `[[skill]]`. `agents apply`
+only writes entries whose profiles match the current machine. It removes stale
+managed entries from a harness config when the profile no longer matches, when
+the entry is deactivated, or when the entry is removed from the lockfile.
+
+Supported MCP config renderers:
+
+| Harness | Config written |
+|---|---|
+| `codex` | `~/.codex/config.toml` under `[mcp_servers.<name>]` |
+| `claude-code` | `~/.claude.json` under top-level `mcpServers.<name>` |
+
+Unmanaged MCP entries already present in those files are preserved. Harnesses
+without a supported MCP config renderer are rejected by `agents mcp add`.
+
 ## Source types
 
 | Prefix | Use |
@@ -124,9 +169,9 @@ directory.
 
 ## Duplicate-name validator
 
-If two `[[skill]]` entries share a `name`, agents refuses to load the lockfile
-and prints both offending entries. Resolve the conflict in your editor, then
-re-run.
+If two `[[skill]]`, `[[subagent]]`, or `[[mcp]]` entries share a `name` within
+that table type, agents refuses to load the lockfile. Resolve the conflict in
+your editor, then re-run.
 
 ## Subpath validator
 

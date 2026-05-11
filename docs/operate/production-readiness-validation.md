@@ -62,22 +62,22 @@ an external standard that third-party sources are expected to publish.
 | 1 | Fresh install | Pass | `init --scaffold` resolves a target, writes `agents.toml`, `agents.lock.toml`, `.gitignore`, `.agents/`, initializes git, and soft-fails only the initial commit if git identity is missing. |
 | 2 | Fresh clone | Pass | `init <git-url>` clones into the target, refuses non-empty targets, ensures state dirs, and writes the pointer/machine config. |
 | 3 | Custom repo path | Pass | `init --repo <path>` writes the XDG pointer when the target differs from the default repo path. |
-| 4 | Machine profiles | Pass | `--profiles` is parsed as comma-delimited values and persisted to `.agents/machine.toml`; `apply` uses `profile_match` for skills, subagents, and instructions context. |
+| 4 | Machine profiles | Pass | `--profiles` is parsed as comma-delimited values and persisted to `.agents/machine.toml`; `apply` uses profile matching for skills, subagents, MCP servers, and instructions context. |
 | 5 | Existing repo detection | Pass | `status` resolves the repo, reads lockfile/manifest/machine config, reports profile and health details, and does not write state. |
 | 6 | Missing repo recovery | Pass | `paths::resolve_repo` errors with the expected pointer/default locations and `run agents init` recovery text. |
 | 7 | Global quiet mode | Pass | Normal output routes through quiet-aware UI helpers; machine-readable `skills list --json` / `--names` output remains direct by design. |
 | 8 | Verbose diagnosis | Pass | `status` emits repo and manifest details through `ui::detail`, which is gated by `--verbose`; list output also adds scope/profile detail in verbose mode. |
-| 9 | Read-only safety | Pass | `is_mutating` leaves `status`, `skills list/show/find`, `validate`, `project list`, `remote list`, `instructions diff/show`, and `subagents list` unlocked. |
+| 9 | Read-only safety | Pass | `is_mutating` leaves `status`, `skills list/show/find`, `mcp list`, `validate`, `project list`, `remote list`, `instructions diff/show`, and `subagents list` unlocked. |
 | 10 | Mutating serialization | Pass | Mutating commands acquire `RepoLock`; integration test `apply_prints_wait_message_when_repo_lock_is_held` validates lock waiting. |
 | 11 | Fail-fast lock mode | Pass | `RepoLock::acquire(..., no_wait = true)` returns a clear contention error; unit coverage validates the branch. |
 | 12 | Remote setup | Pass | `remote add` refuses non-git repos, adds `origin`, pushes the current branch with upstream tracking, and rolls back `origin` when push fails. |
 | 13 | Remote protection | Pass | `remote add` checks for an existing `origin` and bails with the current URL before changing git config. |
 | 14 | Manual sync | Pass | `sync` delegates to `git pull --rebase --autostash` and push; it does not stage, commit, or rewrite lockfile content itself. |
 | 15 | Offline tolerance | Pass | Auto-sync pre-pull and push detect common offline errors, warn, and keep local state. |
-| 16 | Clean apply | Pass | `apply` materializes active, profile-matching skills, subagents, and instructions across resolved harnesses. |
+| 16 | Clean apply | Pass | `apply` materializes active, profile-matching skills, subagents, MCP servers, and instructions across resolved harnesses. |
 | 17 | Apply dry run | Pass | Dry-run previews planned writes without sweeping `.agents/tmp`, writing files, updating manifests, creating backups, or auto-syncing. |
-| 18 | Idempotent apply | Pass | Repeated apply keeps managed files correct and preserves manifest content when the desired state is unchanged. |
-| 19 | Harness filtering | Pass | `apply -a <harness>` builds a target harness set and skips unmatched skill/subagent outputs. |
+| 18 | Idempotent apply | Pass | Repeated apply keeps managed files and MCP config correct and preserves manifest content when the desired state is unchanged. |
+| 19 | Harness filtering | Pass | `apply -a <harness>` builds a target harness set and skips unmatched skill/subagent/MCP outputs. |
 | 20 | Project filtering | Pass | `apply --project <alias>` only processes entries whose `project` matches that alias. |
 | 21 | Unregistered project | Pass | Missing project aliases are collected, warned, and skipped while other entries continue. |
 | 22 | Matching skill copy cleanup | Pass | `install_skill_symlink` hashes existing real dirs/files against the canonical target and auto-heals matching content. |
@@ -103,9 +103,10 @@ an external standard that third-party sources are expected to publish.
 | 42 | JSON list contract | Pass | `skills list --json` suppresses the banner/UI output and emits the versioned JSON envelope with all documented fields. |
 | 43 | Skill show | Pass | `skills show` resolves the canonical skill dir and prints only `SKILL.md`, erroring if the snapshot is missing. |
 | 44 | Registry search | Pass | Non-interactive search emits pipe-friendly `agents skills add <source> --skill <name>` commands; the TTY picker still installs selected results interactively. |
-| 45 | Bulk import | Pass | Bulk import adopts eligible local skills, dedupes across harness dirs, skips managed/plugin skills, and can adopt orphan snapshots. |
+| 45 | Bulk import | Pass | Bulk import adopts eligible local skills, dedupes across harness dirs, skips managed/plugin skills, can adopt orphan snapshots, and imports supported MCP config entries. |
 | 46 | Instructions import | Pass | `import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
-| 47 | Instructions validation | Pass | `validate` checks template identifiers against declared profiles plus reserved harness/hostname identifiers. |
-| 48 | Instructions conflict | Pass | Non-interactive apply refuses foreign instruction files; interactive apply offers skip/cancel/overwrite, and `--force` backs up then writes. |
-| 49 | Subagent add | Pass | `subagents add` imports external Claude-format Markdown, converts it into agents' internal canonical Markdown, stores lockfile metadata, and renders native harness outputs. The internal canonical format is not treated as a required external import format. |
-| 50 | Self-update | Code-validated | `upgrade` calls the updater, reports updated or already-at-latest, and refreshes the update-check cache. It was not run as a probe because it can replace the local binary. |
+| 47 | MCP-only import | Pass | `import --mcp` imports supported Codex and Claude Code MCP entries, skips skills and instructions, and records current local config as managed. |
+| 48 | Instructions validation | Pass | `validate` checks template identifiers against declared profiles plus reserved harness/hostname identifiers. |
+| 49 | Instructions conflict | Pass | Non-interactive apply refuses foreign instruction files; interactive apply offers skip/cancel/overwrite, and `--force` backs up then writes. |
+| 50 | Subagent add | Pass | `subagents add` imports external Claude-format Markdown, converts it into agents' internal canonical Markdown, stores lockfile metadata, and renders native harness outputs. The internal canonical format is not treated as a required external import format. |
+| 51 | Self-update | Code-validated | `upgrade` calls the updater, reports updated or already-at-latest, and refreshes the update-check cache. It was not run as a probe because it can replace the local binary. |

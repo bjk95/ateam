@@ -1,7 +1,7 @@
 # Agents
 
-Sync skills, instructions, and subagents across AI coding harnesses (Claude
-Code, Codex, OpenCode, Gemini CLI) and across machines.
+Sync skills, instructions, subagents, and MCP servers across AI coding
+harnesses (Claude Code, Codex, OpenCode, Gemini CLI) and across machines.
 
 ## The problem
 
@@ -14,7 +14,7 @@ format:
 - Gemini CLI → `~/.gemini/skills/`, `~/.gemini/agents/`, `~/.gemini/GEMINI.md`
 
 Subagent frontmatter is YAML for Claude, OpenCode, and Gemini; TOML for
-Codex.
+Codex. MCP servers live in each harness's own global config file.
 
 If you use more than one harness, you install each skill multiple times,
 maintain `CLAUDE.md` and `AGENTS.md` in parallel, and keep two flavors of
@@ -39,6 +39,9 @@ in sync through the git remote.
 - **Subagents.** One Markdown file at `<repo>/agents/<name>.md` with
   multi-harness frontmatter renders to YAML+Markdown for Claude, OpenCode,
   and Gemini, and to TOML for Codex.
+- **MCP servers.** `agents mcp add <name>` records the server once in the
+  lockfile, then writes supported harness config files such as
+  `~/.codex/config.toml` and `~/.claude.json`.
 - **Cross-machine sync.** Wire a git remote; every `add` / `update` /
   `remove` / `instructions edit` pulls before the change and pushes after,
   in the background. On a new machine, `agents apply` reproduces the full
@@ -46,8 +49,8 @@ in sync through the git remote.
 
 ## Other features
 
-- **Profiles.** Tag skills and subagents `work` or `personal` so each
-  machine gets the right subset.
+- **Profiles.** Tag skills, subagents, and MCP servers `work` or `personal`
+  so each machine gets the right subset.
 - **Project scope.** Install a skill into one repo's harness-local skills dirs
   without touching globals. The same project lives at different paths on
   different machines — agents handles the alias.
@@ -87,10 +90,13 @@ agents skills add vercel-labs/agent-skills --skill deploy-to-vercel -y
 # 3. Drop in a subagent — same thing, every harness
 agents subagents add vercel-labs/agent-skills --subagent code-reviewer -y
 
-# 4. Adopt your existing CLAUDE.md / AGENTS.md as the instructions template
+# 4. Add an MCP server for a subset of machines
+agents mcp add context7 --harness codex --profile work -- npx -y @upstash/context7-mcp
+
+# 5. Adopt your existing CLAUDE.md / AGENTS.md as the instructions template
 agents import --instructions
 
-# 5. Wire a remote so other machines can sync
+# 6. Wire a remote so other machines can sync
 agents remote add git@github.com:you/agents-config.git
 ```
 
@@ -99,10 +105,10 @@ On a second machine:
 ```bash
 agents init git@github.com:you/agents-config.git
 agents apply
-# every skill, subagent, and instructions file from machine A now lives on machine B
+# every matching skill, subagent, MCP server, and instructions file now lives on machine B
 ```
 
-From here, every `agents skills add`, `subagents add`, or
+From here, every `agents skills add`, `subagents add`, `mcp add`, or
 `instructions edit` pushes to the remote and reaches every other machine
 the next time it runs an `agents` command.
 

@@ -1,15 +1,16 @@
 ---
 title: agents
-description: Multi-machine AI skills sync — Vercel-compatible CLI with invisible git auto-sync.
+description: Multi-machine AI harness sync — Vercel-compatible CLI with invisible git auto-sync.
 template: doc
 ---
 
 # agents
 
-`agents` is a Rust CLI that syncs AI coding-assistant skills across your machines.
-It speaks the same flags as `npx skills add`, stores everything in one git repo,
-and runs `git pull` / `git commit` / `git push` invisibly so a skill installed on
-your work machine appears on your personal machine after `agents apply`.
+`agents` is a Rust CLI that syncs AI coding-assistant skills, instructions,
+subagents, and MCP servers across your machines. It speaks the same flags as
+`npx skills add`, stores everything in one git repo, and runs `git pull` /
+`git commit` / `git push` invisibly so a change made on your work machine
+appears on your personal machine after `agents apply`.
 
 ## What you get
 
@@ -17,6 +18,7 @@ your work machine appears on your personal machine after `agents apply`.
 - One lockfile, one `~/.config/agents/` repo, zero pollution of project repos.
 - Project-scoped skills via per-machine path aliases — different filesystem
   layout on every machine, same identifiers.
+- Profile-gated MCP servers, rendered into supported harness config files.
 - Soft-disable via `skills deactivate` / `skills activate` — quarantine a skill
   team-wide before deleting it, no telemetry needed.
 - Auto-sync wraps every mutating command. You never type `git`.

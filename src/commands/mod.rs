@@ -10,6 +10,7 @@ pub mod import;
 pub mod init;
 pub mod instructions;
 pub mod list;
+pub mod mcp;
 pub mod project;
 pub mod remote;
 pub mod remove;
