@@ -161,6 +161,32 @@ fn git_output(args: &[&str], cwd: &Path) -> Output {
     output
 }
 
+fn git_stdout(args: &[&str], cwd: &Path) -> String {
+    String::from_utf8_lossy(&git_output(args, cwd).stdout).into_owned()
+}
+
+fn init_git_repo(repo: &Path) {
+    git(&["init", "--quiet", "--initial-branch=main"], repo);
+    git(&["config", "user.email", "test@example.com"], repo);
+    git(&["config", "user.name", "Test User"], repo);
+}
+
+fn write_legacy_copy_manifest(fx: &Fixture, name: &str) {
+    let path = fx.codex_skill_path(name);
+    let target = fx.repo.join("skills").join(name);
+    std::fs::create_dir_all(fx.repo.join(".agents")).unwrap();
+    std::fs::write(
+        fx.repo.join(".agents/manifest.toml"),
+        format!(
+            "[[entry]]\npath = \"{}\"\nkind = \"copy\"\nskill = \"{}\"\nharness = \"codex\"\ntarget = \"{}\"\napplied_at = 1\n",
+            path.display(),
+            name,
+            target.display()
+        ),
+    )
+    .unwrap();
+}
+
 #[test]
 fn root_command_shows_banner() {
     let fx = Fixture::new();
@@ -226,6 +252,13 @@ fn repeated_apply_keeps_manifest_content_stable() {
 
     fx.assert_success(&["--no-sync", "apply"]);
     let first = std::fs::read_to_string(fx.repo.join(".agents/manifest.toml")).unwrap();
+    assert!(
+        std::fs::symlink_metadata(fx.codex_skill_path("alpha"))
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "skill installs should be symlinks"
+    );
     fx.assert_success(&["--no-sync", "apply"]);
     let second = std::fs::read_to_string(fx.repo.join(".agents/manifest.toml")).unwrap();
 
@@ -261,6 +294,46 @@ fn immediate_add_then_remove_uninstalls_skill_target() {
     let lock = std::fs::read_to_string(fx.repo.join("agents.lock.toml")).unwrap();
     assert!(lock.contains("source = \"local:skills/alpha\""));
     assert!(lock.contains("upstream = \"local:"));
+
+    fx.assert_success(&["--quiet", "--no-sync", "skills", "remove", "alpha", "-y"]);
+
+    assert!(std::fs::symlink_metadata(fx.codex_skill_path("alpha")).is_err());
+}
+
+#[test]
+fn deactivate_removes_legacy_copy_install() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    fx.write_local_skill_lockfile("alpha");
+
+    std::fs::create_dir_all(fx.codex_skill_path("alpha")).unwrap();
+    std::fs::write(
+        fx.codex_skill_path("alpha").join("SKILL.md"),
+        "legacy copy\n",
+    )
+    .unwrap();
+    write_legacy_copy_manifest(&fx, "alpha");
+    assert!(fx.codex_skill_path("alpha").is_dir());
+
+    fx.assert_success(&["--quiet", "--no-sync", "skills", "deactivate", "alpha"]);
+
+    assert!(!fx.codex_skill_path("alpha").exists());
+}
+
+#[test]
+fn remove_removes_legacy_copy_install() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    fx.write_local_skill_lockfile("alpha");
+
+    std::fs::create_dir_all(fx.codex_skill_path("alpha")).unwrap();
+    std::fs::write(
+        fx.codex_skill_path("alpha").join("SKILL.md"),
+        "legacy copy\n",
+    )
+    .unwrap();
+    write_legacy_copy_manifest(&fx, "alpha");
+    assert!(fx.codex_skill_path("alpha").is_dir());
 
     fx.assert_success(&["--quiet", "--no-sync", "skills", "remove", "alpha", "-y"]);
 
@@ -339,4 +412,131 @@ fn apply_project_filter_preserves_global_instructions() {
         std::fs::read_to_string(fx.codex_instructions_path()).unwrap(),
         "GLOBAL\n"
     );
+}
+
+#[test]
+fn auto_sync_commits_when_optional_dirs_are_missing() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    fx.write_local_skill_lockfile("alpha");
+    std::fs::write(fx.repo.join(".gitignore"), ".agents/\n").unwrap();
+    init_git_repo(&fx.repo);
+    git(
+        &[
+            "add",
+            "agents.toml",
+            "agents.lock.toml",
+            ".gitignore",
+            "skills",
+        ],
+        &fx.repo,
+    );
+    git(&["commit", "--quiet", "-m", "initial"], &fx.repo);
+
+    fx.assert_success(&["--quiet", "skills", "deactivate", "alpha"]);
+
+    let subject = git_stdout(&["log", "-1", "--pretty=%s"], &fx.repo);
+    assert_eq!(subject.trim(), "deactivate :: alpha");
+    assert_eq!(git_stdout(&["status", "--short"], &fx.repo), "");
+}
+
+#[test]
+fn subagent_add_auto_sync_stages_snapshot_and_rendered_file() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::write(fx.repo.join("agents.lock.toml"), "# agents lockfile\n").unwrap();
+    std::fs::write(fx.repo.join(".gitignore"), ".agents/\n").unwrap();
+    let source = fx.repo.parent().unwrap().join("source-demo.md");
+    std::fs::write(
+        &source,
+        "---\nname: demo\ndescription: Demo subagent.\n---\n\nBody.\n",
+    )
+    .unwrap();
+    init_git_repo(&fx.repo);
+    git(
+        &["add", "agents.toml", "agents.lock.toml", ".gitignore"],
+        &fx.repo,
+    );
+    git(&["commit", "--quiet", "-m", "initial"], &fx.repo);
+
+    fx.assert_success(&[
+        "--quiet",
+        "subagents",
+        "add",
+        source.to_str().unwrap(),
+        "--subagent",
+        "demo",
+        "-a",
+        "codex",
+        "-y",
+    ]);
+
+    let files = git_stdout(&["show", "--name-only", "--format=", "HEAD"], &fx.repo);
+    assert!(files.contains("agents.lock.toml"), "{files}");
+    assert!(files.contains("agents/demo.md"), "{files}");
+    assert!(files.contains("agents/rendered/codex/demo.toml"), "{files}");
+    let installed = fx.home.join(".codex/agents/demo.toml");
+    assert!(
+        std::fs::symlink_metadata(&installed)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "subagent installs should be symlinks"
+    );
+    assert_eq!(
+        std::fs::read_link(installed).unwrap(),
+        fx.repo.join("agents/rendered/codex/demo.toml")
+    );
+    assert_eq!(git_stdout(&["status", "--short"], &fx.repo), "");
+}
+
+#[test]
+fn apply_auto_sync_stages_rendered_instructions() {
+    let fx = Fixture::new();
+    fx.write_repo_config(&["codex"]);
+    std::fs::create_dir_all(fx.repo.join("instructions")).unwrap();
+    std::fs::write(
+        fx.repo.join("instructions/instructions.md.hbs"),
+        "hello codex\n",
+    )
+    .unwrap();
+    std::fs::write(
+        fx.repo.join("agents.lock.toml"),
+        "[instructions]\nharnesses = [\"codex\"]\n",
+    )
+    .unwrap();
+    std::fs::write(fx.repo.join(".gitignore"), ".agents/\n").unwrap();
+    init_git_repo(&fx.repo);
+    git(
+        &[
+            "add",
+            "agents.toml",
+            "agents.lock.toml",
+            ".gitignore",
+            "instructions/instructions.md.hbs",
+        ],
+        &fx.repo,
+    );
+    git(&["commit", "--quiet", "-m", "initial"], &fx.repo);
+
+    fx.assert_success(&["--quiet", "apply"]);
+
+    let files = git_stdout(&["show", "--name-only", "--format=", "HEAD"], &fx.repo);
+    assert!(
+        files.contains("instructions/rendered/codex/AGENTS.md"),
+        "{files}"
+    );
+    let installed = fx.home.join(".codex/AGENTS.md");
+    assert!(
+        std::fs::symlink_metadata(&installed)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "instruction installs should be symlinks"
+    );
+    assert_eq!(
+        std::fs::read_link(installed).unwrap(),
+        fx.repo.join("instructions/rendered/codex/AGENTS.md")
+    );
+    assert_eq!(git_stdout(&["status", "--short"], &fx.repo), "");
 }

@@ -26,6 +26,7 @@ Targeted probes also covered:
 - `agents --quiet remote list`
 - `agents --no-sync apply --dry-run`
 - repeated `agents --no-sync apply`
+- legacy managed copy manifest entries followed by `skills deactivate` and `skills remove`
 - `agents --no-sync skills find deploy`
 
 Review clarification: row 49 validates import of external subagent files into
@@ -43,6 +44,7 @@ an external standard that third-party sources are expected to publish.
 | PRI-004 | 37, 39 | P1 | Immediate `skills add` installs were not recorded in the manifest, so a following `skills deactivate` or `skills remove` could leave symlinks on disk. | `skills add` now records installed symlinks in the manifest as soon as it writes them. | `immediate_add_then_remove_uninstalls_skill_target` |
 | PRI-005 | 44 | P2 | `skills find` printed Vercel-style `npx skills` output instead of agents install commands. | Non-interactive search results now emit `agents skills add <source> --skill <name>` lines. | `non_interactive_result_formats_agents_install_command` |
 | PRI-006 | 33 | P3 | Registry fallback was reported as logging duplicate warnings when registry lookup errored. | Rechecked the current source and confirmed there is a single warning path. | Source review; covered by single remaining warning path. |
+| PRI-007 | 37, 39 | P1 | `skills deactivate` and `skills remove` left legacy managed copies on disk. | Both paths now use manifest `EntryKind` to dispatch symlinks to `uninstall_path` and legacy copies to `uninstall_copy`. | `deactivate_removes_legacy_copy_install`, `remove_removes_legacy_copy_install` |
 
 ## Dependency decisions
 
@@ -81,6 +83,8 @@ an external standard that third-party sources are expected to publish.
 | 22 | Matching directory auto-heal | Pass | `install_symlink` hashes existing real dirs/files against the canonical target and auto-heals matching content. |
 | 23 | Conflicting directory refusal | Pass | `install_symlink` returns `Refused` for foreign real paths when `force` is false. |
 | 24 | Forced conflict recovery | Pass | `--force` moves foreign paths to `<name>.bak.<unix-ts>` before installing managed output. |
+| 25 | Symlink-only installs | Pass | `apply` installs skills, rendered instructions, and rendered subagents into harness paths as symlinks. |
+| 26 | Legacy copy cleanup | Pass | Legacy managed copy entries are removed during apply/deactivate/remove and future installs are symlinks. |
 | 27 | Skill add happy path | Pass | `skills add` fetches, snapshots remote sources, upserts the lockfile, installs into harnesses, and auto-commits when sync is enabled. |
 | 28 | Skill add list mode | Pass with caveat | `--list` avoids lockfile/snapshot/manifest/harness changes, but still acquires the mutating command lock and may pre-pull/fetch into temp state. |
 | 29 | Vercel compatibility | Pass | `normalize_all_flag` makes `--all` imply wildcard skill selection, wildcard harnesses, and `-y`. |
@@ -91,16 +95,16 @@ an external standard that third-party sources are expected to publish.
 | 34 | OpenClaw risk gate | Pass | `Source::parse_with` rejects `openclaw/*` sources unless the explicit risk flag is set. |
 | 35 | Skill update | Pass | `skills update` compares upstream SHAs/hashes, refetches drifted snapshots, updates `tree_sha`, and leaves unchanged entries alone. |
 | 36 | Deactivated update skip | Pass | Deactivated entries are excluded from bulk updates and explicitly skipped with a warning when named. |
-| 37 | Skill deactivate | Pass | Deactivation removes managed skill symlinks using the manifest entry kind. |
+| 37 | Skill deactivate | Pass | Deactivation removes symlink installs and legacy managed copies using the manifest entry kind. |
 | 38 | Skill activate | Pass | `skills activate` flips `active = true`, writes the lockfile, and invokes apply to re-materialize eligible entries. |
-| 39 | Skill remove | Pass | Removal deletes lockfile entries, managed snapshots, and managed skill symlinks. |
+| 39 | Skill remove | Pass | Removal deletes lockfile entries, managed snapshots, symlink installs, and legacy managed copies. |
 | 40 | Missing skill remove | Pass | Target resolution bails before removal when a named skill is missing in the selected scope. |
 | 41 | Pipe-friendly list | Pass | `skills list` switches stdout to names-only when stdout is not a TTY; `skills remove` reads whitespace-separated names from stdin. |
 | 42 | JSON list contract | Pass | `skills list --json` suppresses the banner/UI output and emits the versioned JSON envelope with all documented fields. |
 | 43 | Skill show | Pass | `skills show` resolves the canonical skill dir and prints only `SKILL.md`, erroring if the snapshot is missing. |
 | 44 | Registry search | Pass | Non-interactive search emits pipe-friendly `agents skills add <source> --skill <name>` commands; the TTY picker still installs selected results interactively. |
 | 45 | Bulk import | Pass | Bulk import adopts eligible local skills, dedupes across harness dirs, skips managed/plugin skills, and can adopt orphan snapshots. |
-| 46 | Instructions import | Pass | `skills import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
+| 46 | Instructions import | Pass | `import --instructions` writes the template, adds `[instructions]`, and records existing output files in the manifest. |
 | 47 | Instructions validation | Pass | `validate` checks template identifiers against declared profiles plus reserved harness/hostname identifiers. |
 | 48 | Instructions conflict | Pass | Non-interactive apply refuses foreign instruction files; interactive apply offers skip/cancel/overwrite, and `--force` backs up then writes. |
 | 49 | Subagent add | Pass | `subagents add` imports external Claude-format Markdown, converts it into agents' internal canonical Markdown, stores lockfile metadata, and renders native harness outputs. The internal canonical format is not treated as a required external import format. |

@@ -39,7 +39,8 @@ the team — deactivating in one machine syncs everywhere.
 
 Subagents are stored as a single canonical Markdown file at
 `<repo>/agents/<name>.md`. On every `apply`, agents **renders** the canonical
-into each enabled harness's native format:
+into each enabled harness's native format under `<repo>/agents/rendered/`, then
+symlinks the harness path to that rendered file:
 
 | Harness | Output path | Format |
 |---|---|---|
@@ -48,9 +49,9 @@ into each enabled harness's native format:
 | OpenCode | `~/.config/opencode/agents/<name>.md` | YAML frontmatter (no `name`, derived from filename) + body |
 | Gemini | `~/.gemini/agents/<name>.md` | YAML frontmatter + body |
 
-A symlink can't serve all four (Codex needs `.toml` with different field
-names), so subagents go through render-and-write the same way
-`instructions/` files do.
+A single canonical symlink can't serve all four harnesses because Codex needs
+`.toml` with different field names, so each harness receives a symlink to its
+own rendered file in the agents repo.
 
 ### Canonical file shape
 

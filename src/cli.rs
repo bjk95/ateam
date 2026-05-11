@@ -132,7 +132,7 @@ pub enum Command {
     #[command(subcommand)]
     Harness(HarnessCommand),
 
-    /// Manage subagents (single-file `.md` agents installed under `.claude/agents/` and `.codex/agents/`).
+    /// Manage subagents (single-file `.md` agents rendered for each enabled harness).
     #[command(subcommand)]
     Subagents(SubagentsCommand),
 }

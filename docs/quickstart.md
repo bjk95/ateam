@@ -4,7 +4,7 @@ description: First 5 minutes — bootstrap, install a skill, sync to another mac
 ---
 
 This walks through the five minutes from a fresh shell to having a synced skill
-visible in both Claude Code and Codex.
+visible in every enabled harness.
 
 ## 1. Bootstrap a fresh repo
 
@@ -25,8 +25,8 @@ Behind the scenes agents:
 
 1. Fetches the skill folder from the GitHub repo.
 2. Records a lockfile entry with the GitHub tree SHA so updates are detectable.
-3. Symlinks `~/.claude/skills/deploy-to-vercel` and `~/.codex/skills/deploy-to-vercel`
-   into the canonical copy inside the agents repo.
+3. Symlinks each enabled harness's skills path into the canonical copy inside
+   the agents repo.
 4. Auto-commits the lockfile change. (Push happens once you wire a remote.)
 
 ## 3. Wire a remote — auto-sync activates
@@ -47,13 +47,13 @@ agents apply
 ```
 
 `init` clones the config repo. `apply` reads the lockfile, refetches every
-remote skill into a cold cache, and creates the same symlinks. Both Claude Code
-and Codex now see the same skill.
+remote skill into a cold cache, and creates the same symlinks. Every enabled
+harness now sees the same skill.
 
 ## Next
 
 - [Project-scoped skills](/concepts/project-scope/) — install a skill into a
-  specific project's `.claude/skills/` instead of user-global.
+  specific project's harness-local skills dirs instead of user-global.
 - [Profiles](/concepts/profiles/) — gate skills by machine (work / personal /
   devbox).
 - [`agents` CLI reference](/reference/cli/) — every flag.

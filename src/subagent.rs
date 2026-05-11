@@ -316,6 +316,18 @@ pub fn harness_install_path(
     }))
 }
 
+pub fn rendered_root(repo: &Path) -> std::path::PathBuf {
+    crate::paths::local_subagents_dir(repo).join("rendered")
+}
+
+pub fn rendered_path(repo: &Path, harness_id: &str, name: &str) -> std::path::PathBuf {
+    rendered_root(repo).join(harness_id).join(format!(
+        "{}.{}",
+        name,
+        harness_file_extension(harness_id)
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
